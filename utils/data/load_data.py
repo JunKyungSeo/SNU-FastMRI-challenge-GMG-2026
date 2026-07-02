@@ -1,10 +1,28 @@
 import h5py
 import random
 import re
-from utils.data.transforms import DataTransform
+import torch
+from utils.data.transforms import DataTransform, MRIAugmentor, AugmentConfig
 from torch.utils.data import Dataset, DataLoader
+from torch.utils.data._utils.collate import default_collate
 from pathlib import Path
 import numpy as np
+
+
+def _worker_init_fn(worker_id):
+    """멀티프로세스 dataloader에서도 결정적이 되도록 worker별 seed 파생 (재현성)."""
+    base = torch.initial_seed() % (2 ** 31)
+    seed = (base + worker_id) % (2 ** 31)
+    np.random.seed(seed)
+    random.seed(seed)
+
+
+def _bbox_collate(batch):
+    """return_bbox=True일 때 가변 길이 bbox를 배치로 묶기 위한 collate.
+    앞 6개(mask, kspace, target, maximum, fname, slice)는 기본 collate, bbox는 리스트로 유지."""
+    core = default_collate([b[:6] for b in batch])
+    bboxes = [b[6] for b in batch]
+    return (*core, bboxes)
 
 
 def _acc_key(name):
@@ -24,57 +42,60 @@ class SliceData(Dataset):
         self.kspace_examples = []
 
         # ------------------------------------------------------------------
-        # [원본] root/image, root/kspace 하위 폴더 스캔 방식 (전체 데이터셋용)
-        # 아직 데이터셋이 준비되지 않아 임시로 주석 처리.
+        # [원본·활성] root/image, root/kspace 하위 폴더 스캔 방식 (전체 데이터셋용).
+        # 원본 데이터셋(train/val)에 연결할 때 사용. root = create_data_loaders의 data_path.
+        # 이미지·k-space 파일이 같은 이름(knee_acc4_1.h5 …)으로 두 폴더에 페어 존재.
         # ------------------------------------------------------------------
-        # if not forward:
-        #     image_files = list(Path(root / "image").iterdir())
-        #     for fname in sorted(image_files):
-        #         num_slices = self._get_metadata(fname)
-        #
-        #         self.image_examples += [
-        #             (fname, slice_ind) for slice_ind in range(num_slices)
-        #         ]
-        #
-        # kspace_files = list(Path(root / "kspace").iterdir())
-        # for fname in sorted(kspace_files):
-        #     num_slices = self._get_metadata(fname)
-        #
-        #     self.kspace_examples += [
-        #         (fname, slice_ind) for slice_ind in range(num_slices)
-        #     ]
-
-        # ------------------------------------------------------------------
-        # [임시] utils/data 폴더에 평평하게 놓인 단일 샘플 파일 직접 로딩.
-        #   이미지(타깃) : img_knee_acc4_1.h5, img_knee_acc8_1.h5
-        #   k-space(입력): kspace_knee_acc4_1.h5, kspaceimg_acc8_1.h5
-        # acc 토큰(acc4_1 / acc8_1)으로 이미지·k-space를 짝짓는다.
-        # 인자로 받은 root(data_path) 대신 이 파일이 있는 utils/data 폴더를 사용한다.
-        # ------------------------------------------------------------------
-        root = Path(__file__).resolve().parent
-        kspace_files = sorted(root.glob("kspace*.h5"))
-
-        image_map = {}
         if not forward:
-            image_files = sorted(root.glob("img*.h5"))
-            image_map = {_acc_key(f.name): f for f in image_files}
+            image_files = list(Path(root / "image").iterdir())
+            for fname in sorted(image_files):
+                num_slices = self._get_metadata(fname)
 
-        for kspace_fname in kspace_files:
-            num_slices = self._get_metadata(kspace_fname)
-            self.kspace_examples += [
-                (kspace_fname, slice_ind) for slice_ind in range(num_slices)
-            ]
-            if not forward:
-                key = _acc_key(kspace_fname.name)
-                if key not in image_map:
-                    raise ValueError(
-                        f"k-space 파일 {kspace_fname.name} 에 대응하는 이미지 파일을 "
-                        f"data 폴더에서 찾지 못했습니다 (키: {key})."
-                    )
-                image_fname = image_map[key]
                 self.image_examples += [
-                    (image_fname, slice_ind) for slice_ind in range(num_slices)
+                    (fname, slice_ind) for slice_ind in range(num_slices)
                 ]
+
+        kspace_files = list(Path(root / "kspace").iterdir())
+        for fname in sorted(kspace_files):
+            num_slices = self._get_metadata(fname)
+
+            self.kspace_examples += [
+                (fname, slice_ind) for slice_ind in range(num_slices)
+            ]
+
+        # ------------------------------------------------------------------
+        # [임시·주석] utils/data 폴더에 평평하게 놓인 단일 샘플 파일 직접 로딩.
+        #   데이터셋 미연결(로컬 테스트) 환경 전용. 원본 데이터셋 연결 시 위 [원본] 블록 사용.
+        #   이미지(타깃) : img_knee_acc4_1.h5, img_knee_acc8_1.h5
+        #   k-space(입력): kspace_knee_acc4_1.h5, kspace_knee_acc8_1.h5
+        # acc 토큰(acc4_1 / acc8_1)으로 이미지·k-space를 짝짓는다(파일명이 달라도 페어링).
+        # 인자로 받은 root(data_path) 대신 이 파일이 있는 utils/data 폴더를 사용한다.
+        # ⚠️ 이 경로를 되살릴 땐 아래 __getitem__의 이름 비교도 _acc_key 버전으로 함께 교체할 것.
+        # ------------------------------------------------------------------
+        # root = Path(__file__).resolve().parent
+        # kspace_files = sorted(root.glob("kspace*.h5"))
+        #
+        # image_map = {}
+        # if not forward:
+        #     image_files = sorted(root.glob("img*.h5"))
+        #     image_map = {_acc_key(f.name): f for f in image_files}
+        #
+        # for kspace_fname in kspace_files:
+        #     num_slices = self._get_metadata(kspace_fname)
+        #     self.kspace_examples += [
+        #         (kspace_fname, slice_ind) for slice_ind in range(num_slices)
+        #     ]
+        #     if not forward:
+        #         key = _acc_key(kspace_fname.name)
+        #         if key not in image_map:
+        #             raise ValueError(
+        #                 f"k-space 파일 {kspace_fname.name} 에 대응하는 이미지 파일을 "
+        #                 f"data 폴더에서 찾지 못했습니다 (키: {key})."
+        #             )
+        #         image_fname = image_map[key]
+        #         self.image_examples += [
+        #             (image_fname, slice_ind) for slice_ind in range(num_slices)
+        #         ]
 
 
     def _get_metadata(self, fname):
@@ -92,7 +113,7 @@ class SliceData(Dataset):
         if not self.forward:
             image_fname, _ = self.image_examples[i]
         kspace_fname, dataslice = self.kspace_examples[i]
-        if not self.forward and _acc_key(image_fname.name) != _acc_key(kspace_fname.name):
+        if not self.forward and image_fname.name != kspace_fname.name:
             raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
 
         with h5py.File(kspace_fname, "r") as hf:
@@ -109,24 +130,70 @@ class SliceData(Dataset):
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False):
+def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
     else:
         max_key_ = -1
         target_key_ = -1
+
+    # train/val 구분: 명시 안 하면 shuffle=True를 train으로 간주(train_part.py는 train만 shuffle=True).
+    # 증강은 반드시 train에만 적용, val/forward는 원본 그대로(검증은 진짜 실력 측정).
+    if is_train is None:
+        is_train = bool(shuffle) and (not isforward)
+
+    # ------------------------------------------------------------------
+    # augmentation 설정 — train.py args에서 읽음(없으면 getattr 기본값 = 전부 off).
+    # 즉 train.py에 --aug-* 인자를 아직 안 넣었다면 기존 학습과 100% 동일하게 동작.
+    # (인자 정의·매 epoch set_epoch 배선은 strategy/todo.md의 3·4번.)
+    # ------------------------------------------------------------------
+    aug_on = getattr(args, "aug_on", False)
+    cfg = AugmentConfig(
+        on=aug_on,
+        schedule=getattr(args, "aug_schedule", "exp"),
+        warmup_epochs=getattr(args, "aug_warmup_epochs", 10),
+        ramp_epochs=getattr(args, "aug_ramp_epochs", 15),
+        max_prob=getattr(args, "aug_max_prob", 0.5),
+        flip=getattr(args, "aug_flip", True),
+        mask=getattr(args, "aug_mask", True),
+        phase=getattr(args, "aug_phase", False),
+        noise=getattr(args, "aug_noise", False),
+        mask_thin_max=getattr(args, "aug_mask_thin_max", 4),
+        orig_mask_prob=getattr(args, "aug_orig_mask_prob", 0.5),
+        noise_sigma=getattr(args, "aug_noise_sigma", 0.0),
+        seed=getattr(args, "seed", 430),
+    )
+    augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None
+    return_bbox = getattr(args, "return_bbox", False)
+
     data_storage = SliceData(
         root=data_path,
-        transform=DataTransform(isforward, max_key_),
+        transform=DataTransform(
+            isforward, max_key_,
+            augmentor=augmentor, is_train=is_train, return_bbox=return_bbox,
+        ),
         input_key=args.input_key,
         target_key=target_key_,
-        forward = isforward
+        forward=isforward,
     )
+
+    # 재현성: 증강/결정적 로더를 쓸 때만 generator·worker seed 부착(그 외엔 기존과 동일 동작).
+    num_workers = getattr(args, "num_workers", 0)
+    use_det = aug_on or getattr(args, "deterministic_loader", False)
+    seed = getattr(args, "seed", None)
+    generator = None
+    if use_det and (seed is not None):
+        generator = torch.Generator()
+        generator.manual_seed(int(seed))
 
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
         shuffle=shuffle,
+        num_workers=num_workers,
+        worker_init_fn=_worker_init_fn if num_workers > 0 else None,
+        generator=generator,
+        collate_fn=(_bbox_collate if return_bbox else None),
     )
     return data_loader

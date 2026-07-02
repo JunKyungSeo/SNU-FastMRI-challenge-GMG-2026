@@ -3,3 +3,6 @@ env
 __pycache__
 .DS_Store
 .claude/
+
+# HDF5 데이터 파일 (utils/data 등)
+*.h5

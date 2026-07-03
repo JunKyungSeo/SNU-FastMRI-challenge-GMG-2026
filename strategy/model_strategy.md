@@ -1,5 +1,7 @@
 # 모델·메모리·구조 전략 (non-augmentation) — FastMRI 2026
 
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
+> 확정 항목은 여기서 재정의하지 않고 confirmed_model을 따른다. 이 문서는 그 배경·근거.
 > augmentation이 아닌, 논문 재검토에서 나온 **아키텍처·입력 설계·메모리·효율 전략**을 모으는 문서.
 > (augmentation 기법은 [`augmentation.md`](augmentation.md)에 별도 정리.)
 > 대상 제약: knee 전용 · SSIM_full + **SSIM_bbox(순위축)** + 추론시간 채점 · GTX 1080 8GB(FP32) · external/pretrained 금지.
@@ -13,7 +15,7 @@
 | 모델 레버 | SSIM_full | SSIM_bbox | 추론시간 | 8GB | 근거 |
 |---|---|---|---|---|---|
 | **경량 E2E-VarNet 베이스**(cascade 6~8·채널 축소·FP32) | ⭐⭐⭐ | — | ⭐⭐⭐ | ⭐⭐⭐ | 백본 |
-| **GRAPPA 초기화**(채널 주입 권장 / x0대체는 주의) | ⭐⭐⭐ | ⚠ neutral~risk | ⭐⭐⭐ | ⭐⭐ | §1 |
+| **GRAPPA 초기화**(채널 주입+**residual** 권장 / x0대체는 주의) | ⭐⭐⭐ | ⚠ 상충(날조↓ vs 누수↑) | ⭐⭐⭐ | ⭐⭐ | §1, §1.2 |
 | **bbox 가중 손실**(MOST 프레이밍) | — | ⭐⭐⭐ | — | ⭐⭐⭐ | §2, REVIEW #4 |
 | **배치 SME**(인접슬라이스, 채택) | — | — | △ | ⭐⭐⭐ | §3.2, PromptMR+ |
 | **sens 효율화 택1**(UEPS 제거 ↔ PromptMR+ 개선) | ⭐⭐ | — | ⭐⭐ | ⭐⭐⭐ | §4.1 |
@@ -39,8 +41,13 @@
 
 **제약·구현**:
 - GRAPPA는 **제공 입력**이라 external/pretrained 규칙 무관, 물리적 복원(합성 아님).
-- acc4/acc8 GRAPPA 품질이 달라 **가속률별 스케일/정규화** 확인.
+- **정규화 확정(2026-07-04, [`confirmed_model.md`](confirmed_model.md))**: acc4/acc8 GRAPPA 품질차는 있으나 **입력 정규화는 가속률 무관 단일 규칙**(입력유도 전역 스칼라 ÷s를 image_input·GRAPPA·target에 동일 적용, 출력 ×s). 가속률별 GRAPPA *신뢰도* 차이는 정규화가 아니라 §1.2 ② 상보 융합/네트워크가 흡수 — 별개 레버. `maximum` attr은 입력 정규화에 미사용(label 통계).
 - **구현 지점(코드 점검 완료)**: `utils/data/load_data.py`는 `image_grappa`를 **미로드**(input=kspace, target=label만), `utils/model/varnet.py`의 `VarNet.forward`는 `masked_kspace`에서 출발 → **loader와 forward 둘 다 수정** 필요.
+
+> 🔧 **부분 구현 (2026-07-04 갱신)** — GRAPPA **로딩·정렬은 데이터 측에 구현 완료**([`implementation.md`](implementation.md), [`confirmed_model.md`](confirmed_model.md)). 남은 것은 아래 network 측(varnet.py) 배선:
+> 1. ✅ **loader** (`utils/data/load_data.py`): `return_grappa` 플래그로 `image_grappa[dataslice]` 로드 → `DataTransform` 전달, flip 동기 정렬까지 **구현됨**.
+> 2. **model** (`utils/model/varnet.py`): `VarNet.forward`에 GRAPPA 보조 채널 입력 경로 추가 + (권장) **residual 출력**(`out = grappa + f(...)`) 형태. 격자 정렬은 §1.1.1(384²↔640×368 crop+pad), 정렬 규칙은 §1.1 표를 따름.
+> 3. (선택) 상보 융합(§1.2 ②)을 쓰려면 `image_input`도 추가 로드해 `[image_input, image_grappa]` 2채널 구성.
 
 ### 1.1 GRAPPA 보조 입력의 augmentation 정렬 규칙 (필수)
 > GRAPPA를 보조 입력 채널로 쓰면, 메인 입력 k-space와 **공간적으로 정확히 정렬**돼야 한다. 메인만 증강하고 GRAPPA를 안 하면(또는 반대) 두 채널이 어긋나 학습이 오히려 망가진다. augmentation 종류별로 처리가 다르다.
@@ -65,6 +72,49 @@
   - ⚠️ 뉘앙스: 높이 pad로 **위/아래 128행은 0으로 채워짐**(GRAPPA엔 바깥 데이터 없음). GRAPPA prior는 중앙 384행만 실내용, 주변부 0 — 보조 채널로는 무해(메인 k-space·DC는 640 전체 유지).
 - **더 깔끔한 대안**: GRAPPA·최종출력 둘 다 384²이므로, cascade 안 대신 **출력단에 384² refinement 단계**를 두면 zero-pad 자체가 불필요(네이티브 동일 격자). 아키텍처 변경폭은 조금 더 큼.
 - **주의(별개 이슈)**: batch_size>1로 올리면 acc4(368) vs acc8(372) width가 못 쌓여 깨짐 → 그때 입력 k-space width 통일(372 pad 등) 필요. GRAPPA 정렬과는 무관(샘플 단위).
+
+### 1.2 GRAPPA를 SSIM으로 전환하는 메커니즘 — residual · 상보 융합 · 게이팅
+> §1이 "GRAPPA를 **어떻게 주입**하나"라면, 여기는 "주입한 GRAPPA가 **왜·어떻게 SSIM을 올리나**"의 메커니즘. 대부분의 FastMRI 논문이 GRAPPA를 안 쓰는 건 **일부러가 아니라 데이터에 없었기 때문** — 우리에겐 제공되므로 "공짜로 주어진 강력한 prior"로 취급한다.
+
+- **① residual 학습 — 학습 난이도를 낮춰 SSIM을 올리는 핵심**:
+  - `image_grappa`는 `image_input`(aliased)보다 이미 `image_label`에 훨씬 가깝다. 그래서 **"GRAPPA→label residual"만 학습**하면(출력 `= grappa + f([image_input, grappa, …])`) 네트워크가 저주파 구조를 처음부터 재학습할 필요 없이 **미획득 고주파 교정에만 집중** → 같은 cascade·에폭에서 SSIM↑, 또는 더 적은 cascade로 동품질(추론시간↓).
+  - **§2.4(고주파 집중 손실)·§4.1(progressive)과 결이 동일**: 셋 다 "이미 주어진 저주파는 놔두고 실제 병목인 고주파에 자원 집중"이라는 같은 원리 → 상보적으로 결합.
+
+- **② 상보 융합 (image_input ⊕ image_grappa)**:
+  - `image_input`은 aliased지만 **노이즈에 충실**(noise-faithful), `image_grappa`는 alias는 지웠지만 **g-factor 노이즈를 증폭**(특히 **acc8**에서 심함). 두 채널을 함께 주면 네트워크가 상황별로 융합해 어느 한쪽의 약점을 보완한다.
+  - **acc4/acc8 GRAPPA 품질차(§1 제약)와 직결** → acc를 conditioning으로 주거나(가속률별 스케일 §1) 노이즈 레벨로 암묵 학습하게 해 **가속률별 GRAPPA 신뢰도를 다르게** 쓰도록.
+
+- **③ anti-copy 게이팅 (필수 주의)**:
+  - GRAPPA를 그대로 베끼면 **SSIM 상한이 GRAPPA 수준에 갇힌다.** residual/게이팅으로 **"어디를 믿고(복사) 어디를 고칠지(교정)"**를 학습시켜야 GRAPPA를 넘어선다.
+  - loss는 항상 최종 `image_label` 기준으로 걸고, GRAPPA와의 과도한 tie(예: GRAPPA 재현 항)는 금지. **DC(원 언더샘플 k-space 기준)를 유지**해 GRAPPA 잔여 아티팩트를 물리로 교정(§1 (b)와 동일 원칙).
+
+- **④ SSIM_bbox 양면성 — "상충"으로 재정리(§0 표 반영)**:
+  - **(＋) 날조 억제**: GRAPPA는 선형·물리 복원이라 없는 병변을 **만들지 않는다**. 강한 anchor로 쓰면 네트워크의 fabrication을 억제 → 대회 핵심(병변부 hallucination 금지)·SSIM_bbox 목표와 **정렬**.
+  - **(－) 아티팩트 누수**: 단 GRAPPA 자체의 잔여 alias·g-factor 노이즈가 **저SNR bbox에 새어들 수 있다**(§1 기존 지적).
+  - 따라서 bbox에서 GRAPPA는 단순 neutral이 아니라 **"네트워크 날조↓ vs GRAPPA 아티팩트 누수↑"의 상충** → 게이팅(③)·DC로 전자만 취하고, **§2·측정 프로토콜의 bbox 비퇴행 게이트**로 순효과를 반드시 검증.
+
+- **권장 형태**: 채널 주입(§1 (b)) + **residual 출력**(①) + `[image_input, image_grappa]` 2채널 상보 입력(②)을 1순위. 아키텍처 변경폭을 더 줄이려면 §1.1의 **출력단 384² refinement head**(VarNet 출력 ⊕ GRAPPA fusion)로 붙여도 됨 — 추론시간 부담이 작아 추론시간 축에 유리.
+
+### 1.3 실증 근거 — AIRS Medical 2020 우승 레시피 & 우리 이식 매핑
+> 출처: `.claude/paper/02_reference/Challenge2020_recon-results_2021.pdf`(2020 fastMRI Challenge 공식 회고, IEEE TMI 2021) = REVIEW.md #7. **AIRS Medical(= 2026 SNU 대회 후원사)**이 4X·8X·Transfer **3개 트랙 전부 우승**. 우리 GRAPPA 전략(§1·§1.2)이 "실험 옵션"이 아니라 **직전 계보 대회의 검증된 우승 레시피의 핵심**임을 실증한다.
+> ⚠️ **범위 주의**: 이건 AIRS 자체 method 논문이 아니라 **주최측 회고 논문에 보고된 요약**. 대상은 **brain(무릎 아님)·2020 세팅**이고 **규모(≈200M 파라미터·4×V100·7일 학습)는 1080 8GB에 그대로 못 옮김** → **구조·초기화 아이디어만 이식**, 절대수치는 무시.
+
+**우승 레시피 5요소 (각 요소가 왜 이겼나 + 우리 매핑):**
+
+| # | AIRS 구성요소 | 왜 우승 요인이었나 (쉬운 설명) | 우리 이식 |
+|---|---|---|---|
+| ① | **GRAPPA 추정으로 초기화 (+residual)** — **전 참가팀 중 유일** | zero-filled 대신 이미 alias가 줄어든 GRAPPA에서 출발 → 네트워크는 "밑그림 다시 그리기"가 아니라 **틀린 부분만 고치는 residual**만 학습 → 적은 stage로 고품질 | **§1·§1.2 그대로** (2026은 GRAPPA를 아예 입력 제공 → 당시 AIRS의 차별 재료가 지금은 given) |
+| ② | **image·k-space dual-domain DC cascade** (4 U-Net stage, KIKI-Net 계열, 매 레이어 data consistency) | 그림(image)·주파수(k-space) **양쪽에서 번갈아 청소** + 측정한 k-space 라인은 매 단계 **실측값으로 되돌림(DC)** → 없는 신호 날조 억제·물리 충실 | **§4(선택)**. VarNet의 k-space DC가 **이미 유사 역할** → dual-domain 전면 이식은 메모리·추론시간 부담이라 1080에선 후순위 |
+| ③ | **ESPIRiT coil sens + multiple GRAPPA kernel** | 코일별 감도맵을 ACS(완전샘플 중앙)에서 추정해 다코일을 정확히 합성. 샘플링이 pseudo-equispaced라 **커널 여러 개**로 보간 정확도↑ | 우리 데이터는 감도맵 미제공 → **VarNet `SensitivityModel`이 내부 학습 추정**(원리 동일). §3.2 배치 SME·§4.1은 **ACS 위주 추정**이 정석 |
+| ④ | **coil configuration 무관 정규화 루틴** — 논문이 **우승 요인으로 명시** | 장비마다 코일 수·감도가 달라 신호 스케일이 제각각 → **전역 스칼라 하나로 통일**하면 학습 안정·**타 vendor 일반화↑**(Transfer 트랙 석권 열쇠). 전역 스칼라라 코일 **상대 비율 보존** → sens-map 추정 무해(감도맵은 RSS로 재정규화되어 스케일 상쇄) | **신규 레버**: 우리도 입력 정규화를 **전역 스칼라**(코일별 X)로 통일. acc4/acc8·파일 간 스케일 편차 흡수 → §1.2 ② 상보 융합·재현성(§5)과 시너지 |
+| ⑤ | **SSIM loss** (Adam 20 epoch, lr 1e-3→1e-4) | 채점 지표(SSIM)를 직접 최적화 | **§2와 결합**: SSIM loss는 **과평활(smoothing) 조장**(회고서 8X 과평활 관찰) → bbox 가중·고주파 집중 손실(§2.1·§2.4)로 **sharpness 방어** 필수 |
+
+**핵심 교훈 3가지 (레시피 밖 회고 통찰):**
+- **cascaded(DC+CNN)이 여전히 지배** → 우리 VarNet 백본 선택 타당(§0).
+- **큰 모델 ≠ 우수**: ATB가 경쟁작 대비 파라미터 **87%↓인데 동급 성능** → **1080용 경량화에 청신호**(§4).
+- **hallucination = 미해결 핵심 문제**: 높은 SSIM에도 false vessel/병변 왜곡 발생, SSIM이 이를 못 잡음 → **2026 SSIM_bbox가 바로 이 gap에 대한 응답**(§2.3 hallucination 금지선의 근거).
+
+**한 줄 결론**: AIRS 우승의 뼈대(①GRAPPA init+residual, ④전역 정규화)는 **1080에서도 저비용으로 이식 가능한 우리 1순위**, dual-domain(②)은 여유 시 선택, ③⑤는 우리 VarNet·손실 설계에 이미 대응됨.
 
 ---
 

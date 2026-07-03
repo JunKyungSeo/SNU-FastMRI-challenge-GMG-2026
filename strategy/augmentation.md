@@ -1,8 +1,10 @@
 # Data Augmentation 전략 — FastMRI 2026 (Annotation-guided Knee Reconstruction)
 
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
+
 > # ✅ 구현 완료 (2026-07-03)
 > 이 문서의 채택 증강은 **`utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`) · `utils/data/load_data.py`에 구현·검증 완료**.
-> 실측 결과 요약은 아래 **[§ 증강 결과 (실측 요약)](#증강-결과-실측-요약)**, 시각 확인은 [`utils/data/visualize.ipynb`](../utils/data/visualize.ipynb).
+> 실측 결과 요약은 아래 **[§ 증강 결과 (실측 요약)](#증강-결과-실측-요약)**. (시각 확인용 노트북은 검증 후 삭제 — 전략 검증용 임시 코드.)
 > 기본값 전부 off라 켜기 전엔 기존 학습과 100% 동일(스위치 배선은 [`todo.md`](todo.md) 3·4번).
 
 > **제1원칙 (이 문서의 조직 기준): hallucination-free lesion fidelity.**
@@ -28,7 +30,7 @@
   - ❌ 위-아래(readout) 플립은 **제외**(2026-07-02): 넙다리뼈↔정강이뼈가 뒤바뀌는 비현실적 무릎 형태 → Tier 3
 - ✅ Mask augmentation(추가 언더샘플, 5~16× 랜덤 + center 0.08 + equispaced/오프셋랜덤) — 우리 데이터 유일 정석 물리 aug
 - ✅ **원본(무증강) 고정마스크 입력 반드시 혼합** — test 분포=고정마스크, OOD 방지(= 실제 bbox 채점 조건 정합)
-- △ **GRAPPA image → FFT(k-space) 보조 입력** — 제공된 physics 기반 초기해를 prior로 사용. 단 image size/슬라이스/도메인 정규화 필수, A/B 후 채택
+- △ **GRAPPA 영상 도메인 prior 채널 + residual**(fft 안 함, [`confirmed_model.md`](confirmed_model.md)) — 제공된 physics 기반 초기해를 영상 그대로 regularizer U-Net에 real-valued prior로 concat. 단 image size/슬라이스/스케일 정규화 필수, A/B 후 채택
 - △ k-space 랜덤 위상(**image-domain smooth phase 한정**) — magnitude/RSS 불변이라 안전하나 **이득 marginal → 저우선**
 - △ coil별 측정 노이즈(강도 보수적, 검토)
 - ❌ 정수 픽셀 translation은 **미채택**(target=384 crop vs 모델 640 crop 정렬 불가, 아래 §Tier2 참고)
@@ -52,7 +54,7 @@
 ## 증강 결과 (실측 요약)
 
 > `utils/data`의 실제 샘플(acc4: 23 slice, acc8: 31 slice)에 구현된 증강을 적용해 검증한 결과.
-> 시각 비교는 [`visualize.ipynb`](../utils/data/visualize.ipynb)(원본↔증강, 모든 병변 슬라이스 + k-space/mask).
+> 시각 비교 노트북(원본↔증강, 병변 슬라이스 + k-space/mask)은 검증용 임시라 삭제 — 아래 수치 요약으로 대체.
 > ※ 아래는 눈으로 보기 위한 **고정 아티팩트**(파일당 flip·thinning 1회 적용) 기준. 실제 학습은 저장 없이 매 배치·슬라이스별 랜덤 확률로 on-the-fly 적용된다.
 
 **증강하면 데이터가 어떻게 바뀌나 (3가지가 동시에·정렬 유지하며 일어남):**
@@ -65,7 +67,7 @@
 2. **ACS 보존 마스크 thinning — 중앙 저주파는 그대로, 주변부 고주파만 추가 언더샘플**
    - 샘플 라인: acc4 **114→71** / 368, acc8 **74→52** / 372 (파일당 예시값; thin 배수는 슬라이스별 랜덤).
    - **중앙 ACS(≈8%) 블록은 100% 보존**(sensitivity map/GRAPPA 캘리브레이션 유지), 주변부만 성기게. 증강 마스크는 항상 **원본 마스크의 부분집합**(라인 추가 없음).
-   - k-space 스펙트럼에서 중앙 밝은 저주파 코어는 원본과 동일, 바깥 고주파 줄무늬만 넓어짐(visualize.ipynb §3에서 육안 확인).
+   - k-space 스펙트럼에서 중앙 밝은 저주파 코어는 원본과 동일, 바깥 고주파 줄무늬만 넓어짐(육안 확인함).
 
 3. **bbox 좌표 flip 동기 — 병변을 계속 정확히 감쌈**
    - `x' = 384 − x − w`로 이동. 실측: acc4 `x 158→196`, acc8 `x 296→71` (기대값과 일치). `y`/`width`/`height`/`label`은 불변.
@@ -84,7 +86,7 @@
 - 모델: VarNet 계열. **입력 = 언더샘플 multi-coil k-space + mask**, 타깃 = `image_label`(384×384).
 - 관련 코드: `utils/data/transforms.py`의 `DataTransform.__call__`, `utils/data/load_data.py`.
 - 병변 annotation: image 파일 `attrs['annotations']` (JSON, bbox 좌표는 384×384 image 공간 기준).
-- GRAPPA 초기해: image 파일의 `image_grappa`는 제공 입력으로 사용 가능하나, 원본 multi-coil complex k-space와 동일한 물리량은 아님. FFT해 쓰더라도 **multi-coil k-space 대체품이 아니라 보조 prior**로 취급한다.
+- GRAPPA 초기해: image 파일의 `image_grappa`는 제공 입력으로 사용 가능하나, 원본 multi-coil complex k-space와 동일한 물리량은 아님. **fft 하지 않고 영상 도메인 그대로**, multi-coil k-space 대체품이 아니라 **regularizer U-Net의 영상 prior 채널**로 취급한다(확정: [`confirmed_model.md`](confirmed_model.md)).
 - ⚠️ **현재 파이프라인은 annotation을 미사용**: `DataTransform`은 `mask, kspace, target, maximum, fname, slice`만 반환(annotation drop). bbox 좌표 동기 aug / bbox 가중 손실을 쓰려면 **transform이 `json.loads(attrs.get("annotations","{}"))`를 파싱해 slice별 bbox를 emit**하고, **가변 길이 bbox 배치를 위한 custom `collate_fn`**(또는 batch_size=1)이 필요.
 
 ---
@@ -114,7 +116,7 @@
 | ~~위아래(readout) 플립~~ | ↑(픽셀상) | ⚠ 비현실적 해부구조 | **제외**(Tier 3) — 뼈 위치가 뒤바뀜, hallucination 유사 위험 |
 | Mask aug(추가 언더샘플) | ↑ | ↑ | 낮음 — 타깃 불변. 단 과도 배율은 저대비 병변 소실 → **원본마스크 혼합 필수** |
 | 원본(무증강) 고정마스크 혼합 | ↑(분포정합) | ↑(분포정합) | 없음 — test 고정마스크 = 실제 bbox 채점 분포 |
-| GRAPPA image→FFT 보조 입력 | ↑? | 중립~↑? | 낮음~중간 — 제공 physics prior라 안전 후보. 단 크기/슬라이스/스케일 정규화 실패 시 OOD/shortcut 위험 |
+| GRAPPA 영상 prior 채널(+residual) | ↑? | 중립~↑? | 낮음~중간 — 제공 physics prior라 안전 후보(fft 안 함). 단 크기/슬라이스/스케일 정규화 실패 시 OOD/shortcut 위험 |
 | k-space 랜덤 위상(image-domain smooth) | ↑(robust, marginal) | **중립(불변)** | 없음 — magnitude/RSS 불변. 단 이득 marginal(불변이라 새 신호 없음) → 저우선 |
 | ~~정수 translation~~ | — | — | ❌ **미채택** — target(384 crop) vs 모델(640 crop) 정렬 불가(relerr≈0.44) |
 | 라인 지터(trajectory) | ↑(robust) | 중립 | 낮음 |
@@ -157,14 +159,15 @@
 - **Instrumental noise 분포 보존 (SMPlayer 차용, 검토)**
   - 측정 고유 노이즈 분포를 유지하려 **채널별 노이즈에 sensitivity map을 곱해** 증강.
   - 우리는 멀티코일 k-space가 제공되므로 이식 가능 → coil별 노이즈 통계 존중한 노이즈 주입.
-- **GRAPPA image → FFT(k-space) 보조 입력 계획** △ 제공 physics prior 활용
-  - 아이디어: `image_grappa`는 주최측이 제공한 GRAPPA 초기 복원 영상이므로 external data가 아니라 **언더샘플 k-space에서 얻은 physics 기반 prior**다. 이를 centered FFT로 변환해 `grappa_kspace` 보조 입력으로 사용한다.
-  - 사용 방식: FFT한 GRAPPA를 원래 multi-coil k-space에 "추가 coil"처럼 직접 합치지 않는다. `image_grappa`는 보통 384×384 magnitude 단일 영상이고, 원 입력은 예시 기준 640×368×15coil complex k-space라 coil/위상/해상도가 다르다. 따라서 VarNet의 data consistency는 제공 k-space+mask에만 걸고, GRAPPA FFT는 cascade regularizer의 **auxiliary prior channel**로만 넣는다.
-  - **정규화 필수**: 파일별 image size, k-space size, slice 개수, acc4/acc8 페어 구성이 다를 수 있으므로 `(fname, acc, slice)` 기준으로 정확히 매칭한다. GRAPPA image는 k-space spatial grid에 맞춰 center crop/pad 또는 명시적 resize 규칙을 고정하고, target 384×384 평가 crop과 혼동하지 않는다.
-  - **스케일 정규화**: `image_grappa`, `image_input`, `image_label`, k-space magnitude의 intensity scale이 다를 수 있으므로 per-slice 또는 per-volume 기준을 정해 magnitude normalize한다. 권장 시작점은 `maximum/max` attr 또는 robust percentile로 나누고, FFT 후 complex real/imag는 동일 scale을 유지한다.
+- **GRAPPA 영상 도메인 prior 채널 + residual** △ 제공 physics prior 활용 (확정: [`confirmed_model.md`](confirmed_model.md))
+  - 아이디어: `image_grappa`는 주최측이 제공한 GRAPPA 초기 복원 영상이므로 external data가 아니라 **언더샘플 k-space에서 얻은 physics 기반 prior**다. **fft 하지 않고 영상 그대로** regularizer U-Net에 real-valued prior 채널로 concat한다.
+  - ⚠️ **fft 안 함(2026-07-04 확정)**: GRAPPA는 magnitude·단일코일 384²라, fft하면 위상·코일이 날조된 가짜 k-space가 된다. VarNet cascade regularizer는 image 도메인에서 동작(`sens_reduce→U-Net→sens_expand`)하므로 **영상 채널로 넣는 게 정합**. data consistency는 제공 k-space+mask에만 건다.
+  - **residual 출력**: `out = grappa + f([image_input, grappa, …])` — GRAPPA→label 잔차만 학습해 학습 난이도↓·SSIM↑([`model_strategy.md`](model_strategy.md) §1.2 ①).
+  - **정규화 필수**: 파일별 image size, k-space size, slice 개수, acc4/acc8 페어 구성이 다를 수 있으므로 `(fname, acc, slice)` 기준으로 정확히 매칭한다. GRAPPA(384²)와 readout-crop된 k-space(384×폭) 격자 정합은 GRAPPA 폭 crop 또는 출력단 384² refinement head로.
+  - **스케일 정규화(확정)**: 입력 유도 **전역 스칼라 ÷s**(zero-filled RSS robust percentile)를 `image_input`·`image_grappa`·target에 **동일 적용**, 출력단 `×s`. `maximum` attr은 label 통계라 입력 정규화엔 쓰지 않는다. acc 무관 단일 규칙.
   - **슬라이스 정규화**: image 파일과 k-space 파일의 slice 수가 다르면 더 짧은 쪽에 맞춰 자르거나 명시적으로 error를 낸다. silent broadcast/순서 mismatch는 bbox 학습을 망가뜨리므로 금지한다.
-  - **동기 augmentation**: 좌우 flip/translation을 적용하면 `kspace`, `mask`, `image_grappa` FFT prior, `target`, bbox 좌표를 모두 같은 변환으로 맞춘다. mask augmentation으로 추가 언더샘플을 걸 때는 원본 GRAPPA prior와 증강 k-space 사이 분포 차가 생길 수 있으므로 원본마스크 혼합비와 함께 A/B한다.
-  - 채택 기준: `baseline` vs `+GRAPPA FFT prior`를 동일 split/seed에서 비교하고, **SSIM_bbox 비퇴행**을 먼저 확인한다. bbox가 유지되고 full이 오르며 1080 추론시간 증가가 작을 때만 유지한다.
+  - **동기 augmentation**: 좌우 flip을 적용하면 `kspace`, `mask`, `image_grappa`, `target`, bbox 좌표를 모두 같은 변환으로 맞춘다. **mask augmentation은 GRAPPA엔 미적용**(깨끗한 prior 보존).
+  - 채택 기준: `baseline` vs `+GRAPPA prior`를 동일 split/seed에서 비교하고, **SSIM_bbox 비퇴행**을 먼저 확인한다. bbox가 유지되고 full이 오르며 1080 추론시간 증가가 작을 때만 유지한다.
 - **Mask/라인 위치 지터(trajectory jitter)** ⭐ K-Space Acquisition DG 차용
   - **이미 샘플된 위상인코딩 라인의 인덱스를 소폭(정수 가우시안 오프셋 δ~N_int(0,τ²), 원논문 τ=10) 이동**시켜
     "샘플링 위치가 조금씩 달랐다면"을 시뮬레이션. **라인 개수 유지 + 이동 후 위치 중복 방지**(unique).
@@ -275,7 +278,7 @@
 
 1. **mask-aug + 좌우 flip** — 수상팀 공통·물리 유효·bbox 안전·해부학적 유효라 **최대 이득으로 예상(검증 전 가설)**. 이후 실험의 baseline.
 2. **원본(고정)마스크 혼합비** 튜닝(예: 50/50 → 70/30) — test 분포 정합·OOD 방지, bbox 채점에 직결.
-3. **GRAPPA image → FFT(k-space) 보조 입력**: 크기/슬라이스/스케일 정규화를 고정한 뒤 auxiliary prior로 A/B. data consistency에는 직접 섞지 않음.
+3. **GRAPPA 영상 prior 채널 + residual**(fft 안 함): 크기/슬라이스/스케일 정규화를 고정한 뒤 영상 prior로 A/B. data consistency에는 직접 섞지 않음.
 4. **acc4/acc8 커리큘럼**: 단일배율 pretrain → 혼합 fine-tune(UnifiedCS) A/B.
 5. **k-space 랜덤 위상** — 저위험이나 magnitude/RSS 불변이라 이득 marginal. ON/OFF로 실이득 확인 후만 유지.
 6. **정수 translation / 라인 지터** — 소폭.

@@ -39,6 +39,53 @@ def _ifftc(k, axes=(-2, -1)):
     return np.fft.fftshift(img, axes=axes)
 
 
+# ============================================================================
+# 확정 파이프라인 전처리 (strategy/confirmed_model.md) — 아래 3개는 DataTransform이
+# 플래그로 on/off. 기본 전부 off라, 켜기 전엔 기존 학습과 100% 동일하게 동작한다.
+#   (1) readout crop  : k-space 높이(readout) 640→384만 crop, 폭(PE)은 native 유지
+#   (2) 전역 스칼라 정규화 : 입력유도 스칼라 1개로 k-space·GRAPPA·target 동일 ÷s
+#   (3) GRAPPA 정렬   : flip 증강 시 GRAPPA도 동기 (MRIAugmentor 내부)
+# ============================================================================
+
+def _ifftc1(x, axis):
+    """1축(axis)만 centered iFFT (readout crop용). fastmri 규약(ortho)."""
+    x = np.fft.ifftshift(x, axes=axis)
+    x = np.fft.ifft(x, axis=axis, norm="ortho")
+    return np.fft.fftshift(x, axes=axis)
+
+
+def _fftc1(x, axis):
+    """1축(axis)만 centered FFT."""
+    x = np.fft.ifftshift(x, axes=axis)
+    x = np.fft.fft(x, axis=axis, norm="ortho")
+    return np.fft.fftshift(x, axes=axis)
+
+
+def readout_crop(kspace_c, target_h=384):
+    """readout(height=axis-2) oversampling 조기 제거. 폭(PE, axis-1)은 절대 안 건드림.
+    height축만 이미지화 → center crop(640→target_h) → 다시 k-space.
+    readout는 완전샘플이라 정확 가역 = 무손실(실측: utils/data/verify_readout_crop.py, corr 1.0).
+    출력단 varnet center_crop(384)과 수학적으로 동일(이중 crop 아님, 조기 crop이면 이후 no-op).
+    반환: (coils, target_h, W) complex — 입력과 같은 dtype으로 caller가 캐스팅할 것."""
+    img_h = _ifftc1(kspace_c, axis=-2)          # (coils, H, W) — height만 이미지 도메인
+    H = img_h.shape[-2]
+    if H > target_h:
+        st = (H - target_h) // 2
+        img_h = img_h[..., st:st + target_h, :]
+    elif H < target_h:                          # (드묾) 더 짧으면 center pad
+        pad = target_h - H
+        img_h = np.pad(img_h, [(0, 0)] * (img_h.ndim - 2) + [((pad + 1) // 2, pad // 2), (0, 0)])
+    return _fftc1(np.ascontiguousarray(img_h), axis=-2)
+
+
+def global_scale(kspace_c, percentile=99.0):
+    """입력 유도 전역 스칼라 1개. zero-filled RSS 영상의 robust percentile(기본 p99).
+    코일별 아님(전역) → 코일 상대비 보존 → sens map 추정 무해. acc4/acc8 무관 동일 규칙.
+    ⚠️ label 통계(maximum attr) 대신 '입력'에서 뽑아야 학습·추론이 일관(추론엔 label 없음)."""
+    rss = np.sqrt((np.abs(_ifftc(kspace_c)) ** 2).sum(0))   # (H, W) zero-filled RSS
+    return float(np.percentile(rss, percentile)) + 1e-8
+
+
 def _detect_acs(mask):
     """1D 마스크(1=sampled)에서 중앙 연속 완전샘플(ACS) 구간을 bool로 반환.
     ACS는 sensitivity map/GRAPPA 캘리브레이션 소스라 증강에서 절대 보존해야 한다."""
@@ -131,11 +178,12 @@ class MRIAugmentor:
         keep[periph_idx[off::thin]] = 1  # equispaced thinning + 랜덤 오프셋
         return keep.astype(mask.dtype)
 
-    def _flip_lr(self, K, target, bbox, mask):
+    def _flip_lr(self, K, target, bbox, mask, grappa=None):
         """좌-우(width) 플립을 이미지 도메인에서 수행 후 k-space 재생성 → 재시뮬 없이 픽셀 정확 정렬.
         flip은 center-crop과 commute하므로 384 target(=flip(clean))과 완전 일치.
         마스크는 even-length 정확 공식 M'[j]=M[(W-j)%W] = roll(flip(M),1)로 도출(1-라인 오차 방지).
-        검증: recon(K_flip) == flip(recon(K)) (오차 ~1e-7), 샘플 라인 수 보존."""
+        검증: recon(K_flip) == flip(recon(K)) (오차 ~1e-7), 샘플 라인 수 보존.
+        GRAPPA(영상 384², 있으면)도 같은 좌우 flip으로 동기 — 두 입력의 해부 정렬 유지."""
         coil = _ifftc(K)[:, :, ::-1]
         K2 = _fftc(np.ascontiguousarray(coil))
         M2 = np.roll(np.flip(mask), 1).astype(np.float32)
@@ -144,51 +192,91 @@ class MRIAugmentor:
         if bbox is not None:
             W = tgt.shape[1]
             bbox = [{**b, "x": W - int(b["x"]) - int(b["width"])} for b in bbox]
-        return K2, tgt, M2, bbox
+        g = None if grappa is None else np.ascontiguousarray(grappa[..., ::-1])
+        return K2, tgt, M2, bbox, g
 
-    def __call__(self, kspace_c, mask, target, bbox, fname, sl):
-        """kspace_c:(coils,H,W) complex(raw) · mask:(W,) · target:(384,384) or None.
-        반환: (kspace_masked_complex, mask_1d, target, bbox)."""
+    def __call__(self, kspace_c, mask, target, bbox, grappa, fname, sl):
+        """kspace_c:(coils,H,W) complex(raw) · mask:(W,) · target:(384,384) or None
+        · grappa:(384,384) magnitude or None(GRAPPA 보조 입력, 확정: 영상 도메인 유지).
+        반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
+        ⚠️ GRAPPA에는 flip(기하)만 동기 적용하고 mask/phase/noise 증강은 미적용
+           — 이미 복원된 깨끗한 prior라 라인 더 지우거나 노이즈 주입은 스스로 훼손(confirmed_model)."""
         cfg = self.cfg
         M = (mask >= 1).astype(mask.dtype)
         K = kspace_c * M                       # 제공 언더샘플 적용
         if (not cfg.on) or (target is None):
-            return K, M, target, bbox
+            return K, M, target, bbox, grappa
         p = self._prob()
         if p <= 0.0:
-            return K, M, target, bbox
+            return K, M, target, bbox, grappa
         rng = self._rng(fname, sl)
         tgt = target
 
-        # 1) mask augmentation (원본 유지 확률 반영 → test 고정마스크 분포 정합)
+        # 1) mask augmentation (원본 유지 확률 반영 → test 고정마스크 분포 정합). GRAPPA엔 미적용.
         if cfg.mask and (rng.random() < p) and (rng.random() >= cfg.orig_mask_prob):
             M = self._aug_mask(rng, M)
             K = kspace_c * M
 
-        # 2) 좌-우(width) flip — target·bbox·mask 동기(정렬 유지)
+        # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
         if cfg.flip and (rng.random() < p):
-            K, tgt, M, bbox = self._flip_lr(K, tgt, bbox, M)
+            K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
 
-        # 3) k-space 랜덤 위상 (global, magnitude/RSS 불변 → bbox 채점 불변, 이득 marginal)
+        # 3) k-space 랜덤 위상 (global, magnitude/RSS 불변 → bbox 채점 불변, 이득 marginal). GRAPPA 불변.
         if cfg.phase and (rng.random() < p):
             K = K * np.exp(1j * rng.uniform(0.0, 2.0 * np.pi))
 
-        # 4) 측정 노이즈 (보수적, 샘플된 라인에만)
+        # 4) 측정 노이즈 (보수적, 샘플된 라인에만). GRAPPA 미적용.
         if cfg.noise and (cfg.noise_sigma > 0.0) and (rng.random() < p):
             scale = cfg.noise_sigma * float(np.abs(K).mean())
             n = (rng.standard_normal(K.shape) + 1j * rng.standard_normal(K.shape)) * scale
             K = K + n * M
 
-        return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox
+        return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox, grappa
 
 
 class DataTransform:
-    def __init__(self, isforward, max_key, augmentor=None, is_train=False, return_bbox=False):
+    """확정 파이프라인 전처리(strategy/confirmed_model.md). 신규 기능은 전부 플래그로 게이트.
+
+    ── 다른 파일로의 전달 형식 (network/학습 코드 = 동료 담당) ──────────────────
+    반환은 위치(positional) 튜플. **핵심 6개는 항상 고정** (기존과 동일):
+        (mask, kspace, target, maximum, fname, slice)
+    아래 플래그가 켜지면 그 뒤에 이 순서로만 덧붙는다 (bbox는 항상 맨 끝):
+        normalize=True     → + scale        (float; 출력 역정규화용, output*scale)
+        return_grappa=True → + grappa        (Tensor (384,384) real; regularizer prior 채널로 concat)
+        return_bbox=True   → + bbox          (list[dict]; 가변 길이라 _bbox_collate 필요)
+    즉 최대 형태: (mask, kspace, target, maximum, fname, slice, [scale], [grappa], [bbox]).
+
+    ⚠️ 기본값 전부 off → 정확히 6-튜플 → train_part.py/test_part.py의 6개 언패킹과 비트 동일.
+       플래그를 켜면 소비부(train_epoch/validate/test의 `... = data`)를 그에 맞게 확장해야 함.
+
+    ── network 설계자에게 (플래그 켰을 때 받게 되는 것) ───────────────────────
+      • kspace : readout_crop=True면 높이 640→crop_h(기본 384), 폭은 native(acc4 368/acc8 372).
+                 normalize=True면 전역 스칼라로 나뉜 상태. shape=(coils, crop_h, W, 2) real/imag.
+      • grappa : 영상 도메인 magnitude(384², fft 안 함). normalize 시 같은 s로 나뉨. flip 증강 시 동기.
+                 → confirmed_model: 영상 prior 채널 concat + residual(out = grappa + f(...)).
+                 ※ grappa 폭 384 vs kspace 폭 W(368/372) 격자 차 → network에서 폭 crop 또는 출력단 384² head로 정합.
+      • scale  : per-sample 정규화 스칼라. 최종 출력·SSIM은 이 값으로 역정규화(원 스케일 복귀) 후 채점.
+      • 감도맵 1회 추정 후 재사용(mask증강=그대로/flip=flip)은 network(varnet.py) 쪽 최적화 — 여기선 미포함.
+      • 증강 확률 스케줄(warmup→지수)은 구현돼 있으나 epoch 전달(train_part set_epoch)은 배선 필요(나중/동료).
+    """
+
+    # GRAPPA 키(image 파일 내). load_data.py가 이 키로 읽어 넘겨준다.
+    GRAPPA_KEY = "image_grappa"
+
+    def __init__(self, isforward, max_key, augmentor=None, is_train=False, return_bbox=False,
+                 normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
+                 return_grappa=False):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
         self.is_train = bool(is_train) and (not isforward)
         self.return_bbox = bool(return_bbox)
+        # ---- 확정 전처리 플래그 (기본 off = 기존 동작 보존) ----
+        self.normalize = bool(normalize)          # 전역 스칼라 ÷s (+ scale 반환)
+        self.readout_crop = bool(readout_crop)    # readout 640→crop_h crop
+        self.crop_h = int(crop_h)
+        self.norm_percentile = float(norm_percentile)
+        self.return_grappa = bool(return_grappa)  # GRAPPA 영상 prior 반환
 
     def set_epoch(self, epoch):
         """train_part.py가 매 epoch 호출(스케줄 갱신). augmentor 없으면 no-op."""
@@ -207,7 +295,7 @@ class DataTransform:
             return []
         return d.get(str(int(sl)), [])
 
-    def __call__(self, mask, input, target, attrs, fname, slice):
+    def __call__(self, mask, input, target, attrs, fname, slice, grappa=None):
         if not self.isforward:
             maximum = attrs[self.max_key]
             tgt = np.asarray(target, dtype=np.float32)
@@ -221,10 +309,32 @@ class DataTransform:
 
         bbox = self._parse_bbox(attrs, slice) if (self.return_bbox and not self.isforward) else None
 
+        # GRAPPA 영상 prior (fft 안 함). forward(추론) 경로는 load_data가 아직 미제공 → None 유지.
+        grappa_arr = None
+        if self.return_grappa and (grappa is not None):
+            grappa_arr = np.asarray(grappa, dtype=np.float32)
+
         if self.is_train and (self.augmentor is not None) and (tgt is not None):
-            kspace_c, mask1d, tgt, bbox = self.augmentor(kspace_c, mask1d, tgt, bbox, fname, slice)
+            kspace_c, mask1d, tgt, bbox, grappa_arr = self.augmentor(
+                kspace_c, mask1d, tgt, bbox, grappa_arr, fname, slice)
         else:
-            kspace_c = kspace_c * (mask1d >= 1).astype(mask1d.dtype)  # 기존 동작 유지
+            kspace_c = kspace_c * (mask1d >= 1).astype(mask1d.dtype)  # 기존 동작 유지(val/forward)
+
+        # (1) readout crop 640→crop_h (높이만, 폭 native). flip/mask와 commute라 순서 무관.
+        if self.readout_crop:
+            kspace_c = readout_crop(kspace_c, self.crop_h)
+
+        # (2) 전역 스칼라 정규화 ÷s (입력유도, k-space·GRAPPA·target·maximum 동일 s). 출력단 ×s.
+        scale = None
+        if self.normalize:
+            scale = global_scale(kspace_c, self.norm_percentile)
+            kspace_c = kspace_c / scale
+            if tgt is not None:
+                tgt = tgt / scale
+            if grappa_arr is not None:
+                grappa_arr = grappa_arr / scale
+            if maximum != -1:
+                maximum = float(maximum) / scale     # SSIM data_range 정합(정규화 공간)
 
         kspace_c = kspace_c.astype(orig_cdtype, copy=False)  # dtype 보존(모델은 float32 기대)
         kspace = to_tensor(kspace_c)
@@ -235,6 +345,12 @@ class DataTransform:
 
         target_out = -1 if self.isforward else to_tensor(tgt)
 
+        # 핵심 6개(항상 고정) + 옵션(순서 고정: scale → grappa → bbox). 상세는 클래스 docstring.
+        out = [mask_t, kspace, target_out, maximum, fname, slice]
+        if self.normalize:
+            out.append(np.float32(scale))
+        if self.return_grappa:
+            out.append(to_tensor(grappa_arr) if grappa_arr is not None else torch.empty(0))
         if self.return_bbox:
-            return mask_t, kspace, target_out, maximum, fname, slice, (bbox if bbox is not None else [])
-        return mask_t, kspace, target_out, maximum, fname, slice
+            out.append(bbox if bbox is not None else [])
+        return tuple(out)

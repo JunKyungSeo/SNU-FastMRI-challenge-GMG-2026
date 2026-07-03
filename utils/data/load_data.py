@@ -19,9 +19,11 @@ def _worker_init_fn(worker_id):
 
 def _bbox_collate(batch):
     """return_bbox=True일 때 가변 길이 bbox를 배치로 묶기 위한 collate.
-    앞 6개(mask, kspace, target, maximum, fname, slice)는 기본 collate, bbox는 리스트로 유지."""
-    core = default_collate([b[:6] for b in batch])
-    bboxes = [b[6] for b in batch]
+    bbox는 항상 튜플 맨 끝이라(DataTransform docstring 순서: ...→bbox), 마지막 원소만 리스트로 유지하고
+    나머지(mask/kspace/target/maximum/fname/slice[/scale][/grappa])는 기본 collate.
+    → scale·grappa가 중간에 끼어도 인덱스 하드코딩 없이 동작(맨 끝=bbox 규약)."""
+    core = default_collate([b[:-1] for b in batch])
+    bboxes = [b[-1] for b in batch]
     return (*core, bboxes)
 
 
@@ -119,15 +121,21 @@ class SliceData(Dataset):
         with h5py.File(kspace_fname, "r") as hf:
             input = hf[self.input_key][dataslice]
             mask =  np.array(hf["mask"])
+        grappa = None
         if self.forward:
             target = -1
             attrs = -1
+            # forward(추론/leaderboard) 경로는 kspace 폴더만 읽음 → GRAPPA 미제공.
+            # GRAPPA를 추론에도 쓰려면 leaderboard의 image_grappa 경로 확인 후 배선 필요(미확정, 나중/동료).
         else:
             with h5py.File(image_fname, "r") as hf:
                 target = hf[self.target_key][dataslice]
                 attrs = dict(hf.attrs)
-            
-        return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice)
+                # GRAPPA 영상 prior — transform이 요청할 때만 로드(기본 off면 I/O도 0 → 기존과 동일).
+                if getattr(self.transform, "return_grappa", False) and DataTransform.GRAPPA_KEY in hf:
+                    grappa = hf[DataTransform.GRAPPA_KEY][dataslice]
+
+        return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice, grappa)
 
 
 def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None):
@@ -167,11 +175,22 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None
     return_bbox = getattr(args, "return_bbox", False)
 
+    # ---- 확정 전처리 플래그 (기본 전부 off = 기존 학습과 100% 동일) ----
+    #   켤 때는 network/학습 코드(train_part.py 등)의 배치 언패킹도 함께 확장해야 함
+    #   (반환 튜플 형식은 DataTransform docstring 참고). off면 6-튜플 그대로.
+    normalize = getattr(args, "normalize", False)
+    readout_crop = getattr(args, "readout_crop", False)
+    crop_h = getattr(args, "crop_h", 384)
+    norm_percentile = getattr(args, "norm_percentile", 99.0)
+    return_grappa = getattr(args, "return_grappa", False)
+
     data_storage = SliceData(
         root=data_path,
         transform=DataTransform(
             isforward, max_key_,
             augmentor=augmentor, is_train=is_train, return_bbox=return_bbox,
+            normalize=normalize, readout_crop=readout_crop, crop_h=crop_h,
+            norm_percentile=norm_percentile, return_grappa=return_grappa,
         ),
         input_key=args.input_key,
         target_key=target_key_,

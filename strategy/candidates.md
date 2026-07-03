@@ -1,0 +1,60 @@
+# 후보 (Candidates) — 미결정·열린 A/B
+
+> [`confirmed_model.md`](confirmed_model.md)의 확정 파이프라인 **위에** 얹을지 A/B로 검증할 항목들. 아직 spec 아님.
+> 판정 공통 규칙: **SSIM_bbox 비퇴행을 하드 게이트**로, 그 조건에서 SSIM_full·추론시간 최적화([`augmentation.md`](augmentation.md) §4.2·§4.3). 직전 best 위에 **하나만 추가하는 incremental A/B**.
+
+---
+
+## 즉시 A/B (확정 구조에서 바로)
+| 항목 | 무엇 | 게이트 | 근거 |
+|---|---|---|---|
+| **입력crop vs 출력crop** | readout crop을 입력단(확정) vs 출력단(현행)에 둘 때 비선형 U-Net 문맥 차이 | SSIM 동등 확인(이론상 차 작음, readout 완전샘플이라 alias 유입 없음) | confirmed_model 실측 |
+| **GRAPPA 상보 융합** | `[image_input, image_grappa]` 2채널 입력(noise-faithful ⊕ alias-free) | acc8 bbox 비퇴행 | model_strategy §1.2 ② |
+
+### acc-conditioned GRAPPA·k-space 가중 (network 융합, 후보)
+> **동기**: acc4 GRAPPA는 깨끗하나 acc8 GRAPPA는 g-factor 노이즈 증폭([model_strategy §1.2 ②](model_strategy.md)). → acc4는 GRAPPA를 더 믿고, acc8은 k-space·DC에 더 의존하도록 **가속률별로 GRAPPA·k-space 융합 가중을 다르게**. 특히 acc8 병변부(SSIM_bbox 순위축)에서 노이즈 GRAPPA 과신 방지.
+
+- **acc 판단 = mask에서(파일명 X, 추론서도 robust)**: 파일마다 sample rate가 미세하게 달라 **딱 숫자 대신 임계값**으로 이진 판정.
+  - **규칙**: `frac = sampled/total`. **`frac ≤ 0.25` → acc8(8배), 아니면 → acc4(4배).**
+  - 근거(실측): acc4 frac≈0.310, acc8 frac≈0.199 → 임계 0.25는 양쪽 여유 ≈0.06(파일별 미세 변동 흡수).
+  - ⚠️ **임계값 재조정 필요**: 위 0.25는 **샘플 2개 파일(acc4_1·acc8_1)** 실측 기반. **전체 데이터셋 접근 가능해지면 두 그룹 frac 분포를 재측정해 임계값을 다시 정할 것**(파일별 미세 변동이 크면 두 분포가 겹치는지 확인, 필요시 ACS 제외 주변부 factor로 판정 방식 자체 재검토).
+- **가중 방식(권장)**: 하드코딩(acc4=0.8 등) 대신 **acc 신호를 conditioning으로 주고 network가 학습**(FiLM 또는 GRAPPA prior 채널 학습 게이트 `g=σ(MLP(acc))`, [§1.2 ③ anti-copy 게이팅](model_strategy.md#L85)). 한 모델로 acc4/acc8 둘 다 커버.
+- **데이터 측 지원(미구현)**: mask에서 acc 스칼라/라벨을 뽑아 transform 출력에 실어주면(`return_acc` 게이트 예정) 동료가 융합에서 바로 사용. 실제 가중 로직은 network(varnet.py) 쪽.
+- **게이트**: acc8 SSIM_bbox 비퇴행 우선 확인.
+
+## 손실 함수 (순위축 직공략 — 1순위 후보, 아직 미확정)
+> ⚠️ 선결: `DataTransform`이 annotation을 emit해야 함(현재 bbox는 `return_bbox=True`로 파싱만, 손실 소비부 미배선).
+
+| 항목 | 무엇 | 우선순위 | 근거 |
+|---|---|---|---|
+| **bbox 가중 손실** | `L=(1−SSIM_full)+λ(1−SSIM_bbox)`, 병변영역 가중 | **1순위** | model_strategy §2.1 (MOST) |
+| **병변 슬라이스 오버샘플링** | 병변 슬라이스 샘플 확률↑ (픽셀 미변형, 위험 0) | 1순위(저위험) | model_strategy §2.5 |
+| 중간 감독(deep supervision) | cascade 중간 출력에도 bbox 손실 | 보조 | §2.2 |
+| 고주파 집중 손실 | 미획득 PE 라인/고역통과에 손실 가중 | 실험 후보 | §2.4 (⚠ hallucination 양날) |
+| foreground 마스크 손실 | 배경 제외 영역에서만 SSIM_full (채점 정합) | **eval code 대기** | preprocessing B5 |
+
+## 효율 레버 (8GB·추론시간 — 택1/AB, 동시적용 금지)
+| 항목 | 무엇 | 상태 | 근거 |
+|---|---|---|---|
+| **배치 SME** | 인접 2a+1 슬라이스 감도맵 배치 추정, GPU ≈55%↓ | 잠정채택(spec 미반영) | model_strategy §3.2 |
+| coil compression | 15→8~10 가상코일 SVD/GCC 압축 | 배치SME와 택1 | preprocessing A2 (⚠ 과압축시 bbox↓) |
+| progressive resolution | ACS 저해상도 앵커에서 고주파 점진 복원 | VRAM 부족 시 | model_strategy §4.1 (UEPS-P) |
+| FLAT cascade 다이어트 | 중간감독으로 cascade 6→4 축소, 추론시간↓ | 추론시간 부족 시 | §4.2 |
+
+## 증강 추가 (저위험, marginal)
+| 항목 | 무엇 | 우선순위 | 근거 |
+|---|---|---|---|
+| 원본마스크 혼합비 | 무증강 고정마스크 혼합 50/50→70/30 튜닝 | 2순위 | augmentation.md §4.1 |
+| acc4/acc8 커리큘럼 | 단일배율 pretrain→혼합 fine-tune | 4순위 | §2 UnifiedCS |
+| k-space 랜덤 위상 | magnitude 불변, robust(이득 marginal) | 5순위 | §2 (기본 off) |
+| 라인 지터 | 샘플 라인 인덱스 소폭 이동 | 6순위 | K-Space DG |
+| coil 노이즈 | 채널별 보수적 노이즈(강도 보수적) | 저순위 | §2 (⚠ 저대비 병변) |
+| consistency 정규화 | `‖f(g·y)−g·f(y)‖`, 학습 2× 비용 | 후순위 | §2 보조 (EI) |
+
+## 대기 (외부 조건 필요)
+| 항목 | 무엇 | 필요 조건 |
+|---|---|---|
+| SSIM_full 배경 마스크 정의 | 채점 정합 마스크 확정 | eval code 7/8 공개 |
+| TGVN (2nd contrast) | side-info 기반 재구성 | PD/PDFS 쌍 제공 여부 확인 (미확정) |
+| coil noise pre-whitening | 노이즈 공분산 whitening (acc8 안정) | 코너/배경 추정 정확도 | preprocessing B3 |
+| ACS-only 저해상도 앵커 채널 | 3번째 성질 prior 채널 | 여력 시(GRAPPA로 강등) | preprocessing C6 |

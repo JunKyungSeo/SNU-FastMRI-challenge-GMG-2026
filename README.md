@@ -55,19 +55,24 @@ SNU FastMRI Challenge 도전기
 ├── train.py
 ├── train.sh
 ├── tutorial.ipynb
-├── strategy               # 대회 전략·구현 문서 (아래 "전략 문서" 절 참고)
-│   ├── augmentation.md
-│   ├── model_strategy.md
-│   └── todo.md
+├── strategy               # 대회 전략·구현 문서 (인덱스: strategy/README.md)
+│   ├── README.md          # 전략 문서 인덱스 + 상태 대시보드 (확정/후보/제외)
+│   ├── confirmed_model.md # 확정 파이프라인 SPEC (단일 기준)
+│   ├── implementation.md  # 코드 배선 체크리스트 (✅구현/⏳보류/⬜미구현)
+│   ├── candidates.md      # 미결정 후보·열린 A/B
+│   ├── rejected.md        # 제외한 기법 + 이유
+│   ├── model_strategy.md  # 모델·입력·메모리·효율 전략 (근거)
+│   ├── augmentation.md    # 데이터 증강 전략 (근거)
+│   ├── preprocessing.md   # 전처리 전략 (근거)
+│   └── todo.md            # → implementation.md로 통합(리다이렉트)
 └── utils
 │   ├── common
 │   │   ├── loss_function.py
 │   │   ├── metrics.py
 │   │   └── utils.py
 │   ├── data
-│   │   ├── load_data.py   # 데이터셋 로딩 + augmentation dataloader 배선
-│   │   ├── transforms.py  # DataTransform + MRIAugmentor (augmentation 구현)
-│   │   └── visualize.py   # 샘플 h5 시각화 (원본/증강 이미지·k-space·bbox)
+│   │   ├── load_data.py   # 데이터셋 로딩 + GRAPPA 로딩 + dataloader 배선
+│   │   └── transforms.py  # DataTransform(전처리: readout crop·정규화·GRAPPA) + MRIAugmentor
 │   ├── learning
 │   │   ├── test_part.py
 │   │   └── train_part.py
@@ -126,10 +131,17 @@ python reconstruct.py // sh reconstruct.sh
 - 모델 설명 ppt
 
 ## 8. 전략 문서 (`strategy/`)
-> 대회 준비용 리서치·구현 전략 문서. 코드와 함께 읽으면 "왜 이렇게 구현했는지" 맥락을 파악할 수 있습니다.
+> 대회 준비용 리서치·구현 전략 문서. **인덱스와 상태 대시보드는 [`strategy/README.md`](strategy/README.md)**.
+> 결정은 `confirmed_model.md`(SPEC) 한 곳에서만 정의하고, 나머지는 역할별(구현/후보/제외/근거)로 분리했습니다.
 
-* [`strategy/augmentation.md`](strategy/augmentation.md) — **데이터 증강 전략**. 채택/미채택 기법(좌우 flip·ACS 보존 마스크 thinning 등), SSIM_bbox(순위 결정축) 기준 판정, 실측 결과 요약.
-  * `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)·`utils/data/load_data.py`에 **구현 완료**. 단 기본값은 전부 off라, 켜기 전에는 baseline과 동일하게 동작합니다.
-  * 시각 확인: `utils/data/visualize.ipynb` (원본↔증강 이미지·k-space·bbox 비교).
-* [`strategy/model_strategy.md`](strategy/model_strategy.md) — augmentation이 아닌 **모델·입력·메모리·효율 전략**(GRAPPA 보조 입력, bbox 좌표 활용, 인접 슬라이스 2.5D 채택 여부, cascade 다이어트 등).
-* [`strategy/todo.md`](strategy/todo.md) — 증강을 실제 학습에 **켜기 위한 배선 TODO**(`train.py`의 `--aug-*` 인자 신설, `train_part.py`의 매 epoch `set_epoch` 호출). **아직 미구현**.
+* **[`strategy/README.md`](strategy/README.md)** — 전략 문서 인덱스 + 상태 대시보드(✅확정 / 🔬후보 / ❌제외).
+* **[`strategy/confirmed_model.md`](strategy/confirmed_model.md)** — **확정 재구성 파이프라인 SPEC(단일 기준)**: readout crop·전역 정규화·GRAPPA 영상 prior+residual·감도맵 재사용 등.
+* **[`strategy/implementation.md`](strategy/implementation.md)** — 코드 배선 체크리스트(✅구현됨 / ⏳보류 / ⬜미구현).
+* [`strategy/candidates.md`](strategy/candidates.md) — 미결정 후보·열린 A/B(손실 함수·효율 레버·acc-conditioned GRAPPA 가중 등).
+* [`strategy/rejected.md`](strategy/rejected.md) — 제외한 기법 + 이유(재논의 방지).
+* 근거(rationale) 아카이브: [`model_strategy.md`](strategy/model_strategy.md)(모델·메모리·효율) · [`augmentation.md`](strategy/augmentation.md)(데이터 증강) · [`preprocessing.md`](strategy/preprocessing.md)(전처리).
+
+### 구현 현황 (`utils/data/`, 2026-07-04)
+* **데이터 측 전처리 구현·검증 완료**: readout crop(640→384, 무손실)·전역 스칼라 정규화·GRAPPA 로딩. `transforms.py`/`load_data.py`에 **플래그로 게이트, 기본 전부 off** → 켜기 전에는 baseline과 **비트 동일**.
+* **증강**(좌우 flip·ACS 보존 마스크 thinning·지수 확률 스케줄)도 `MRIAugmentor`에 구현. 단 **활성화 배선**(`train.py` `--aug-*` + `train_part.py` `set_epoch`)은 미구현.
+* **미배선**(network·학습 측): GRAPPA prior+residual·감도맵 재사용·소비부 확장, 그리고 **추론용 GRAPPA 로딩**(leaderboard 구조 공개 후) — 상세는 [`implementation.md`](strategy/implementation.md).

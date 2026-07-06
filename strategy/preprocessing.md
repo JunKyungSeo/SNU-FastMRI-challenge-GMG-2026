@@ -53,13 +53,18 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
   - GRAPPA 채널(§1)은 이미 384² → 조기 crop된 격자와 **오히려 정합이 쉬워짐**(640 pad 불필요, `model_strategy.md` §1.1.1의 zero-pad 뉘앙스 완화).
 - **채점축**: 추론시간 ⭐⭐⭐ / 8GB ⭐⭐⭐ / SSIM 완전 중립(무손실). **문서에 없으면서 최대 지렛대.**
 
-### A2. Coil compression (SVD / geometric coil compression, GCC)
+### A2. Coil compression (SVD / geometric coil compression, GCC) — ✅ **SVD 데이터측 구현됨** (2026-07-06)
 
-- **아이디어**: 15코일 → 가상 8~10코일로 **선형 압축**. ACS(중앙 완전샘플) 블록에서 SVD 도출, per-volume 고정. sens_net·모든 cascade의 coil 차원이 그대로 축소.
+- **아이디어**: 15코일 → 가상 8~10코일로 **선형 압축**. ACS(중앙 완전샘플) 블록에서 SVD 도출. sens_net·모든 cascade의 coil 차원이 그대로 축소.
+- **출처(논문)**:
+  - **SVD coil compression (SCC)**: Buehrer, Pruessmann, Boesiger, Kozerke, "Array compression for MRI with large coil arrays," *Magn. Reson. Med.* 57:1131, 2007. (원조; ACS/calibration에서 SVD 좌특이벡터로 코일 기저 압축.) 관련: Huang et al., "A software channel compression technique for faster reconstruction with many channels," *Magn. Reson. Imaging* 26:133, 2008.
+  - **GCC (geometric-decomposition coil compression)**: Zhang, Pauly, Vasanawala, Lustig, "Coil compression for accelerated imaging with Cartesian sampling," *Magn. Reson. Med.* 69:571, 2013. (readout 방향 위치별 SVD + 정렬 → 가상코일 감도 smooth. SVD보다 재구성 오차 낮음: Wang et al., *CMMM* 2017.)
+- **SSIM 실측 근거**: 딥러닝 복원에서 coil compression은 **SSIM "상승"이 아니라 "거의 동등(neutral)"** — 무압축 대비 SSIM 동등, PSNR만 소폭(≈−0.45 dB) 손실(Benchmarking 3D multi-coil NC-PDNet, arXiv:2411.05883, 2024). ⇒ **속도/VRAM 레버**로만 자리매김(화질 레버 아님). SVD의 SNR 집중이 고노이즈(acc8)에서 미미하게 도울 여지는 있으나 신뢰 상승 요인 아님.
 - **효과**: coil은 메모리·연산의 곱셈 인자 → VRAM·추론시간 동시 절감. **A1과 곱셈적으로 결합**(height↓ × coil↓).
-- **주의(SSIM_bbox)**: 과압축은 **저SNR 병변 신호를 소수 성분에 묻어 소실**시킬 수 있음(순위축 직접 손해). → 보수적으로(예: 12/15) 시작, **bbox 비퇴행 게이트로 배율 스윕**.
-- **관계**: [`model_strategy.md`](model_strategy.md) §3.2 배치 SME와 **목적(SME 메모리 절감)이 겹침** → **동시 적용 말고 택1 또는 A/B**. §4.1 UEPS의 코일 배치화 리스크(15코일 knee에서 되레↑)와도 대비 — coil compression은 그 리스크를 **선형·사전계산으로 회피**하는 대안.
-- **채점축**: 추론시간·8GB ⭐⭐⭐ / SSIM_full △ / SSIM_bbox ⚠(배율 의존).
+- **구현(2026-07-06)**: [`utils/data/transforms.py`](../utils/data/transforms.py) `coil_compress()`(SVD/SCC, per-slice, ACS 기반) + `DataTransform`의 `coil_compress`/`n_virtual_coils` 플래그(기본 off). `readout_crop` 직후·`normalize` 직전 삽입. **추론 안전성**: W를 **ACS에서만** 도출(추론 시 완전샘플은 ACS뿐 → train/test 일관). 미샘플 라인(0) 보존 → **DC 그대로 성립**(실측: 누설 0.00e+00). 실측(realistic 상관 코일): Nvc=8 에너지보존 99.999%·RSS corr 1.0. GCC는 추후 후보.
+- **주의(SSIM_bbox)**: 과압축은 **저SNR 병변 신호를 소수 성분에 묻어 소실**시킬 수 있음(순위축 직접 손해). → 보수적으로(예: 8~10/15) 시작, **bbox 비퇴행 게이트로 배율 스윕**.
+- **관계**: [`model_strategy.md`](model_strategy.md) §3.2 배치 SME와 **목적(SME 메모리 절감)이 겹침** → **동시 적용 말고 택1 또는 A/B**(코드도 상호배타 전제). §4.1 UEPS의 코일 배치화 리스크(15코일 knee에서 되레↑)와도 대비 — coil compression은 그 리스크를 **선형·사전계산으로 회피**하는 대안.
+- **채점축**: 추론시간·8GB ⭐⭐⭐ / SSIM_full △(neutral) / SSIM_bbox ⚠(배율 의존).
 
 ---
 
@@ -67,6 +72,7 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
 
 ### B3. Coil noise pre-whitening (디코릴레이션)
 
+- **출처(논문)**: Roemer, Edelstein, Hayes, Souza, Mueller, "The NMR phased array," *Magn. Reson. Med.* 16:192, 1990 (노이즈 공분산 기반 최적 코일 결합의 원조). 실무 프로토콜: Kellman & McVeigh, "Image reconstruction in SNR units," *Magn. Reson. Med.* 54:1439, 2005 (noise-only 스캔으로 whitening → SNR 단위 복원).
 - **아이디어**: 신호 없는 영역(영상 코너 / 외곽 k-space)에서 **coil 노이즈 공분산을 추정 → whitening 변환**을 coil에 적용. RSS·sensitivity 추정이 통계적으로 최적화됨.
 - **왜 우리 데이터에**: acc8은 g-factor 노이즈 증폭이 심함([`model_strategy.md`](model_strategy.md) §1.2 ②에서 GRAPPA 약점으로 지적) → whitening이 **acc8 SSIM_bbox 안정화**에 특히 유효 가능.
 - **제약**: 전용 noise-only scan은 없음 → **코너/배경 영역 추정으로 근사**(정확도 제한). 중간 난이도.

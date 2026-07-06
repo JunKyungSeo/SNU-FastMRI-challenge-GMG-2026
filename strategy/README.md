@@ -11,7 +11,7 @@
 | **[implementation.md](implementation.md)** | 🔧 코드 배선 체크리스트(의존성 순서) | 배선하는 중 |
 | **[candidates.md](candidates.md)** | 🔬 미결정 후보·열린 A/B | 다음에 뭘 실험할지 |
 | **[rejected.md](rejected.md)** | ❌ 제외된 것 + 이유 | 재논의 방지 |
-| [model_strategy.md](model_strategy.md) · [augmentation.md](augmentation.md) · [preprocessing.md](preprocessing.md) | 📚 근거(rationale) 아카이브 | "왜 이렇게 정했지?" |
+| [model_strategy.md](model_strategy.md) · [augmentation.md](augmentation.md) · [preprocessing.md](preprocessing.md) · [related_work.md](related_work.md) | 📚 근거(rationale)·출처 아카이브 | "왜 이렇게 정했지?"·"선례 논문?" |
 
 > ⚠️ **confirmed_model = 재구성 forward 파이프라인 구조만 확정.** 손실 함수·효율 레버·추가 증강은 아직 **candidates.md**(미확정).
 
@@ -26,7 +26,8 @@
 
 ### 🔬 열린 후보 (→ [candidates.md](candidates.md))
 - **1순위 손실**: bbox 가중 손실 · 병변 슬라이스 오버샘플링
-- **효율(택1 A/B)**: 배치 SME(잠정채택) / coil compression / progressive / FLAT
+- **효율 A군(택1 A/B, SME비용)**: 배치 SME(잠정채택) / **coil compression(SVD, 데이터측 구현됨)** / progressive / FLAT
+- **효율 B군(직교·조합가능)**: knowledge distillation(teacher→student) / TensorRT(배포, Pascal 이득 제한)
 - **즉시 A/B**: 입력crop vs 출력crop · GRAPPA 상보융합(input⊕grappa)
 - **대기**: SSIM_full 배경 마스크(eval code 7/8) · TGVN(PD/PDFS 확인)
 

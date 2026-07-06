@@ -108,6 +108,70 @@ def _detect_acs(mask):
     return acs
 
 
+def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
+    """SVD 기반 coil compression (SCC = Single-slice/SVD Coil Compression).
+
+    ── 무엇을 하나 ────────────────────────────────────────────────────────────
+    물리 코일 C개(예: 15)의 k-space를, 신호(SNR)가 큰 상위 `n_virtual_coils`개의
+    **가상 코일(virtual coil)**로 선형 결합해 코일 차원을 줄인다.
+    코일 수는 sens_net·모든 VarNet cascade의 연산·VRAM에 곱해지는 인자라,
+    15→8이면 per-cascade 비용이 거의 코일 비율만큼(≈53%) 줄어든다.
+    ⚠️ SSIM은 "상승"이 아니라 "거의 동등(neutral)"이 실측 결론(무압축 대비 PSNR 소폭↓,
+       SSIM 동등: Benchmarking 3D multi-coil NC-PDNet, arXiv:2411.05883). 즉 **속도/VRAM
+       레버**이지 화질 레버가 아니다. (근거·출처: strategy/preprocessing.md A2, related_work.md)
+
+    ── 왜 ACS에서 압축행렬을 뽑나 (중요) ──────────────────────────────────────
+    압축행렬 W는 "코일 조합 기저"라, 추론 시점에 **실제로 가진 데이터**로 계산해야 한다.
+    대회 추론에서는 언더샘플 k-space만 주어지고, 그중 **완전샘플 구간은 중앙 ACS(저주파)뿐**이다.
+    따라서 train/test 모두 ACS에서만 W를 구해 일관성을 유지한다(confirmed_model.md의
+    "입력 유도(label 통계 금지)" 원칙과 동일한 계열). ACS는 mask 증강에도 100% 보존되므로
+    (MRIAugmentor._aug_mask) 증강과도 안전하게 호환된다.
+
+    ── 알고리즘 (SVD) ─────────────────────────────────────────────────────────
+      1) ACS 열(중앙 완전샘플 PE 라인)만 모아 calibration 행렬 A = (C, H·n_acs) 구성.
+      2) A = U Σ Vᴴ 로 SVD. 좌특이벡터 U(C×C)가 코일 간 상관을 에너지 순으로 담은 기저.
+      3) 상위 Nvc열 W = U[:, :Nvc] 를 압축행렬로 사용.
+      4) 가상 코일 v = Σ_c conj(W[c,v]) · kspace[c]  →  (Nvc, H, W).
+
+    ── 파이프라인 안전성 (설계 근거) ──────────────────────────────────────────
+    • 코일축 선형결합이라 spatial crop(readout_crop)·flip과 commute → 순서 무관, DataTransform은
+      readout_crop 직후·normalize 직전에 호출한다(잘라 작아진 뒤 SVD → 더 쌈).
+    • mask는 코일 무관(W,) → 불변. 미샘플 라인(값 0)은 0의 선형결합이라 그대로 0 유지 →
+      VarNet의 DC(원 측정 k-space 기준)가 **압축 코일 공간에서 그대로 성립**한다.
+    • GRAPPA 영상 prior는 이미 코일결합된 384² → 압축과 무관(영향 없음).
+    • sens_net은 압축된 ACS로 내부 감도맵을 추정 → 그냥 Nvc코일로 동작(수정 불필요).
+
+    ── 상호배타 주의 ─────────────────────────────────────────────────────────
+    candidates.md 기준 coil compression은 **배치 SME(§3.2)와 택1(동시적용 금지)** — 둘 다
+    SME 비용 절감이 목적이라 중복. 하나만 켠다.
+
+    Args:
+        kspace_c (np.ndarray): complex (C, H, W). readout_crop 이후라면 H=crop_h.
+        mask1d   (np.ndarray): (W,) 0/1 언더샘플 마스크 (ACS 위치 판정용).
+        n_virtual_coils (int): 남길 가상 코일 수(기본 8). C 이상이면 no-op.
+
+    Returns:
+        np.ndarray: complex (Nvc, H, W). C≤Nvc 또는 ACS 부재 시 입력을 그대로 반환(안전).
+                    dtype은 numpy SVD가 complex128로 승격할 수 있으니, 호출부에서
+                    orig_cdtype으로 캐스팅한다(DataTransform.__call__ 말미).
+    """
+    C = kspace_c.shape[0]
+    if n_virtual_coils is None or n_virtual_coils >= C:
+        return kspace_c                              # 압축 이득 없음 → no-op
+    acs = _detect_acs(np.asarray(mask1d))            # bool (W,)
+    if int(acs.sum()) < 1:
+        return kspace_c                              # ACS 없으면 W 추정 불가 → 안전하게 원본
+    # (1) calibration 행렬: ACS 열만 → (C, H*n_acs). 코일별 한 행.
+    cal = kspace_c[:, :, acs].reshape(C, -1)
+    # (2) SVD. full_matrices=False면 U:(C, min(C,N)). 좌특이벡터 = 코일 압축 기저.
+    U, _, _ = np.linalg.svd(cal, full_matrices=False)
+    # (3) 상위 Nvc열 = 압축행렬 W (C, Nvc).
+    W = U[:, :n_virtual_coils]
+    # (4) 적용: (Nvc, C) @ (C, H, W) → (Nvc, H, W). Wᴴ = conj(W).T.
+    kc = np.tensordot(np.conj(W).T, kspace_c, axes=([1], [0]))
+    return np.ascontiguousarray(kc)
+
+
 class AugmentConfig:
     """증강 설정. train.py args에서 채워지며(없으면 getattr 기본값), 기본은 전부 off."""
 
@@ -252,6 +316,8 @@ class DataTransform:
     ── network 설계자에게 (플래그 켰을 때 받게 되는 것) ───────────────────────
       • kspace : readout_crop=True면 높이 640→crop_h(기본 384), 폭은 native(acc4 368/acc8 372).
                  normalize=True면 전역 스칼라로 나뉜 상태. shape=(coils, crop_h, W, 2) real/imag.
+                 ⚠️ coil_compress=True면 coils=n_virtual_coils(예 8)로 축소된다(원 15가 아님).
+                    sens_net·cascade는 그 코일 수로 그대로 동작(수정 불필요). DC도 압축공간에서 성립.
       • grappa : 영상 도메인 magnitude(384², fft 안 함). normalize 시 같은 s로 나뉨. flip 증강 시 동기.
                  → confirmed_model: 영상 prior 채널 concat + residual(out = grappa + f(...)).
                  ※ grappa 폭 384 vs kspace 폭 W(368/372) 격자 차 → network에서 폭 crop 또는 출력단 384² head로 정합.
@@ -265,7 +331,7 @@ class DataTransform:
 
     def __init__(self, isforward, max_key, augmentor=None, is_train=False, return_bbox=False,
                  normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
-                 return_grappa=False):
+                 return_grappa=False, coil_compress=False, n_virtual_coils=8):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
@@ -277,6 +343,11 @@ class DataTransform:
         self.crop_h = int(crop_h)
         self.norm_percentile = float(norm_percentile)
         self.return_grappa = bool(return_grappa)  # GRAPPA 영상 prior 반환
+        # ---- 효율 레버(후보): SVD coil compression. 기본 off. 배치 SME와 택1 ----
+        #   켜면 코일 C(예 15)→n_virtual_coils(예 8)로 축소 → 반환 kspace shape의 coil축이 바뀜.
+        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, candidates.md.
+        self.coil_compress = bool(coil_compress)
+        self.n_virtual_coils = int(n_virtual_coils)
 
     def set_epoch(self, epoch):
         """train_part.py가 매 epoch 호출(스케줄 갱신). augmentor 없으면 no-op."""
@@ -324,7 +395,14 @@ class DataTransform:
         if self.readout_crop:
             kspace_c = readout_crop(kspace_c, self.crop_h)
 
+        # (1b) SVD coil compression C→n_virtual_coils. crop 뒤(작아진 뒤)에 SVD → 더 쌈.
+        #      코일축 선형결합이라 crop과 commute. mask는 ACS 판정에만 쓰고 불변.
+        #      미샘플 라인(0) 보존 → DC 그대로 성립. GRAPPA(코일결합 384²)는 무관.
+        if self.coil_compress:
+            kspace_c = coil_compress(kspace_c, mask1d, self.n_virtual_coils)
+
         # (2) 전역 스칼라 정규화 ÷s (입력유도, k-space·GRAPPA·target·maximum 동일 s). 출력단 ×s.
+        #     압축 뒤에 계산 → global_scale의 RSS가 가상코일 기준 → 네트워크 입력과 일관.
         scale = None
         if self.normalize:
             scale = global_scale(kspace_c, self.norm_percentile)

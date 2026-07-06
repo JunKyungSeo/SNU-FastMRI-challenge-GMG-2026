@@ -32,9 +32,15 @@ def forward(args):
     torch.cuda.set_device(device)
     print ('Current cuda device ', torch.cuda.current_device())
 
-    model = VarNet(num_cascades=args.cascade, 
-                   chans=args.chans, 
-                   sens_chans=args.sens_chans)
+    if getattr(args, "model", "varnet") == "sdum":
+        from utils.model.sdum.config import tiny_8gb_args
+        from utils.model.sdum.adapter import build_sdum
+        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels))
+        model = build_sdum(sdum_args)
+    else:
+        model = VarNet(num_cascades=args.cascade,
+                       chans=args.chans,
+                       sens_chans=args.sens_chans)
     model.to(device=device)
     
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)

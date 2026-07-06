@@ -183,6 +183,10 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     crop_h = getattr(args, "crop_h", 384)
     norm_percentile = getattr(args, "norm_percentile", 99.0)
     return_grappa = getattr(args, "return_grappa", False)
+    # 효율 레버(후보): SVD coil compression. 기본 off = 기존과 동일. 배치 SME와 택1.
+    #   켜면 kspace coil축이 n_virtual_coils로 축소되어 소비부(train_part 등)에 전달됨.
+    coil_compress = getattr(args, "coil_compress", False)
+    n_virtual_coils = getattr(args, "n_virtual_coils", 8)
 
     data_storage = SliceData(
         root=data_path,
@@ -191,6 +195,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
             augmentor=augmentor, is_train=is_train, return_bbox=return_bbox,
             normalize=normalize, readout_crop=readout_crop, crop_h=crop_h,
             norm_percentile=norm_percentile, return_grappa=return_grappa,
+            coil_compress=coil_compress, n_virtual_coils=n_virtual_coils,
         ),
         input_key=args.input_key,
         target_key=target_key_,

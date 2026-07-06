@@ -22,6 +22,13 @@
 - ⚠️ network에서 출력단 `center_crop`(varnet.py:245)과 이중 crop 안 되게 정합(조기 crop이면 이후 no-op).
 - 근거: preprocessing A1, confirmed_model. 실측 recon corr 1.0으로 무손실 검증 완료(검증 스크립트는 임시라 삭제).
 
+### 3b. ✅ Coil compression (SVD) — [`transforms.py`](../utils/data/transforms.py) **(데이터측 구현됨, 2026-07-06)**
+- ✅ `coil_compress` 플래그 + `n_virtual_coils`(기본 8): `coil_compress()`(SVD/SCC, ACS 기반 압축행렬). `readout_crop` 직후·`normalize` 직전. 실측: 미샘플 라인 누설 0.00e+00(DC 보존), realistic 코일 Nvc=8 에너지 99.999%.
+- ⚠️ **network 측 영향**: 켜면 kspace coil축이 15→`n_virtual_coils`로 축소되어 전달됨. sens_net·cascade는 코일 수에 무관하게 동작하므로 **모델 코드 수정 불필요**, 단 소비부가 shape 가정을 하드코딩하지 않는지 확인.
+- ⚠️ **상호배타**: §3.2 배치 SME와 **택1**(동시 적용 금지, 목적 중복). 하나만 켠다.
+- ⚠️ **화질 neutral**: 속도/VRAM 레버(SSIM 상승 아님). 근거·출처: preprocessing A2, related_work, candidates 효율레버 A군.
+- 근거: preprocessing A2, candidates.md. 출처: SVD=Buehrer et al. MRM 2007 / GCC=Zhang et al. MRM 2013.
+
 ### 4. ⬜ GRAPPA 영상 prior + residual — [`utils/model/varnet.py`](../utils/model/varnet.py) (network 측)
 - `VarNet.forward`에 GRAPPA 영상 보조 채널 경로 + **residual 출력**(`out = grappa + f(...)`).
 - GRAPPA(384²) ↔ k-space 격자(384×폭) 정합: 폭 crop 또는 출력단 384² refinement head.

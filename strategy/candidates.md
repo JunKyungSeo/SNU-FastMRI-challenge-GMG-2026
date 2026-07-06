@@ -19,6 +19,7 @@
   - 근거(실측): acc4 frac≈0.310, acc8 frac≈0.199 → 임계 0.25는 양쪽 여유 ≈0.06(파일별 미세 변동 흡수).
   - ⚠️ **임계값 재조정 필요**: 위 0.25는 **샘플 2개 파일(acc4_1·acc8_1)** 실측 기반. **전체 데이터셋 접근 가능해지면 두 그룹 frac 분포를 재측정해 임계값을 다시 정할 것**(파일별 미세 변동이 크면 두 분포가 겹치는지 확인, 필요시 ACS 제외 주변부 factor로 판정 방식 자체 재검토).
 - **가중 방식(권장)**: 하드코딩(acc4=0.8 등) 대신 **acc 신호를 conditioning으로 주고 network가 학습**(FiLM 또는 GRAPPA prior 채널 학습 게이트 `g=σ(MLP(acc))`, [§1.2 ③ anti-copy 게이팅](model_strategy.md#L85)). 한 모델로 acc4/acc8 둘 다 커버.
+  - 출처(FiLM): **Perez, Strub, de Vries, Dumoulin, Courville, "FiLM: Visual Reasoning with a General Conditioning Layer," *AAAI* 2018 (arXiv:1709.07871).** feature를 조건 스칼라로 affine 변조(γ·x+β) → acc 조건화에 경량 적합.
 - **데이터 측 지원(미구현)**: mask에서 acc 스칼라/라벨을 뽑아 transform 출력에 실어주면(`return_acc` 게이트 예정) 동료가 융합에서 바로 사용. 실제 가중 로직은 network(varnet.py) 쪽.
 - **게이트**: acc8 SSIM_bbox 비퇴행 우선 확인.
 
@@ -29,17 +30,27 @@
 |---|---|---|---|
 | **bbox 가중 손실** | `L=(1−SSIM_full)+λ(1−SSIM_bbox)`, 병변영역 가중 | **1순위** | model_strategy §2.1 (MOST) |
 | **병변 슬라이스 오버샘플링** | 병변 슬라이스 샘플 확률↑ (픽셀 미변형, 위험 0) | 1순위(저위험) | model_strategy §2.5 |
-| 중간 감독(deep supervision) | cascade 중간 출력에도 bbox 손실 | 보조 | §2.2 |
+| 중간 감독(deep supervision) | cascade 중간 출력에도 bbox 손실 | 보조 | §2.2 (출처: **Lee, Xie, Gallagher, Zhang, Tu, "Deeply-Supervised Nets," *AISTATS* 2015**) |
 | 고주파 집중 손실 | 미획득 PE 라인/고역통과에 손실 가중 | 실험 후보 | §2.4 (⚠ hallucination 양날) |
 | foreground 마스크 손실 | 배경 제외 영역에서만 SSIM_full (채점 정합) | **eval code 대기** | preprocessing B5 |
 
-## 효율 레버 (8GB·추론시간 — 택1/AB, 동시적용 금지)
-| 항목 | 무엇 | 상태 | 근거 |
+## 효율 레버 A군 (SME 비용 절감 — 택1/AB, 동시적용 금지)
+> 아래 4개는 **목적이 겹쳐(sens/코일/해상도/cascade 비용 절감) 동시적용 금지**, 하나만 택해 A/B.
+
+| 항목 | 무엇 | 상태 | 근거·출처 |
 |---|---|---|---|
-| **배치 SME** | 인접 2a+1 슬라이스 감도맵 배치 추정, GPU ≈55%↓ | 잠정채택(spec 미반영) | model_strategy §3.2 |
-| coil compression | 15→8~10 가상코일 SVD/GCC 압축 | 배치SME와 택1 | preprocessing A2 (⚠ 과압축시 bbox↓) |
-| progressive resolution | ACS 저해상도 앵커에서 고주파 점진 복원 | VRAM 부족 시 | model_strategy §4.1 (UEPS-P) |
-| FLAT cascade 다이어트 | 중간감독으로 cascade 6→4 축소, 추론시간↓ | 추론시간 부족 시 | §4.2 |
+| **배치 SME** | 인접 2a+1 슬라이스 감도맵 배치 추정, GPU ≈55%↓ | 잠정채택(spec 미반영) | model_strategy §3.2 (PromptMR+: `.claude/paper/01_candidates/PromptMRplus_rethink-dum_2024.pdf`) |
+| **coil compression (SVD)** | 15→8~10 가상코일 SVD 압축 | ✅ **데이터측 구현(2026-07-06)**, 배치SME와 택1 | preprocessing A2 · related_work. SVD: **Buehrer et al., MRM 2007**; GCC: **Zhang et al., MRM 2013**. SSIM neutral(arXiv:2411.05883). ⚠ 과압축시 bbox↓ |
+| progressive resolution | ACS 저해상도 앵커에서 고주파 점진 복원 | VRAM 부족 시 | model_strategy §4.1 (UEPS-P: `.claude/paper/01_candidates/UEPS_efficient-recon_2026.pdf`) |
+| FLAT cascade 다이어트 | 중간감독으로 cascade 6→4 축소, 추론시간↓ | 추론시간 부족 시 | §4.2 (FLAT: `.claude/paper/01_candidates/FLAT_prob-flow_2025.pdf`) |
+
+## 효율 레버 B군 (A군과 직교 — 조합 가능, "SSIM 보존하며 속도↓")
+> A군과 달리 **학습 전략(distillation)·배포 단계(TensorRT)**라 A군 어느 것과도 곱해 쓸 수 있다. frontier를 미는 레버(2026-07-06 논의).
+
+| 항목 | 무엇 | 상태 | 근거·출처 |
+|---|---|---|---|
+| **Knowledge distillation** | 서버서 큰 teacher(cascade 多) 학습 → 작고 빠른 student가 teacher 출력까지 모방 → **작은 student가 큰 SSIM 흡수**. 최종 제출은 student(재현성: student만 서버 재학습) | 추론시간·SSIM 동시 개선 후보 | **Hinton, Vinyals, Dean, "Distilling the Knowledge in a Neural Network," arXiv:1503.02531 (NeurIPS 2014 DL Workshop).** MRI 복원 적용례 다수 |
+| **TensorRT / 그래프 최적화** | 학습 후 추론엔진 재컴파일(layer fusion·커널 오토튜닝). **결과 수치 동일, 실행만↓** | 배포 마감 단계 | NVIDIA TensorRT SDK (라이브러리, 논문 아님). ⚠ **1080=Pascal**: Tensor Core 부재로 FP16/INT8 이득 없음 → **FP32 fusion 수준의 완만한 이득만** |
 
 ## 증강 추가 (저위험, marginal)
 | 항목 | 무엇 | 우선순위 | 근거 |

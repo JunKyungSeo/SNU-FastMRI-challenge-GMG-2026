@@ -46,7 +46,8 @@ class SDUMReconModel(nn.Module):
         out = out[:, 0]                           # T 제거 -> (B,C,H,W,2)
         mag = root_sum_of_squares_t(complex_abs_t(out), spatial_dim=1)  # (B,H,W)
         # center_crop은 (C,H,W)를 받음 -> B를 C자리로 취급, (B,384,384) 반환(폭 372->384 zero-pad 포함)
-        return center_crop(mag, *self.out_size)
+        # center_crop이 cuda 가용 시 출력을 cuda로 강제 이동하므로, 입력과 동일 디바이스로 재정렬(정석 계약).
+        return center_crop(mag, *self.out_size).to(masked_kspace.device)
 
 
 def build_sdum(args, out_size=(384, 384)) -> SDUMReconModel:

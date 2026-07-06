@@ -57,6 +57,7 @@
 monai>=1.3.0
 einops>=0.7.0
 timm>=0.9.0
+pytest>=7.0.0
 ```
 
 - [ ] **스텝 2: 설치**
@@ -325,7 +326,7 @@ def test_adapter_forward_shape_and_finite():
 
 - [ ] **스텝 4: adapter.py 구현**
 
-`utils/model/sdum/adapter.py` 생성. 우리 k-space 계약을 NV의 영상 도메인 호출로 변환하고 되돌린다. MONAI의 centered ifft/fft, RSS 사용; 우리 `utils/common/utils.py`에 `center_crop`이 있으면 재사용, 없으면 아래처럼 인라인. ifft/rss 헬퍼 정확한 이름은 Task 1 스텝 2 / MONAI(`monai.data.fft_utils.ifftn_centered`, `monai.apps.reconstruction.mri_utils.root_sum_of_squares_t`, `monai.apps.reconstruction.complex_utils.complex_abs_t`)에서 확정:
+`utils/model/sdum/adapter.py` 생성. 우리 k-space 계약을 NV의 영상 도메인 호출로 변환하고 되돌린다. MONAI의 centered ifft, RSS 사용; **최종 crop은 기존 `utils/common/utils.py::center_crop(data, height, width)`를 재사용**(shape `(C,H,W)` 입력, crop+zero-pad, 존재 확인됨 — 인라인 불필요). ifft/rss 헬퍼 정확한 이름은 Task 1 스텝 2 / MONAI(`monai.data.fft_utils.ifftn_centered`, `monai.apps.reconstruction.mri_utils.root_sum_of_squares_t`, `monai.apps.reconstruction.complex_utils.complex_abs_t`)에서 확정:
 
 ```python
 import torch
@@ -334,6 +335,7 @@ from monai.apps.reconstruction.complex_utils import complex_abs_t
 from monai.apps.reconstruction.mri_utils import root_sum_of_squares_t
 from monai.data.fft_utils import ifftn_centered
 
+from utils.common.utils import center_crop
 from utils.model.sdum.config import build_cascaded
 
 
@@ -341,18 +343,6 @@ def _extract_acc(mask_1d: torch.Tensor) -> int:
     # mask_1d: (W,) of {0,1}. frac<=0.25 -> acc8 else acc4 (strategy/candidates.md)
     frac = mask_1d.float().mean().item()
     return 8 if frac <= 0.25 else 4
-
-
-def _center_crop(img: torch.Tensor, th: int, tw: int) -> torch.Tensor:
-    # img: (B,H,W). 중앙을 (th,tw)로 crop 또는 zero-pad.
-    b, h, w = img.shape
-    out = img.new_zeros(b, th, tw)
-    sh, sw = (h - th) // 2, (w - tw) // 2
-    dh, dw = max(0, -sh), max(0, -sw)
-    sh, sw = max(0, sh), max(0, sw)
-    ch, cw = min(th, h - sh), min(tw, w - sw)
-    out[:, dh : dh + ch, dw : dw + cw] = img[:, sh : sh + ch, sw : sw + cw]
-    return out
 
 
 class SDUMReconModel(nn.Module):
@@ -381,7 +371,8 @@ class SDUMReconModel(nn.Module):
         # magnitude로 coil-combine: NV 출력은 이미 영상 도메인 multicoil
         out = out[:, 0]                           # T 제거 -> (B,C,H,W,2)
         mag = root_sum_of_squares_t(complex_abs_t(out), spatial_dim=1)  # (B,H,W)
-        return _center_crop(mag, *self.out_size)
+        # center_crop은 (C,H,W)를 받음 → B를 C자리로 취급, (B,384,384) 반환(폭 372→384 zero-pad 포함)
+        return center_crop(mag, *self.out_size)
 
 
 def build_sdum(args, out_size=(384, 384)) -> SDUMReconModel:

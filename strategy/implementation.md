@@ -56,6 +56,14 @@
 ### 7. bbox 손실 소비부 (손실 확정 후 — candidates)
 - `DataTransform`은 `return_bbox=True`로 bbox 파싱·flip 동기까지 됨(`_bbox_collate` 포함). **손실에서 소비하는 부분만 미배선** → [`candidates.md`](candidates.md) 손실 확정 후.
 
+### 8. ⬜ 학습 기록 장치 (Claude 입력용)
+> 학습 소요 시간·중단 지점 같은 걸 사람이 손으로 옮겨 적지 않아도, Claude가 파일로 읽을 수 있게 하는 최소 장치.
+
+- **epoch 로그**: train 루프가 epoch마다 한 줄 append — epoch 번호·시작/끝 시각·loss·val SSIM. `../result/<net_name>/train_log.jsonl` 한 파일이면 충분.
+- **중단 기록**: KeyboardInterrupt·예외 시 마지막 줄에 `interrupted @ epoch N + 시각` 기록. 로그가 끊긴 지점 자체가 단서가 되게.
+- **런 메타**: 시작 시 args 전체·git commit을 같은 폴더에 저장.
+- 원칙: 나중에 Claude에게 말로 설명하게 될 정보는 학습 중에 파일로 남긴다. 거창한 도구 말고 로그 몇 줄이면 된다.
+
 ## 재현성 (전 항목 공통)
 - 기본 off일 때 기존과 **비트 동일** 회귀 테스트(seed 고정). 최종 VESSL 재학습 재현 검증 대비.
 - seed·split·라이브러리 버전·데이터 순서 리포지토리 커밋.

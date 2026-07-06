@@ -1,6 +1,10 @@
 # CLAUDE.md — 이 repo에서 작업하는 Claude에게
 
-이 파일은 **미래 세션(GPU 서버 포함)의 Claude가 먼저 읽어야 하는 핸드오프 노트**다. 특히 SDUM 백본 이식 코드는 **개발 환경에서 작성만 됐고 한 번도 실행되지 않았다.** 아래 순서를 반드시 지킬 것.
+이 파일은 **미래 세션(GPU 서버 포함)의 Claude가 먼저 읽어야 하는 핸드오프 노트**다.
+
+> **⚡ GPU 서버라면 바로 여기부터: [`docs/gpu_quickstart.md`](docs/gpu_quickstart.md)** — clone→sanity→8GB config 찾기→학습까지 복붙 순서.
+
+**진행 상황(2026-07-07 갱신):** SDUM 어댑터 forward는 **Colab GPU에서 검증 완료**(shape/finite/1-step 학습 통과). 단 **실제 1080 8GB 적재량은 미검증** → 학습 전 `probe_oom.py`로 config를 잡아야 함(quickstart 2단계). 아래 §1도 참고.
 
 ---
 

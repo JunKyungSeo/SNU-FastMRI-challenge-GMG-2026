@@ -3,6 +3,11 @@ env
 __pycache__
 .DS_Store
 .claude/
+.ipynb_checkpoints/
 
 # HDF5 데이터 파일 (utils/data 등)
 *.h5
+
+# 시각화 산출물 (h5_viewer --export 결과, 대용량)
+viewer_result/volume_stacks/
+viewer_result/volume_stacks.zip

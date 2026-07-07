@@ -36,7 +36,7 @@ python scripts/probe_oom.py --cascades 8 --channels 32 64
 ```bash
 python train.py \
   --model sdum \
-  --num-cascades 6 --channels 24 48 \
+  --num-cascades 4 --channels 32 64 \
   -b 1 -l 2e-4 -e 30 -r 50 \
   -n sdum_run1 \
   -t /root/Data/train/ \

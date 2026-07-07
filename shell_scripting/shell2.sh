@@ -7,6 +7,7 @@
 #        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
 # ============================================================
 set -uo pipefail
+export PYTHONUNBUFFERED=1   # tee 파이프로 가도 python 출력을 실시간으로 (버퍼링 방지)
 
 # --- repo 루트로 이동 (train.py 등은 repo 루트 기준으로 돈다) ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

@@ -48,6 +48,14 @@
 - 최종 제출은 주최측 서버에서 **고정 seed 재현** 검증 → 재현성 필수.
 - **SSIM_bbox를 해치는(병변 hallucination) 변경은 화질이 올라도 채택 금지.**
 
+## 구조 유지 & Git 규칙
+- **기본은 현 구조 유지.** 사용자의 별도 지시가 없으면 `strategy/`의 현재 파일 구조(pipeline·backbone·implementation·decisions·open_issues·research/ + 이 문서·README)를 **그대로 사용**한다. 파일을 새로 만들거나 옮기거나 이름을 바꾸거나 분할·병합하지 말 것 — 내용만 담당 문서에 추가한다.
+- **Git 병합 시에도 동일.** GitHub에서 merge·rebase·pull로 남의 변경과 합칠 때도 이 구조를 보존한다. **충돌이 나도 내용만 합치고, 파일 구성·이름·역할 분리는 바꾸지 않는다**(구조 변경은 사용자 지시가 있을 때만).
+- **push/commit 명령을 받으면 알릴 것.** 사용자가 GitHub push·commit을 지시하면, 실행 전에 **"현재 strategy 구조를 그대로 유지한 채 진행한다"**는 방침을 한 줄로 알린 뒤 진행한다.
+
+> **알림 예시** (push/commit 지시를 받았을 때):
+> "커밋·푸시 진행합니다. strategy 폴더는 현 구조(pipeline·backbone·decisions·open_issues·research/)를 **그대로 유지**하며, 병합 충돌이 있어도 내용만 합치고 구조는 바꾸지 않습니다."
+
 ## 링크 규칙
 - 상대 링크 유지. `research/` 안 문서에서 상위 문서는 `../pipeline.md`처럼.
 - 파일을 옮기거나 이름을 바꾸면 참조 링크를 함께 갱신하고, 끝나면 `grep`으로 **구 파일명 잔여 0 + 링크 대상 실재**를 검증할 것.

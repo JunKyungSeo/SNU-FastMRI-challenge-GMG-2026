@@ -1,7 +1,7 @@
 # Preprocessing 전략 — FastMRI 2026
 
-> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
-> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`confirmed_model.md`](confirmed_model.md).** 나머지(A2·B3·B5·C6)는 [`candidates.md`](candidates.md). 아래는 그 근거.
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](../README.md) · 확정 SPEC [`pipeline.md`](../pipeline.md) · 후보·제외 [`decisions.md`](../decisions.md).
+> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`pipeline.md`](../pipeline.md).** 나머지(A2·B3·B5·C6)는 [`decisions.md`](../decisions.md). 아래는 그 근거.
 > augmentation([`augmentation.md`](augmentation.md))·모델/메모리([`model_strategy.md`](model_strategy.md))와 별개로,
 > **입력 데이터를 네트워크에 넣기 전 결정적으로 가공하는 preprocessing**만 모은 문서.
 > 여기 항목들은 **현재 코드·다른 전략 문서 어디에도 없는(미구현·미계획) 신규 후보**다.
@@ -81,7 +81,7 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
 ### B4. 전역 스칼라 intensity 정규화 (명시적 스케일 고정) ✅ **확정 채택** (2026-07-04)
 
 - **현황**: 로더에 **k-space 스케일 정규화가 전혀 없음**. group-norm(varnet)이 cascade별로만 흡수 → 파일 간·acc4/acc8 간 스케일 편차가 DC 항·손실에 그대로 노출.
-- **확정 방식([`confirmed_model.md`](confirmed_model.md))**: **입력 유도 전역 스칼라 1개**(zero-filled RSS 영상의 robust percentile, 예 p99)로 **k-space·GRAPPA·target 동일 ÷s**, 출력 `×s`. **가속률 무관 단일 규칙**. 코일별 아님(전역) → sens map 무해.
+- **확정 방식([`pipeline.md`](../pipeline.md))**: **입력 유도 전역 스칼라 1개**(zero-filled RSS 영상의 robust percentile, 예 p99)로 **k-space·GRAPPA·target 동일 ÷s**, 출력 `×s`. **가속률 무관 단일 규칙**. 코일별 아님(전역) → sens map 무해.
   - ⚠️ `maximum` attr은 **입력 정규화에 미사용**(label 통계라 추론 시 없음 → 학습·추론 불일치). SSIM data_range로만 유지하되 target ÷s에 맞춰 `maximum÷s` 정합.
 - **효과**: DC·손실 스케일 안정 + acc4/acc8 스케일차 흡수 + GRAPPA↔입력 스케일 정합(residual 성립) + **FP32 재현성↑**. 저비용·무손실.
 - **위치**: `DataTransform.__call__`(증강 후·`to_tensor` 전), 학습·추론 공통 경로. 스칼라 `s` 저장해 출력단 역정규화(384² 채점 crop과 혼동 금지).

@@ -57,15 +57,16 @@ SNU FastMRI Challenge 도전기
 ├── tutorial.ipynb
 ├── strategy               # 대회 전략·구현 문서 (인덱스: strategy/README.md)
 │   ├── README.md          # 전략 문서 인덱스 + 상태 대시보드 (확정/후보/제외)
-│   ├── confirmed_model.md # 확정 파이프라인 SPEC (단일 기준)
+│   ├── pipeline.md        # 확정 재구성 파이프라인 (백본 무관, 단일 기준)
 │   ├── implementation.md  # 코드 배선 체크리스트 (✅구현/⏳보류/⬜미구현)
-│   ├── candidates.md      # 미결정 후보·열린 A/B
-│   ├── rejected.md        # 제외한 기법 + 이유
-│   ├── model_strategy.md  # 모델·입력·메모리·효율 전략 (근거)
-│   ├── augmentation.md    # 데이터 증강 전략 (근거)
-│   ├── preprocessing.md   # 전처리 전략 (근거)
-│   ├── related_work.md    # 딥러닝+GRAPPA 논문 리서치·선례 (출처)
-│   └── todo.md            # → implementation.md로 통합(리다이렉트)
+│   ├── decisions.md       # 열린 후보 A/B + 제외 로그 (재논의 방지)
+│   ├── open_issues.md     # 구현 정합성 갭 + 전략 사각지대 (감사)
+│   ├── backbone.md        # 현재 백본(SDUM) 결정 + 교체 이력 + PromptMR+ 축소 선례
+│   └── research           # 근거 아카이브 (왜 이렇게 정했나)
+│       ├── model_strategy.md  # 모델·입력·메모리·효율 전략
+│       ├── augmentation.md    # 데이터 증강 전략
+│       ├── preprocessing.md   # 전처리 전략
+│       └── related_work.md    # 딥러닝+GRAPPA 논문 리서치·선례 (출처)
 └── utils
 │   ├── common
 │   │   ├── loss_function.py
@@ -133,17 +134,18 @@ python reconstruct.py // sh reconstruct.sh
 
 ## 8. 전략 문서 (`strategy/`)
 > 대회 준비용 리서치·구현 전략 문서. **인덱스와 상태 대시보드는 [`strategy/README.md`](strategy/README.md)**.
-> 결정은 `confirmed_model.md`(SPEC) 한 곳에서만 정의하고, 나머지는 역할별(구현/후보/제외/근거)로 분리했습니다.
+> 결정은 `pipeline.md`(SPEC) 한 곳에서만 정의하고, 나머지는 역할별(구현/결정로그/감사/백본/근거)로 분리했습니다.
 
 * **[`strategy/README.md`](strategy/README.md)** — 전략 문서 인덱스 + 상태 대시보드(✅확정 / 🔬후보 / ❌제외).
-* **[`strategy/confirmed_model.md`](strategy/confirmed_model.md)** — **확정 재구성 파이프라인 SPEC(단일 기준)**: readout crop·전역 정규화·GRAPPA 영상 prior+residual·감도맵 재사용 등.
+* **[`strategy/pipeline.md`](strategy/pipeline.md)** — **확정 재구성 파이프라인 SPEC(단일 기준)**: readout crop·전역 정규화·GRAPPA 영상 prior+residual·감도맵 재사용 등.
 * **[`strategy/implementation.md`](strategy/implementation.md)** — 코드 배선 체크리스트(✅구현됨 / ⏳보류 / ⬜미구현).
-* [`strategy/candidates.md`](strategy/candidates.md) — 미결정 후보·열린 A/B(손실 함수·효율 레버·acc-conditioned GRAPPA 가중 등).
-* [`strategy/rejected.md`](strategy/rejected.md) — 제외한 기법 + 이유(재논의 방지).
-* 근거(rationale) 아카이브: [`model_strategy.md`](strategy/model_strategy.md)(모델·메모리·효율) · [`augmentation.md`](strategy/augmentation.md)(데이터 증강) · [`preprocessing.md`](strategy/preprocessing.md)(전처리) · [`related_work.md`](strategy/related_work.md)(딥러닝+GRAPPA 선례 논문).
+* [`strategy/decisions.md`](strategy/decisions.md) — 열린 후보 A/B(손실 함수·효율 레버·acc-conditioned GRAPPA 가중 등) **+** 제외한 기법과 이유(재논의 방지).
+* [`strategy/open_issues.md`](strategy/open_issues.md) — 구현 정합성 갭(코드 확인) + 전략 사각지대(가설) 감사.
+* [`strategy/backbone.md`](strategy/backbone.md) — 현재 백본(SDUM) 결정 노브 + 교체 이력 + PromptMR+ 클론 축소 선례(8GB 사이징).
+* 근거(research) 아카이브: [`research/model_strategy.md`](strategy/research/model_strategy.md)(모델·메모리·효율) · [`research/augmentation.md`](strategy/research/augmentation.md)(데이터 증강) · [`research/preprocessing.md`](strategy/research/preprocessing.md)(전처리) · [`research/related_work.md`](strategy/research/related_work.md)(딥러닝+GRAPPA 선례 논문).
 
 ### 데이터 증강(Augmentation) 전략 요약
-> 원칙: **hallucination-free lesion fidelity** — 병변 bbox를 훼손하지 않고 물리적으로 유효한 변형만. (상세·근거: [`augmentation.md`](strategy/augmentation.md), 제외 목록: [`rejected.md`](strategy/rejected.md))
+> 원칙: **hallucination-free lesion fidelity** — 병변 bbox를 훼손하지 않고 물리적으로 유효한 변형만. (상세·근거: [`research/augmentation.md`](strategy/research/augmentation.md), 제외 목록: [`decisions.md`](strategy/decisions.md))
 
 * **채택(ON)**: ① 좌-우(phase-encode) **flip** — k-space·GRAPPA·target·bbox 동기, center-crop과 commute라 정확 정렬. ② **ACS 보존 마스크 thinning**(중앙 ACS 100% 보존, 주변부만 추가 언더샘플, k-space에만). ③ (기본 off) k-space 랜덤 위상·보수적 측정 노이즈.
 * **스케줄**: warmup(초기 off) → **지수형 확률 점증**, 샘플별 **결정적 RNG**(재현성).
@@ -151,7 +153,7 @@ python reconstruct.py // sh reconstruct.sh
 * 근거 논문: MRAugment(Fabian et al., NeurIPS 2021) · K-Space Acquisition DG(Wattad et al., 2025).
 
 ### 전처리(Preprocessing) 전략 요약
-> 원칙: 네트워크에 넣기 **전 결정적 가공**으로 8GB·추론시간을 줄이되 화질은 무손실/중립. (상세·근거: [`preprocessing.md`](strategy/preprocessing.md), SPEC: [`confirmed_model.md`](strategy/confirmed_model.md))
+> 원칙: 네트워크에 넣기 **전 결정적 가공**으로 8GB·추론시간을 줄이되 화질은 무손실/중립. (상세·근거: [`research/preprocessing.md`](strategy/research/preprocessing.md), SPEC: [`pipeline.md`](strategy/pipeline.md))
 
 * **✅ 확정**: ① **Readout crop 640→384**(readout는 완전샘플이라 무손실, recon corr 1.0, VRAM ≈40%↓, 폭은 native 유지). ② **전역 스칼라 정규화 ÷s**(입력유도 RSS p99, k-space·GRAPPA·target 동일, 출력 ×s / label 통계 미사용). ③ GRAPPA는 **영상 도메인 유지**(fft 안 함).
 * **🔬 효율 후보(구현됨, 기본 off)**: **SVD coil compression** 15→8 가상코일(속도/VRAM 레버, SSIM neutral, ACS 기반이라 추론 안전·DC 보존; 출처 Buehrer et al. MRM 2007). 배치 SME와 **택1**.

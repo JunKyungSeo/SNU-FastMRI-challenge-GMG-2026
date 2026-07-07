@@ -16,13 +16,13 @@ def to_tensor(data):
 
 
 # ============================================================================
-# Data Augmentation (strategy/augmentation.md 구현)
+# Data Augmentation (strategy/research/augmentation.md 구현)
 #   설계 원칙: hallucination-free lesion fidelity — bbox 안전 + 물리적으로 유효한 증강만.
 #   채택(ON): 좌-우(width/phase-encode) 플립만 · ACS 보존 마스크 증강 · 소폭 정수 translation
 #             · k-space 랜덤 위상(marginal) · 측정 노이즈(보수적)
-#   위-아래(readout) 플립은 제외(무릎 뼈 위치가 뒤바뀌는 비현실 형태) — augmentation.md Tier 3.
+#   위-아래(readout) 플립은 제외(무릎 뼈 위치가 뒤바뀌는 비현실 형태) — research/augmentation.md Tier 3.
 #   스케줄: 지수형 확률(첫 warmup epoch off → max_prob 점증) · 샘플별 결정적 RNG(재현성).
-#   ※ epoch 전달·args 정의는 train_part.py/train.py 배선 필요(strategy/todo.md).
+#   ※ epoch 전달·args 정의는 train_part.py/train.py 배선 필요(strategy/implementation.md §6a·§6b).
 #     기본값은 전부 off라, 배선 전엔 기존 학습과 동일하게 동작.
 # ============================================================================
 
@@ -40,7 +40,7 @@ def _ifftc(k, axes=(-2, -1)):
 
 
 # ============================================================================
-# 확정 파이프라인 전처리 (strategy/confirmed_model.md) — 아래 3개는 DataTransform이
+# 확정 파이프라인 전처리 (strategy/pipeline.md) — 아래 3개는 DataTransform이
 # 플래그로 on/off. 기본 전부 off라, 켜기 전엔 기존 학습과 100% 동일하게 동작한다.
 #   (1) readout crop  : k-space 높이(readout) 640→384만 crop, 폭(PE)은 native 유지
 #   (2) 전역 스칼라 정규화 : 입력유도 스칼라 1개로 k-space·GRAPPA·target 동일 ÷s
@@ -118,12 +118,12 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     15→8이면 per-cascade 비용이 거의 코일 비율만큼(≈53%) 줄어든다.
     ⚠️ SSIM은 "상승"이 아니라 "거의 동등(neutral)"이 실측 결론(무압축 대비 PSNR 소폭↓,
        SSIM 동등: Benchmarking 3D multi-coil NC-PDNet, arXiv:2411.05883). 즉 **속도/VRAM
-       레버**이지 화질 레버가 아니다. (근거·출처: strategy/preprocessing.md A2, related_work.md)
+       레버**이지 화질 레버가 아니다. (근거·출처: strategy/research/preprocessing.md A2, research/related_work.md)
 
     ── 왜 ACS에서 압축행렬을 뽑나 (중요) ──────────────────────────────────────
     압축행렬 W는 "코일 조합 기저"라, 추론 시점에 **실제로 가진 데이터**로 계산해야 한다.
     대회 추론에서는 언더샘플 k-space만 주어지고, 그중 **완전샘플 구간은 중앙 ACS(저주파)뿐**이다.
-    따라서 train/test 모두 ACS에서만 W를 구해 일관성을 유지한다(confirmed_model.md의
+    따라서 train/test 모두 ACS에서만 W를 구해 일관성을 유지한다(pipeline.md의
     "입력 유도(label 통계 금지)" 원칙과 동일한 계열). ACS는 mask 증강에도 100% 보존되므로
     (MRIAugmentor._aug_mask) 증강과도 안전하게 호환된다.
 
@@ -142,7 +142,7 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     • sens_net은 압축된 ACS로 내부 감도맵을 추정 → 그냥 Nvc코일로 동작(수정 불필요).
 
     ── 상호배타 주의 ─────────────────────────────────────────────────────────
-    candidates.md 기준 coil compression은 **배치 SME(§3.2)와 택1(동시적용 금지)** — 둘 다
+    decisions.md 기준 coil compression은 **배치 SME(§3.2)와 택1(동시적용 금지)** — 둘 다
     SME 비용 절감이 목적이라 중복. 하나만 켠다.
 
     Args:
@@ -198,7 +198,7 @@ class AugmentConfig:
 
 
 class MRIAugmentor:
-    """augmentation.md의 데이터 증강을 numpy로 구현. DataTransform이 호출.
+    """research/augmentation.md의 데이터 증강을 numpy로 구현. DataTransform이 호출.
     모든 증강은 (kspace_complex, mask, target[, bbox])를 정렬 유지하며 함께 변환한다."""
 
     def __init__(self, cfg):
@@ -264,7 +264,7 @@ class MRIAugmentor:
         · grappa:(384,384) magnitude or None(GRAPPA 보조 입력, 확정: 영상 도메인 유지).
         반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
         ⚠️ GRAPPA에는 flip(기하)만 동기 적용하고 mask/phase/noise 증강은 미적용
-           — 이미 복원된 깨끗한 prior라 라인 더 지우거나 노이즈 주입은 스스로 훼손(confirmed_model)."""
+           — 이미 복원된 깨끗한 prior라 라인 더 지우거나 노이즈 주입은 스스로 훼손(pipeline)."""
         cfg = self.cfg
         M = (mask >= 1).astype(mask.dtype)
         K = kspace_c * M                       # 제공 언더샘플 적용
@@ -299,7 +299,7 @@ class MRIAugmentor:
 
 
 class DataTransform:
-    """확정 파이프라인 전처리(strategy/confirmed_model.md). 신규 기능은 전부 플래그로 게이트.
+    """확정 파이프라인 전처리(strategy/pipeline.md). 신규 기능은 전부 플래그로 게이트.
 
     ── 다른 파일로의 전달 형식 (network/학습 코드 = 동료 담당) ──────────────────
     반환은 위치(positional) 튜플. **핵심 6개는 항상 고정** (기존과 동일):
@@ -319,7 +319,7 @@ class DataTransform:
                  ⚠️ coil_compress=True면 coils=n_virtual_coils(예 8)로 축소된다(원 15가 아님).
                     sens_net·cascade는 그 코일 수로 그대로 동작(수정 불필요). DC도 압축공간에서 성립.
       • grappa : 영상 도메인 magnitude(384², fft 안 함). normalize 시 같은 s로 나뉨. flip 증강 시 동기.
-                 → confirmed_model: 영상 prior 채널 concat + residual(out = grappa + f(...)).
+                 → pipeline: 영상 prior 채널 concat + residual(out = grappa + f(...)).
                  ※ grappa 폭 384 vs kspace 폭 W(368/372) 격자 차 → network에서 폭 crop 또는 출력단 384² head로 정합.
       • scale  : per-sample 정규화 스칼라. 최종 출력·SSIM은 이 값으로 역정규화(원 스케일 복귀) 후 채점.
       • 감도맵 1회 추정 후 재사용(mask증강=그대로/flip=flip)은 network(varnet.py) 쪽 최적화 — 여기선 미포함.
@@ -345,7 +345,7 @@ class DataTransform:
         self.return_grappa = bool(return_grappa)  # GRAPPA 영상 prior 반환
         # ---- 효율 레버(후보): SVD coil compression. 기본 off. 배치 SME와 택1 ----
         #   켜면 코일 C(예 15)→n_virtual_coils(예 8)로 축소 → 반환 kspace shape의 coil축이 바뀜.
-        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, candidates.md.
+        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, decisions.md.
         self.coil_compress = bool(coil_compress)
         self.n_virtual_coils = int(n_virtual_coils)
 

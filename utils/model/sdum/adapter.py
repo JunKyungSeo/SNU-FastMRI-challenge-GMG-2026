@@ -14,7 +14,7 @@ from utils.model.sdum.config import build_cascaded
 
 
 def _extract_acc(mask_1d: torch.Tensor) -> int:
-    # mask_1d: (W,) of {0,1}. frac<=0.25 -> acc8 else acc4 (strategy/candidates.md)
+    # mask_1d: (W,) of {0,1}. frac<=0.25 -> acc8 else acc4 (strategy/decisions.md)
     frac = mask_1d.float().mean().item()
     return 8 if frac <= 0.25 else 4
 

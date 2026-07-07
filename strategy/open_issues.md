@@ -5,7 +5,7 @@
 > - **Part A — 구현 정합성 갭**: 문서엔 있으나 코드에 없거나, 코드가 문서와 어긋난 부분(사실 확인됨).
 > - **Part B — 전략적 사각지대**: 우리 사고 틀 자체가 인지하지 못한, 대회의 본질·승부 아이디어(가설·검증 필요).
 > 각 항목은 **무엇을 놓쳤나 · 왜 중요한가(이유) · 방향**으로 적는다.
-> 관련: SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 배선 [`implementation.md`](implementation.md).
+> 관련: SPEC [`pipeline.md`](pipeline.md) · 후보 [`decisions.md`](decisions.md) · 배선 [`implementation.md`](implementation.md).
 
 ---
 
@@ -18,12 +18,12 @@
 - **무엇**: [`train_part.py:74`](../utils/learning/train_part.py#L74) `validate()`는 `ssim_loss(targets, reconstructions)`([`utils.py:35`](../utils/common/utils.py#L35))로 채점한다 — **배경 포함 전체 384² 평범한 SSIM**. 그런데 [`metrics.py`](../utils/common/metrics.py)에는 **진짜 리더보드 채점 함수**(`foreground_mask`·`ssim_full`·`ssim_bbox`)가 이미 구현돼 있는데 **train_part.py가 import조차 안 한다.**
 - **이유(왜 치명적)**:
   - `is_new_best` 모델 선택이 **틀린 지표**로 이뤄진다(배경 포함 full SSIM).
-  - **SSIM_bbox(순위 결정축)를 학습 중 단 한 번도 계산하지 않는다.** 전략 전체가 이 값을 밀자는 것인데, 정작 볼 수가 없다 → "full↑ bbox↓" 함정을 조기에 못 잡는다([`augmentation.md`](augmentation.md) §4.2의 측정 프로토콜이 코드에 없음).
+  - **SSIM_bbox(순위 결정축)를 학습 중 단 한 번도 계산하지 않는다.** 전략 전체가 이 값을 밀자는 것인데, 정작 볼 수가 없다 → "full↑ bbox↓" 함정을 조기에 못 잡는다([`augmentation.md`](research/augmentation.md) §4.2의 측정 프로토콜이 코드에 없음).
 - **방향**: `validate()`를 `metrics.ssim_full`·`ssim_bbox`로 교체, best 모델 선택 기준을 **SSIM_bbox 비퇴행 게이트**로. acc4/acc8·full/bbox 4숫자 분리 리포트.
 
 ## A2. 🔴 "배경 마스크 정의 미확정"은 사실이 아님 — 이미 코드에 있음 (문서 stale)
 
-- **무엇**: 여러 문서([`confirmed_model.md:72`](confirmed_model.md), [`augmentation.md`](augmentation.md) §4.2, [`README.md`](README.md), `.claude/CLAUDE.md`)가 *"SSIM_full 배경 마스크 정의 미확정, eval code 공개 후 재동기화"*로 적혀 있다. 그러나 [`metrics.py:48`](../utils/common/metrics.py#L48) `foreground_mask`에 정의가 **이미 있다**: `target > 2e-5` (절대 threshold) → `erode×1 → dilate×15 → erode×14`.
+- **무엇**: 여러 문서([`pipeline.md:72`](pipeline.md), [`augmentation.md`](research/augmentation.md) §4.2, [`README.md`](README.md), `.claude/CLAUDE.md`)가 *"SSIM_full 배경 마스크 정의 미확정, eval code 공개 후 재동기화"*로 적혀 있다. 그러나 [`metrics.py:48`](../utils/common/metrics.py#L48) `foreground_mask`에 정의가 **이미 있다**: `target > 2e-5` (절대 threshold) → `erode×1 → dilate×15 → erode×14`.
 - **이유**: "잠정 proxy"라며 미뤄둔 로컬 SSIM_full을 **지금 확정**할 수 있다. 불확실성을 이유로 보류한 실험들이 실제로는 진행 가능.
 - **방향**: 이 `metrics.py`가 **공식 배포본이 맞는지 확인**(맞으면 문서의 "미확정" 표기 일괄 정정) → 로컬 채점을 이 정의로 고정.
 
@@ -45,11 +45,11 @@
 
 - **무엇**: [`loss_function.py:12`](../utils/common/loss_function.py#L12) `SSIMLoss`는 **배경 포함 full SSIM**. 채점은 (a)전경마스크 SSIM_full + (b)bbox SSIM.
 - **이유**: **손실이 최적화하는 대상과 채점 대상이 다르다.** 배경(공기)까지 SSIM에 포함되어 학습 신호가 희석되고, 순위축 bbox는 손실에 아예 없다.
-- **방향**: 손실에 전경마스크 적용 + **bbox 가중 손실**([`candidates.md`](candidates.md) 1순위) 배선. bbox 파싱은 되나 손실 소비부 미배선.
+- **방향**: 손실에 전경마스크 적용 + **bbox 가중 손실**([`decisions.md`](decisions.md) 1순위) 배선. bbox 파싱은 되나 손실 소비부 미배선.
 
 ## A6. 🟡 배치가 bs=1에 갇혀 있고 acc4/acc8 폭(368/372) pad 미구현
 
-- **무엇**: [`train.py:20`](../train.py#L20) 기본 `batch_size=1`. 폭이 다른 acc4(368)/acc8(372)를 한 배치에 못 쌓아 batch>1이 막힘. 문서는 "mask=0 pad로 폭 통일"을 **언급만** 하고 구현·계획 없음([`model_strategy.md`](model_strategy.md) §1.1 주의).
+- **무엇**: [`train.py:20`](../train.py#L20) 기본 `batch_size=1`. 폭이 다른 acc4(368)/acc8(372)를 한 배치에 못 쌓아 batch>1이 막힘. 문서는 "mask=0 pad로 폭 통일"을 **언급만** 하고 구현·계획 없음([`model_strategy.md`](research/model_strategy.md) §1.1 주의).
 - **이유**: 1080에서 학습 효율(수렴 속도)의 상한을 스스로 묶고 있다.
 - **방향**: k-space 폭 pad(mask=0) 유틸 + 배치에 acc4/acc8 균형 혼합.
 
@@ -71,25 +71,25 @@
 
 ## B2. ⭐ SSIM은 작은 병변 패치에서 "선명함"이 아니라 "보수성"을 보상한다 (우리 §2.4가 방향이 거꾸로일 수 있음)
 
-- **무엇**: [`model_strategy.md`](model_strategy.md) §2.4는 *"미획득 고주파에 손실 집중해 병변 미세구조를 살리자"*를 민다. 그런데 [`metrics.py:73`](../utils/common/metrics.py#L73) `ssim_bbox`는 **16~수십 px 작은 패치**에서 SSIM을 잰다 — 이 스케일에선 국소 평균/분산 일치(luminance·contrast)가 지배적이고, SSIM은 노이즈 분산을 페널티한다.
+- **무엇**: [`model_strategy.md`](research/model_strategy.md) §2.4는 *"미획득 고주파에 손실 집중해 병변 미세구조를 살리자"*를 민다. 그런데 [`metrics.py:73`](../utils/common/metrics.py#L73) `ssim_bbox`는 **16~수십 px 작은 패치**에서 SSIM을 잰다 — 이 스케일에선 국소 평균/분산 일치(luminance·contrast)가 지배적이고, SSIM은 노이즈 분산을 페널티한다.
 - **이유(비대칭)**: **흐릿하지만 충실한 병변**은 구조 보존으로 SSIM이 괜찮고, **선명하지만 위조된 텍스처**는 없는 구조를 만들어 SSIM이 오히려 **더 떨어지고** 임상적으로도 위험. 저SNR 병변부에 "고주파를 채워라"를 강하게 밀면 곧 위조·노이즈 = 순위축 손해. (우리도 §2.4를 "양날의 칼"이라 했으나 결론이 "밀어보자"로 기울어 있음.)
 - **방향 — 영역 적응(region-adaptive)**: 벌크 조직은 선명하게(SSIM_full), **병변 bbox 안은 의도적으로 보수적으로**(약한 스무딩·GRAPPA 근접). 전역 sharpen과 정반대.
 
 ## B3. ⭐ GRAPPA를 병변에서 "덜 베끼게"가 아니라 "더 믿게" (anti-copy의 역발상)
 
-- **무엇**: [`model_strategy.md`](model_strategy.md) §1.2 ③ anti-copy 게이팅은 *"GRAPPA 상한에 갇히지 말고 넘어서라"*. 맞지만 **공간적으로 반대로 적용해야 할 지점**을 놓쳤다.
+- **무엇**: [`model_strategy.md`](research/model_strategy.md) §1.2 ③ anti-copy 게이팅은 *"GRAPPA 상한에 갇히지 말고 넘어서라"*. 맞지만 **공간적으로 반대로 적용해야 할 지점**을 놓쳤다.
 - **이유**: GRAPPA는 선형·물리 복원 = **절대 병변을 지어내지 않는 안전 앵커**. 환각 위험이 가장 높은 곳 = 병변부. 그렇다면 **병변 bbox 안에서는 GRAPPA를 강하게 신뢰**(trust gate↑)하고, 창의적 복원은 위험 낮은 벌크에서만 허용.
 - **방향 — 병변 인지 신뢰 게이팅**: 게이트 `g`를 전역 학습이 아니라 **병변 saliency로 공간 변조**. (B2=손실 버전, B3=구조 버전, 같은 원리 "병변부=보수 영역".)
 
 ## B4. ⭐ VarNet은 "주어진 베이스라인"일 뿐 — 백본을 한 번도 의심하지 않았다
 
-- **무엇**: VarNet은 팀이 A/B로 고른 게 아니라 **주최측 제공 베이스라인(`2026_baby_varnet`)이라 기본값으로 깔린 것**이다. 그런데 [`confirmed_model.md`](confirmed_model.md) §5·[`README.md`](README.md) 상태판이 이걸 "main: VarNet cascade+DC"로 적으면서, **고른 적 없는 상속된 기본값이 의심 없이 '확정'처럼 굳었다.** 백본 자체를 대안과 비교한 기록이 없다.
-- **이유**: 이 대회엔 백본 선택을 다시 열어야 할 두 특수 조건이 있다 — ① **GRAPPA가 병렬영상의 무거운 일을 끝내 입력으로 제공**됨(VarNet의 가장 비싼 감도맵 SME+다단계 cascade가 하는 일을 상당 부분 대체), ② **추론시간 채점 + 1080 8GB**. 즉 **"GRAPPA 초기해 + 경량 image-domain refiner + 가벼운 k-space DC 한두 번"** 구조가 추론시간을 압도하면서 GRAPPA 출발이라 환각도 안전할 수 있다([`related_work.md`](related_work.md) DeepMRIRec/feature-domain 계열). 상속된 기본값을 그대로 밀면 이 가능성을 통째로 못 본다.
+- **무엇**: VarNet은 팀이 A/B로 고른 게 아니라 **주최측 제공 베이스라인(`2026_baby_varnet`)이라 기본값으로 깔린 것**이다. 그런데 [`pipeline.md`](pipeline.md) §5·[`README.md`](README.md) 상태판이 이걸 "main: VarNet cascade+DC"로 적으면서, **고른 적 없는 상속된 기본값이 의심 없이 '확정'처럼 굳었다.** 백본 자체를 대안과 비교한 기록이 없다.
+- **이유**: 이 대회엔 백본 선택을 다시 열어야 할 두 특수 조건이 있다 — ① **GRAPPA가 병렬영상의 무거운 일을 끝내 입력으로 제공**됨(VarNet의 가장 비싼 감도맵 SME+다단계 cascade가 하는 일을 상당 부분 대체), ② **추론시간 채점 + 1080 8GB**. 즉 **"GRAPPA 초기해 + 경량 image-domain refiner + 가벼운 k-space DC 한두 번"** 구조가 추론시간을 압도하면서 GRAPPA 출발이라 환각도 안전할 수 있다([`related_work.md`](research/related_work.md) DeepMRIRec/feature-domain 계열). 상속된 기본값을 그대로 밀면 이 가능성을 통째로 못 본다.
 - **방향**: VarNet을 "기본값"이 아니라 **하나의 후보**로 내려놓고, **GRAPPA-centric 경량 refiner**와 동등하게 A/B(현재 비교 대상에서 빠져 있음). 백본은 A7 baseline 측정 위에서 3축(SSIM/시간/VRAM)으로 판정.
 
 ## B5. 앙상블/self-ensemble을 "화질 도구"로 보고 기각했다 — 실은 "환각 제거 도구"
 
-- **무엇**: [`augmentation.md`](augmentation.md) §3.5는 TTA를 *"추론시간 N배 → 감점"*으로 사실상 접었다.
+- **무엇**: [`augmentation.md`](research/augmentation.md) §3.5는 TTA를 *"추론시간 N배 → 감점"*으로 사실상 접었다.
 - **이유(저울이 틀림)**: 여러 복원본 평균은 **일관된 구조(진짜)는 살리고 뷰마다 갈리는 구조(환각)는 상쇄** → **순위축(hallucination-free bbox)을 직접 겨냥하는 억제 도구**. "저비용 2-view flip 앙상블"의 가치는 "SSIM 약간 상승"이 아니라 **"병변부 위조 확률 감소"**로 재평가해야 한다.
 - **방향**: 2-view flip 앙상블을 **Δms vs Δ(bbox 위조율)**로 재측정. B1(환각 통제) 프레임의 실전 도구.
 
@@ -101,7 +101,7 @@
 
 ## B7. 병변을 "슬라이스 유무"로만 보고 pathology 22종의 분포/불균형을 안 본다
 
-- **무엇**: 데이터 활용이 "병변 슬라이스 오버샘플링" 수준. SSIM_bbox는 **per-lesion 평균**이 1차 지표([`augmentation.md`](augmentation.md) §4.2).
+- **무엇**: 데이터 활용이 "병변 슬라이스 오버샘플링" 수준. SSIM_bbox는 **per-lesion 평균**이 1차 지표([`augmentation.md`](research/augmentation.md) §4.2).
 - **이유**: **희귀 pathology 카테고리 하나가 분산을 좌우**할 수 있다. 22종 분포·난이도 분석 없이 뭉뚱그리면 흔한 병변에 과적합되고 희귀 병변에서 무너져 순위가 흔들린다. **자유 재조합 허용**을 K-fold로만 쓰는데, 진짜 레버는 **카테고리 균형 학습 분포 큐레이션**.
 - **방향(B2·B3의 실전화)**: 추론 시 bbox가 안 주어질 가능성이 높으니 **보조 lesion-saliency head**(annotation으로 학습)를 달아 모델이 스스로 병변 위치를 예측 → 그 saliency로 B2(보수적 손실)·B3(GRAPPA 신뢰)을 **추론 시점에도 공간 변조**. 문서에 없는, 이 대회에 딱 맞는 구조.
 
@@ -130,4 +130,4 @@
 4. **B2 첫 실험(가장 반직관적 = 승부처)**: **"고주파 집중(§2.4) vs 병변부 보수화(B2)"**를 acc8 bbox에서 직접 A/B. 어느 쪽이 SSIM_bbox를 올리는지 데이터로 판정.
 5. **B4 / B1**: GRAPPA-centric 경량 refiner를 VarNet과 A/B(시간축) · 불확실성/앙상블(B5)로 환각 억제.
 
-> ⚠️ 이 문서의 Part A는 **사실(코드 확인)**, Part B는 **가설(검증 필요)**. Part B 항목은 [`candidates.md`](candidates.md)의 A/B 규칙(SSIM_bbox 비퇴행 하드 게이트, incremental) 하에서만 채택한다.
+> ⚠️ 이 문서의 Part A는 **사실(코드 확인)**, Part B는 **가설(검증 필요)**. Part B 항목은 [`decisions.md`](decisions.md)의 A/B 규칙(SSIM_bbox 비퇴행 하드 게이트, incremental) 하에서만 채택한다.

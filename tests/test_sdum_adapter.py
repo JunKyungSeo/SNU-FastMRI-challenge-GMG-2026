@@ -25,6 +25,23 @@ def test_adapter_forward_shape_and_finite():
     assert torch.isfinite(out).all()
 
 
+def test_scale_equivariance():
+    """forward(a*k) == a*forward(k): per-sample 정규화가 있어야 성립.
+    정규화가 없으면 신경망 bias 때문에 스케일에 비선형 반응 -> 깨짐.
+    이 불변식이 SSIM 학습을 데이터 절대 스케일과 무관하게 만든다."""
+    torch.manual_seed(0)
+    model = build_sdum(tiny_8gb_args(num_cascades=2, channels=[16, 32])).to(DEV).eval()
+    B, C, H, W = 1, 4, 64, 40
+    ksp = torch.randn(B, C, H, W, 2, device=DEV)
+    mask = torch.zeros(B, 1, 1, W, 1, dtype=torch.uint8, device=DEV)
+    mask[..., ::4, :] = 1
+    mask[..., W // 2 - 6 : W // 2 + 6, :] = 1
+    with torch.no_grad():
+        o1 = model(ksp, mask)
+        o10 = model(10.0 * ksp, mask)
+    assert torch.allclose(o10, 10.0 * o1, rtol=1e-3, atol=1e-4)
+
+
 def test_one_training_step():
     args = tiny_8gb_args(num_cascades=2, channels=[16, 32])
     model = build_sdum(args).train().to(DEV)

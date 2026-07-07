@@ -35,6 +35,8 @@ def parse():
     parser.add_argument('--target-key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max-key', type=str, default='max', help='Name of max key in attributes')
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
+    parser.add_argument('--num-workers', type=int, default=4, help='DataLoader worker processes (0=main proc)')
+    parser.add_argument('--max-iters', type=int, default=0, help='Cap train iters/epoch for debugging (0=full)')
 
     args = parser.parse_args()
     return args

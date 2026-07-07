@@ -56,6 +56,7 @@
 ## ✅ 참고: 이미 잘 되어 있는 것 (헛다리 방지)
 - **재현성 seed는 이미 걸려 있음** — [`utils.py:76`](../utils/common/utils.py#L76) `seed_fix`가 `cudnn.deterministic=True`까지 설정([`train.py:43`](../train.py#L43) 호출). 문서 강조 대비 이미 구현.
 - 데이터측 전처리 조각의 **수치 검증(무손실·DC 보존)**은 탄탄.
+- **PD/PDFS 대비 레짐 혼합은 이미 충족** — 시각화에서 PD/PDFS 이봉 분포 관찰([`research/preprocessing.md`](research/preprocessing.md) 시각화 관찰)됐으나, `batch_size=1`([`train.py:20`](../train.py#L20)) + `shuffle=True`([`train_part.py:121`](../utils/learning/train_part.py#L121))라 배치 내 혼합 개념 자체가 없고 스텝 간 레짐이 이미 무작위로 섞임 → **별도 레짐 균형 샘플러 불필요**(슬라이스가 파일 단위로 크게 뭉치지 않는 한).
 
 ---
 

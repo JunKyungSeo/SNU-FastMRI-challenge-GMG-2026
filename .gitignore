@@ -6,3 +6,6 @@ __pycache__
 
 # HDF5 데이터 파일 (utils/data 등)
 *.h5
+
+# viewer 3D 볼륨 스택 산출물 (용량 큼)
+viewer_result/volume_stacks/

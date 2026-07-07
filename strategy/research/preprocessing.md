@@ -36,6 +36,22 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
 
 ---
 
+## 📸 전체 데이터 시각화 관찰 (2026-07-08) — 기존 근거 보강
+
+> 보유 전체 image(train 85 vol · val 15 vol × acc4/acc8)를 [`viewer_result/volume_stacks`](../../viewer_result/volume_stacks)로 렌더해 직접 관찰. **아래는 기존 확정/후보 항목의 근거를 실제 이미지로 뒷받침하는 관찰**이며 새 확정 스펙이 아니다(SPEC은 [`pipeline.md`](../pipeline.md)). SSIM 리스크가 있는 파생 제안(정규화 `data_range` 정합·GRAPPA 신뢰도 가중·배경 마스크 공격성)은 여기 반영하지 않고 별도 판단 대기.
+> ⚠️ **뷰어 캐비엇**: [`summarize.py:115`](../../summarize.py)가 `imshow(cmap="gray")`를 vmin/vmax 없이 호출 → **패널마다 독립 min–max 오토스케일**. 열(Label/Input/GRAPPA) 간 **절대 밝기 비교는 무의미**(열 내부 대비·구조만 유효).
+
+- **PD/PDFS 두 대비 레짐 공존(이봉 분포) 확인** — PD류(지방 밝음: `train/knee_acc4_1,22`)와 PDFS류(지방 억제로 전반 어둡고 액체/부종만 국소 초고휘도: `train/knee_acc4_43,85`·`acc8_55,80`·`val/acc8_3,10`)가 뚜렷이 갈림. → **B4의 "max 아닌 robust percentile" 근거 강화**: PDFS 국소 초고휘도(부종=병변 후보)에 max를 쓰면 조직이 압축됨 → p99 유지 정당화.
+- **슬라이스별 배경 비율 20~80% 급변 확인** — apical(patellar) 슬라이스는 무릎이 작은 덩어리로 배경 60~80%, 중앙 관절 슬라이스는 조직이 FOV를 거의 채움. → **B4의 "슬라이스별 아닌 볼륨 단위 전역 스칼라" 근거 강화**: 슬라이스별 통계는 apical에서 배경에 지배돼 불안정.
+- **acc8 GRAPPA의 강한 세로 밴딩 + g-factor grain 확인** (`train/knee_acc8_8,55`·`val/knee_acc8_3,10`) — acc4 GRAPPA 대비 노이즈·줄무늬가 뚜렷. → **B3(coil pre-whitening) · [`decisions.md`](../decisions.md) "acc-conditioned GRAPPA 가중" 근거 강화**: acc8 GRAPPA를 그대로 하드 residual로 주입하면 밴딩을 텍스처로 재현할 hallucination 위험(SSIM_bbox 손해).
+- **FOV<384 → 좌우 zero 컬럼 + 비영 배경 노이즈 플로어 확인** — 다수 슬라이스에서 물체가 384 폭을 못 채워 좌우 검은 띠, 배경도 완전 0이 아님. → **B5(eval 정합 foreground 마스크) · [`open_issues.md`](../open_issues.md) A2 배경 정의의 맥락 보강**.
+
+**리스크 없는 파생 액션(반영):**
+- **readout crop(A1) bbox 포함 검증** — 무릎 위치가 볼륨마다 상/좌로 치우침(`val/knee_acc8_10` 좌측 등). A1의 640→384 height crop은 `image_label`과 같은 FOV를 재현하므로 원리상 bbox는 384² 안에 포함되나, **off-center 볼륨에서 crop window가 label FOV와 수직 정렬되는지 1회 검증**을 권장(bbox가 crop 밖으로 나가는 케이스 카운트=0 확인). 검증만이라 무위험. → A1 §주의에도 반영.
+- **QA 렌더(선택)** — 정규화·residual 스케일 정합 디버깅 시 뷰어 오토스케일 대신 **공통 vmin/vmax 고정 렌더**를 별도로 뽑으면 소스(Input/GRAPPA/Label) 간 절대 스케일을 실측 검증 가능.
+
+---
+
 ## A. 무손실 효율화 (8GB·추론시간 직격, 화질 손해 0)
 
 ### A1. Readout(주파수인코딩=height) oversampling 조기 제거 ✅ **확정 채택** (2026-07-04)
@@ -51,6 +67,7 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
   - width는 **건드리지 않음**(PE 언더샘플 축).
   - flip 증강([`augmentation.md`](augmentation.md) Tier 1)은 crop과 commute하므로 안전 — 조기 crop 후에도 논리 동일. mask 증강도 width축이라 무관.
   - GRAPPA 채널(§1)은 이미 384² → 조기 crop된 격자와 **오히려 정합이 쉬워짐**(640 pad 불필요, `model_strategy.md` §1.1.1의 zero-pad 뉘앙스 완화).
+  - **off-center bbox 포함 검증(2026-07-08 시각화 관찰)**: 무릎 위치가 볼륨마다 상/좌로 치우침 → height crop window가 `image_label` FOV와 수직 정렬돼 모든 bbox를 384² 안에 담는지 **1회 검증 스크립트**로 확인(밖으로 나가는 케이스 카운트=0). 원리상 무위험이나 병변 잘림은 SSIM_bbox 치명적이라 한 번 실측.
 - **채점축**: 추론시간 ⭐⭐⭐ / 8GB ⭐⭐⭐ / SSIM 완전 중립(무손실). **문서에 없으면서 최대 지렛대.**
 
 ### A2. Coil compression (SVD / geometric coil compression, GCC) — ✅ **SVD 데이터측 구현됨** (2026-07-06)

@@ -77,6 +77,15 @@
 | coil noise pre-whitening | 노이즈 공분산 whitening (acc8 안정) | 코너/배경 추정 정확도 | preprocessing B3 |
 | ACS-only 저해상도 앵커 채널 | 3번째 성질 prior 채널 | 여력 시(GRAPPA로 강등) | preprocessing C6 |
 
+## SSIM 리스크로 구현 보류 (2026-07-08, 전체 시각화 발) — 기록만·미구현
+> 보유 전체 데이터 시각화([`research/preprocessing.md`](research/preprocessing.md) 시각화 관찰)에서 도출된 세 정련안. **셋 다 SSIM(순위축 SSIM_bbox 포함)을 잘못 켜면 화질과 무관하게 점수를 되레 깎을 수 있어, 지금은 구현하지 않고 기록만 남긴다.** 소비부 배선(×s 역정규화·GRAPPA 채널·손실 마스크) 선행 + SSIM_bbox 비퇴행 게이트 통과 후에만 착수.
+
+| 항목 | 무엇 | SSIM 리스크 (왜 보류) | 선결·연결 |
+|---|---|---|---|
+| **정규화 `data_range` 정합** | ÷s 정규화 시 채점 `data_range`·target을 같은 `s`로 맞추고 출력 `×s`로 역정규화 | SSIM은 scale-sensitive → `data_range` 불일치나 `×s` 누락 시 **화질 무관하게 점수 붕괴** | 확정 B4([`pipeline.md`](pipeline.md) §2)를 **켜기 위한 선결**. 현재 `×s` 미구현([`implementation.md`](implementation.md) §2) |
+| **GRAPPA 신뢰도 가중 (anti-hallucination)** | acc8 GRAPPA를 하드 residual(`out=grappa+f(...)`)로 더하지 말고 **보조 채널 + 학습 게이트**로 | 하드 residual은 acc8 세로 밴딩·g-factor grain을 텍스처로 재현 → **bbox hallucination**. 반대로 고정 블러는 미세 디테일 소실 → 둘 다 bbox↓ | 기존 후보 **"GRAPPA 상보 융합"·"acc-conditioned GRAPPA 가중"**의 리스크 노트(그 항목들 위에서만 실험) |
+| **배경 마스크 공격성** | 배경 0 처리 시 **eval 정의 그대로** 사용, 자체 임계 발명 금지 | 과공격 마스크가 병변 경계 저신호 조직을 배경으로 오인·절단 → **SSIM_bbox↓** | B5 · "대기" 배경 마스크 정의(eval 7/8 대기) · [`open_issues.md`](open_issues.md) A2(`metrics.py` 정의 실재 확인 필요) |
+
 ---
 
 # Part 2 — 제외 (Rejected)

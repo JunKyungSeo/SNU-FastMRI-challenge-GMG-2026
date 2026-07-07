@@ -1,9 +1,9 @@
 # Related Work — 딥러닝 MRI 복원 + GRAPPA 논문 리서치 (2021–2026)
 
-> 📚 **근거(rationale)·출처 아카이브.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md).
+> 📚 **근거(rationale)·출처 아카이브.** 인덱스 [`README.md`](../README.md) · 확정 SPEC [`pipeline.md`](../pipeline.md).
 > 목적: 우리 대회 세팅(**언더샘플 k-space + 제공된 GRAPPA 영상을 함께 딥모델 입력/prior로**)과
 > 유사한 최근 5년(2021–2026) 논문을 조사해, 우리 전략([`model_strategy.md`](model_strategy.md) §1·§1.2,
-> [`confirmed_model.md`](confirmed_model.md))의 선례·출처를 명확히 남긴다.
+> [`pipeline.md`](../pipeline.md))의 선례·출처를 명확히 남긴다.
 > 조사 방법: 다각도 웹 검색 → 원문 페치 → 주장별 3-vote 검증(2026-07-06 수행). 검증 로그는 세션 기록.
 
 ---
@@ -24,9 +24,9 @@
 
 | 논문 | 연도·venue | GRAPPA 사용 방식 | 데이터·가속 | 우리 매핑 |
 |---|---|---|---|---|
-| **Accelerated MRI reconstructions via variational network and feature domain learning** (Feature/FI-VarNet) — Nature *Scientific Reports* 14:8085 | 2024, Sci Rep | **E2E-VarNet 출력에 GRAPPA 영상을 concat**해 feature-domain 네트워크로 정제. k-space가 못 주는 정보를 GRAPPA가 보완 | fastMRI knee/brain | ⭐ **가장 유사** — [`confirmed_model.md`](confirmed_model.md) §5 GRAPPA prior concat와 동형 |
+| **Accelerated MRI reconstructions via variational network and feature domain learning** (Feature/FI-VarNet) — Nature *Scientific Reports* 14:8085 | 2024, Sci Rep | **E2E-VarNet 출력에 GRAPPA 영상을 concat**해 feature-domain 네트워크로 정제. k-space가 못 주는 정보를 GRAPPA가 보완 | fastMRI knee/brain | ⭐ **가장 유사** — [`pipeline.md`](../pipeline.md) §5 GRAPPA prior concat와 동형 |
 | **fastMRI 2020 Challenge 우승 (AIRS Medical)** — Muckley et al., "Results of the 2020 fastMRI Challenge…", *IEEE TMI* 40(9):2306, 2021 (PMC8428775 / arXiv:2012.06318) | 2021, IEEE TMI | **GRAPPA 추정치로 네트워크 초기화**(reconstruction + residual). "GRAPPA를 initialization으로 쓴 유일한 팀." **AIRS = 2026 대회 후원사** | fastMRI multicoil, 4X/8X | ⭐ [`model_strategy.md`](model_strategy.md) §1.3 우승 레시피 이식(§1·§1.2) |
-| **GRAPPA-GANs for Parallel MRI Reconstruction** — Tavaf et al., arXiv:2101.03135 (ISBI 2021) | 2021 | GRAPPA RSS 영상을 conditional GAN(U-Net generator) 입력/prior로. k-space는 data-consistency loss로만 | fastMRI **brain**, R4/R8 | ⚠️ GAN=hallucination 위험 → 우리 채점(SSIM_bbox)엔 부적합, [`rejected.md`](rejected.md) 계열 |
+| **GRAPPA-GANs for Parallel MRI Reconstruction** — Tavaf et al., arXiv:2101.03135 (ISBI 2021) | 2021 | GRAPPA RSS 영상을 conditional GAN(U-Net generator) 입력/prior로. k-space는 data-consistency loss로만 | fastMRI **brain**, R4/R8 | ⚠️ GAN=hallucination 위험 → 우리 채점(SSIM_bbox)엔 부적합, [`decisions.md`](../decisions.md) 계열 |
 | **DeepMRIRec** — Alam et al., arXiv:2311.13485 (St. Jude, github.com/stjude/DeepMRIRec) | 2023 | GRAPPA 복원 영상을 U-Net "enhancer"의 **유일 입력**(k-space 브랜치 없음, 순수 image-to-image) | 소아 **brain** 종양, 4x | fallback 후보(값싼 image-domain refiner). data-consistency 없음이 약점 |
 | **2022 SNU FastMRI Challenge 제출작** — github.com/orange-fritters/fast-mri | 2022 | E2E-VarNet 출력 + **GRAPPA 영상 concat** + RCAN super-resolution. **바로 이 대회 계보에서 검증** | fastMRI knee | ⭐ 1군 concat 방식이 우리 대회에서 실동작한 실증 |
 
@@ -63,7 +63,7 @@
 
 ## 시사점 (우리 전략에의 반영)
 
-1. **1군 concat 방식(Sci Rep 2024 + 2022 SNU 제출작)이 가장 실용적 선례** → [`confirmed_model.md`](confirmed_model.md) §5
+1. **1군 concat 방식(Sci Rep 2024 + 2022 SNU 제출작)이 가장 실용적 선례** → [`pipeline.md`](../pipeline.md) §5
    "GRAPPA 영상 prior 채널 + residual"과 정확히 일치. 우리 방향이 검증된 계보임을 확인.
 2. **AIRS(후원사) = GRAPPA 초기화 + residual** → [`model_strategy.md`](model_strategy.md) §1.3에 이미 이식 매핑.
 3. **미개척 공백**: 서베이한 논문 중 **병변 bbox 영역 SSIM(우리 SSIM_bbox 순위축)이나 hallucination을

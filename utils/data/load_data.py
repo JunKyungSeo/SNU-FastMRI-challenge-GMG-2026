@@ -154,7 +154,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     # ------------------------------------------------------------------
     # augmentation 설정 — train.py args에서 읽음(없으면 getattr 기본값 = 전부 off).
     # 즉 train.py에 --aug-* 인자를 아직 안 넣었다면 기존 학습과 100% 동일하게 동작.
-    # (인자 정의·매 epoch set_epoch 배선은 strategy/todo.md의 3·4번.)
+    # (인자 정의·매 epoch set_epoch 배선은 strategy/implementation.md §6a·§6b.)
     # ------------------------------------------------------------------
     aug_on = getattr(args, "aug_on", False)
     cfg = AugmentConfig(

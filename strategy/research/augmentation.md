@@ -1,11 +1,11 @@
 # Data Augmentation 전략 — FastMRI 2026 (Annotation-guided Knee Reconstruction)
 
-> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](../README.md) · 확정 SPEC [`pipeline.md`](../pipeline.md) · 후보·제외 [`decisions.md`](../decisions.md).
 
 > # ✅ 구현 완료 (2026-07-03)
 > 이 문서의 채택 증강은 **`utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`) · `utils/data/load_data.py`에 구현·검증 완료**.
 > 실측 결과 요약은 아래 **[§ 증강 결과 (실측 요약)](#증강-결과-실측-요약)**. (시각 확인용 노트북은 검증 후 삭제 — 전략 검증용 임시 코드.)
-> 기본값 전부 off라 켜기 전엔 기존 학습과 100% 동일(스위치 배선은 [`todo.md`](todo.md) 3·4번).
+> 기본값 전부 off라 켜기 전엔 기존 학습과 100% 동일(스위치 배선은 [`implementation.md`](../implementation.md) §6a·§6b).
 
 > **제1원칙 (이 문서의 조직 기준): hallucination-free lesion fidelity.**
 > 대회의 신설 novelty는 "병변 bbox 위치를 위조(hallucination) 없이 정확히 복원"이며 **SSIM_bbox가 순위 결정축**이다.
@@ -15,7 +15,7 @@
 > — **단 예외**: consistency 손실(학습 2× forward)·TTA(추론 N×)는 시간 비용이 있어 별도 취급(§2 보조·§3.5).
 >
 > 📌 **역대 수상팀 근거**: 이전 SNU FastMRI 수상팀 기법 총정리는
-> [`../.claude/paper/past_winners_augmentation.md`](../.claude/paper/past_winners_augmentation.md).
+> [`../.claude/paper/past_winners_augmentation.md`](../../.claude/paper/past_winners_augmentation.md).
 > 특히 2025 대회에서 **"knee는 강한 공간 변형에 취약, 약한 변화(마스크 위주)만 유효"** 라는 교훈이
 > 아래 보수적 Tier 설계(flip+마스크 중심)를 직접 뒷받침한다.
 
@@ -30,7 +30,7 @@
   - ❌ 위-아래(readout) 플립은 **제외**(2026-07-02): 넙다리뼈↔정강이뼈가 뒤바뀌는 비현실적 무릎 형태 → Tier 3
 - ✅ Mask augmentation(추가 언더샘플, 5~16× 랜덤 + center 0.08 + equispaced/오프셋랜덤) — 우리 데이터 유일 정석 물리 aug
 - ✅ **원본(무증강) 고정마스크 입력 반드시 혼합** — test 분포=고정마스크, OOD 방지(= 실제 bbox 채점 조건 정합)
-- △ **GRAPPA 영상 도메인 prior 채널 + residual**(fft 안 함, [`confirmed_model.md`](confirmed_model.md)) — 제공된 physics 기반 초기해를 영상 그대로 regularizer U-Net에 real-valued prior로 concat. 단 image size/슬라이스/스케일 정규화 필수, A/B 후 채택
+- △ **GRAPPA 영상 도메인 prior 채널 + residual**(fft 안 함, [`pipeline.md`](../pipeline.md)) — 제공된 physics 기반 초기해를 영상 그대로 regularizer U-Net에 real-valued prior로 concat. 단 image size/슬라이스/스케일 정규화 필수, A/B 후 채택
 - △ k-space 랜덤 위상(**image-domain smooth phase 한정**) — magnitude/RSS 불변이라 안전하나 **이득 marginal → 저우선**
 - △ coil별 측정 노이즈(강도 보수적, 검토)
 - ❌ 정수 픽셀 translation은 **미채택**(target=384 crop vs 모델 640 crop 정렬 불가, 아래 §Tier2 참고)
@@ -46,7 +46,7 @@
 **실험 우선순위(먼저 켤 것)**: ① mask-aug + 좌우 flip(**최대 이득으로 예상 — 검증 전 가설**) → ② 원본마스크 혼합비 튜닝 → ③ GRAPPA FFT prior 입력 → ④ acc4/acc8 커리큘럼 → ⑤ k-space 위상 → ⑥ translation/지터 → ⑦ consistency(후순위, **학습 2× 비용**). 상세 순서·측정법은 §4.1/§4.2.
 
 > ✅ **구현 상태(2026-07-03)**: 위 증강은 `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)와 `utils/data/load_data.py`에 **구현 완료**.
-> **기본값 전부 off라 기존 학습과 100% 동일** — 켜려면 train.py `--aug-*` 인자 + train_part.py `set_epoch` 배선 필요([`todo.md`](todo.md) 3·4번).
+> **기본값 전부 off라 기존 학습과 100% 동일** — 켜려면 train.py `--aug-*` 인자 + train_part.py `set_epoch` 배선 필요([`implementation.md`](../implementation.md) §6a·§6b).
 > bbox는 `return_bbox=True`일 때 `DataTransform`이 `annotations`를 파싱해 flip과 동기 반환(가변 길이용 `_bbox_collate` 포함). bbox를 **손실에 쓰려면** train_part 소비부는 아직 배선 필요.
 
 ---
@@ -86,7 +86,7 @@
 - 모델: VarNet 계열. **입력 = 언더샘플 multi-coil k-space + mask**, 타깃 = `image_label`(384×384).
 - 관련 코드: `utils/data/transforms.py`의 `DataTransform.__call__`, `utils/data/load_data.py`.
 - 병변 annotation: image 파일 `attrs['annotations']` (JSON, bbox 좌표는 384×384 image 공간 기준).
-- GRAPPA 초기해: image 파일의 `image_grappa`는 제공 입력으로 사용 가능하나, 원본 multi-coil complex k-space와 동일한 물리량은 아님. **fft 하지 않고 영상 도메인 그대로**, multi-coil k-space 대체품이 아니라 **regularizer U-Net의 영상 prior 채널**로 취급한다(확정: [`confirmed_model.md`](confirmed_model.md)).
+- GRAPPA 초기해: image 파일의 `image_grappa`는 제공 입력으로 사용 가능하나, 원본 multi-coil complex k-space와 동일한 물리량은 아님. **fft 하지 않고 영상 도메인 그대로**, multi-coil k-space 대체품이 아니라 **regularizer U-Net의 영상 prior 채널**로 취급한다(확정: [`pipeline.md`](../pipeline.md)).
 - ⚠️ **현재 파이프라인은 annotation을 미사용**: `DataTransform`은 `mask, kspace, target, maximum, fname, slice`만 반환(annotation drop). bbox 좌표 동기 aug / bbox 가중 손실을 쓰려면 **transform이 `json.loads(attrs.get("annotations","{}"))`를 파싱해 slice별 bbox를 emit**하고, **가변 길이 bbox 배치를 위한 custom `collate_fn`**(또는 batch_size=1)이 필요.
 
 ---
@@ -159,7 +159,7 @@
 - **Instrumental noise 분포 보존 (SMPlayer 차용, 검토)**
   - 측정 고유 노이즈 분포를 유지하려 **채널별 노이즈에 sensitivity map을 곱해** 증강.
   - 우리는 멀티코일 k-space가 제공되므로 이식 가능 → coil별 노이즈 통계 존중한 노이즈 주입.
-- **GRAPPA 영상 도메인 prior 채널 + residual** △ 제공 physics prior 활용 (확정: [`confirmed_model.md`](confirmed_model.md))
+- **GRAPPA 영상 도메인 prior 채널 + residual** △ 제공 physics prior 활용 (확정: [`pipeline.md`](../pipeline.md))
   - 아이디어: `image_grappa`는 주최측이 제공한 GRAPPA 초기 복원 영상이므로 external data가 아니라 **언더샘플 k-space에서 얻은 physics 기반 prior**다. **fft 하지 않고 영상 그대로** regularizer U-Net에 real-valued prior 채널로 concat한다.
   - ⚠️ **fft 안 함(2026-07-04 확정)**: GRAPPA는 magnitude·단일코일 384²라, fft하면 위상·코일이 날조된 가짜 k-space가 된다. VarNet cascade regularizer는 image 도메인에서 동작(`sens_reduce→U-Net→sens_expand`)하므로 **영상 채널로 넣는 게 정합**. data consistency는 제공 k-space+mask에만 건다.
   - **residual 출력**: `out = grappa + f([image_input, grappa, …])` — GRAPPA→label 잔차만 학습해 학습 난이도↓·SSIM↑([`model_strategy.md`](model_strategy.md) §1.2 ①).
@@ -362,7 +362,7 @@
   Segmentation", MICCAI 2015. augmentation = elastic deformation(σ=10px, 3×3 grid) + shift/rotation +
   gray value + drop-out → **세그멘테이션용이라 우리 복원 과제엔 대부분 부적용/유해.**
   PDF: `.claude/paper/00_foundation/UNet_segmentation_2015.pdf`
-- **역대 수상팀 augmentation 총정리**: [`../.claude/paper/past_winners_augmentation.md`](../.claude/paper/past_winners_augmentation.md)
+- **역대 수상팀 augmentation 총정리**: [`../.claude/paper/past_winners_augmentation.md`](../../.claude/paper/past_winners_augmentation.md)
   (MRAugment·마스크증강·스케줄링·부위별 전략·TTA 등, 2026 knee 적용 코멘트 포함).
 - MRAugment: Fabian et al., "Data augmentation for deep learning based accelerated MRI
   reconstruction with limited data", NeurIPS 2021.

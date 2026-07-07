@@ -1,7 +1,8 @@
-# 확정 모델 (Confirmed Architecture) — FastMRI 2026
+# 확정 파이프라인 (Pipeline) — FastMRI 2026
 
-> 상태: **확정 (2026-07-04)** · 이 문서가 파이프라인 구조의 **단일 기준(source of truth)**.
-> 세부 근거는 [`model_strategy.md`](model_strategy.md) · [`augmentation.md`](augmentation.md) · [`preprocessing.md`](preprocessing.md) · [`todo.md`](todo.md).
+> 상태: **확정 (2026-07-04)** · 이 문서가 **재구성 파이프라인 구조의 단일 기준(source of truth)**.
+> ⚠️ **백본(main network)은 여기서 정의하지 않는다 — 교체 가능하므로 [`backbone.md`](backbone.md)에서 관리**(현재: SDUM). 이 문서는 **백본이 무엇이든 성립하는 고정 계약**(입력 분기·crop·정규화·증강·감도맵·GRAPPA prior·출력·채점)만 담는다.
+> 세부 근거는 [`model_strategy.md`](research/model_strategy.md) · [`augmentation.md`](research/augmentation.md) · [`preprocessing.md`](research/preprocessing.md) · 배선은 [`implementation.md`](implementation.md).
 > 실측 검증(2026-07-04): readout crop 무손실·정규화·GRAPPA 정렬을 acc4/acc8 · slice 13에서 확인(검증 스크립트는 전략 검증용 임시라 삭제, 결과만 아래 표에 유지).
 
 ---
@@ -42,9 +43,10 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 - 이득 실현 조건: 감도추정을 **per-view forward에서 분리**(canonical source에서 1회 추정 후 g 적용).
 - ⚠️ flip view에 안 뒤집은 맵을 쓰면 coil-combine/DC가 조용히 오염 → "flip이면 맵도 flip" 필수.
 
-### 5. Main network
-- **E2E-VarNet cascade + DC.** DC는 **원 측정 k-space 기준**(readout-crop 후에도 정확히 성립, 실측 0.00e+00).
-- **GRAPPA = 영상 도메인 prior 채널 + residual**: `out = grappa + f([image_input, grappa, …])`.
+### 5. Main network (백본은 교체 가능 → [`backbone.md`](backbone.md))
+- **백본(unrolled 재구성 네트워크) = [`backbone.md`](backbone.md)에서 관리** (현재: SDUM / 이전: E2E-VarNet 베이스라인). 아래는 **어떤 백본을 쓰든 지켜야 하는 파이프라인 계약**이다.
+- **DC(data consistency)는 원 측정 k-space 기준**(readout-crop 후에도 정확히 성립, 실측 0.00e+00). unrolled 백본이면 종류 무관하게 이 기준을 따른다.
+- **GRAPPA = 영상 도메인 prior 채널 + residual**: `out = grappa + f([image_input, grappa, …])`. 백본에 **얹는 구체 방식**은 backbone.md(백본별로 다름).
 - GRAPPA(384²) ↔ k-space(384×폭) 격자 정합: GRAPPA 폭을 native로 crop, 또는 **출력단 384² refinement head**에서 융합(격자 동일).
 
 ### 6. 출력
@@ -84,7 +86,7 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 - **감도맵 재사용**: sens 추정을 per-view forward에서 분리(mask=그대로/flip=flip).
 - **소비부 확장**: train_part.py/test_part.py 배치 언패킹 확장 + 출력 `×s` 역정규화.
 - **증강 스케줄 배선**: train.py `--aug-*` 인자 + train_part.py `set_epoch`.
-- **acc-conditioned GRAPPA 가중**(후보): mask frac≤0.25→acc8/else acc4로 conditioning → 융합 가중 학습. [`candidates.md`](candidates.md).
+- **acc-conditioned GRAPPA 가중**(후보): mask frac≤0.25→acc8/else acc4로 conditioning → 융합 가중 학습. [`decisions.md`](decisions.md).
 
 ### ⏳ 보류 (외부조건)
 - **forward(추론) GRAPPA 로딩**: leaderboard 데이터 구조 미공개 → 공개 후 배선. 제출 전 필수 확인.

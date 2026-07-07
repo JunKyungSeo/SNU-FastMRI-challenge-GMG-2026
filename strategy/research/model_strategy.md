@@ -1,7 +1,7 @@
 # 모델·메모리·구조 전략 (non-augmentation) — FastMRI 2026
 
-> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
-> 확정 항목은 여기서 재정의하지 않고 confirmed_model을 따른다. 이 문서는 그 배경·근거.
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](../README.md) · 확정 SPEC [`pipeline.md`](../pipeline.md) · 후보·제외 [`decisions.md`](../decisions.md).
+> 확정 항목은 여기서 재정의하지 않고 pipeline을 따른다. 이 문서는 그 배경·근거.
 > augmentation이 아닌, 논문 재검토에서 나온 **아키텍처·입력 설계·메모리·효율 전략**을 모으는 문서.
 > (augmentation 기법은 [`augmentation.md`](augmentation.md)에 별도 정리.)
 > 대상 제약: knee 전용 · SSIM_full + **SSIM_bbox(순위축)** + 추론시간 채점 · GTX 1080 8GB(FP32) · external/pretrained 금지.
@@ -41,10 +41,10 @@
 
 **제약·구현**:
 - GRAPPA는 **제공 입력**이라 external/pretrained 규칙 무관, 물리적 복원(합성 아님).
-- **정규화 확정(2026-07-04, [`confirmed_model.md`](confirmed_model.md))**: acc4/acc8 GRAPPA 품질차는 있으나 **입력 정규화는 가속률 무관 단일 규칙**(입력유도 전역 스칼라 ÷s를 image_input·GRAPPA·target에 동일 적용, 출력 ×s). 가속률별 GRAPPA *신뢰도* 차이는 정규화가 아니라 §1.2 ② 상보 융합/네트워크가 흡수 — 별개 레버. `maximum` attr은 입력 정규화에 미사용(label 통계).
+- **정규화 확정(2026-07-04, [`pipeline.md`](../pipeline.md))**: acc4/acc8 GRAPPA 품질차는 있으나 **입력 정규화는 가속률 무관 단일 규칙**(입력유도 전역 스칼라 ÷s를 image_input·GRAPPA·target에 동일 적용, 출력 ×s). 가속률별 GRAPPA *신뢰도* 차이는 정규화가 아니라 §1.2 ② 상보 융합/네트워크가 흡수 — 별개 레버. `maximum` attr은 입력 정규화에 미사용(label 통계).
 - **구현 지점(코드 점검 완료)**: `utils/data/load_data.py`는 `image_grappa`를 **미로드**(input=kspace, target=label만), `utils/model/varnet.py`의 `VarNet.forward`는 `masked_kspace`에서 출발 → **loader와 forward 둘 다 수정** 필요.
 
-> 🔧 **부분 구현 (2026-07-04 갱신)** — GRAPPA **로딩·정렬은 데이터 측에 구현 완료**([`implementation.md`](implementation.md), [`confirmed_model.md`](confirmed_model.md)). 남은 것은 아래 network 측(varnet.py) 배선:
+> 🔧 **부분 구현 (2026-07-04 갱신)** — GRAPPA **로딩·정렬은 데이터 측에 구현 완료**([`implementation.md`](../implementation.md), [`pipeline.md`](../pipeline.md)). 남은 것은 아래 network 측(varnet.py) 배선:
 > 1. ✅ **loader** (`utils/data/load_data.py`): `return_grappa` 플래그로 `image_grappa[dataslice]` 로드 → `DataTransform` 전달, flip 동기 정렬까지 **구현됨**.
 > 2. **model** (`utils/model/varnet.py`): `VarNet.forward`에 GRAPPA 보조 채널 입력 경로 추가 + (권장) **residual 출력**(`out = grappa + f(...)`) 형태. 격자 정렬은 §1.1.1(384²↔640×368 crop+pad), 정렬 규칙은 §1.1 표를 따름.
 > 3. (선택) 상보 융합(§1.2 ②)을 쓰려면 `image_input`도 추가 로드해 `[image_input, image_grappa]` 2채널 구성.

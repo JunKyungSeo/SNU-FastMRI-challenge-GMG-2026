@@ -11,3 +11,6 @@ __pycache__
 # 시각화 산출물 (h5_viewer --export 결과, 대용량)
 viewer_result/volume_stacks/
 viewer_result/volume_stacks.zip
+
+# GPU 작업 큐 실행 로그
+shell_scripting/logs/

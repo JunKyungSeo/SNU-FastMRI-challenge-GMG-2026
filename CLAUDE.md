@@ -1,76 +1,85 @@
 # CLAUDE.md — 이 repo에서 작업하는 Claude에게
 
-이 파일은 **미래 세션(GPU 서버 포함)의 Claude가 먼저 읽어야 하는 핸드오프 노트**다.
-
-> **⚡ GPU 서버라면 바로 여기부터: [`docs/gpu_quickstart.md`](docs/gpu_quickstart.md)** — clone→sanity→8GB config 찾기→학습까지 복붙 순서.
-
-**진행 상황(2026-07-07 갱신):** SDUM 어댑터 forward는 **Colab GPU에서 검증 완료**(shape/finite/1-step 학습 통과). 단 **실제 1080 8GB 적재량은 미검증** → 학습 전 `probe_oom.py`로 config를 잡아야 함(quickstart 2단계). 아래 §1도 참고.
+미래 세션(GPU 서버 포함)의 Claude가 먼저 읽는 핸드오프 노트. **구조 + 현재 상태**만 담는다.
 
 ---
 
-## 0. 현재 환경 구분 (중요)
+## 0. 지금 상황
 
-- **지금까지의 작업 환경 = 개발용 로컬(Windows 노트북)**: torch/MONAI **미설치**, GPU 없음(MX450 2GB뿐), 데이터 없음.
-  - 그래서 **로컬에서 한 검증 = 파이썬 AST 문법 파싱뿐.** `pytest`는 **한 번도 돌리지 않았다.**
-- **GPU 서버로 이동하면 사용자가 명시적으로 알려준다.** 그 신호가 오기 전까지는 여기가 개발 환경이라고 가정.
+- **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
+- **팀 2명** (§4).
 
----
-
-## 1. GPU 서버로 옮기면 — ⚠️ 학습보다 먼저 "모델 돌려서 검증"
-
-사용자가 "이제 GPU 서버다"라고 하면, **본 학습(train) 전에 아래 검증을 먼저** 수행한다. 순서대로:
-
-```bash
-# (0) 가상환경 권장 (전역 오염 방지). Python 3.12.x 권장(repo 타깃 3.12.9).
-pip install -r requirements.txt          # torch/monai/einops/timm/pytest 등
-
-# (1) import & 빌드 스모크
-pytest tests/test_sdum_build.py -v       # 의존성 import + 모델 빌드 + 파라미터 수
-
-# (2) ⭐ 어댑터 게이트 (가장 중요) — 이게 통과해야 그 다음으로 감
-pytest tests/test_sdum_adapter.py -v     # forward shape (B,384,384) + finite + 1-step 학습
-
-# (3) 8GB 적재 스윕 (실제 GPU에서만 의미)
-python scripts/probe_oom.py --cascades 6 --channels 24 48
-#   -> peak GB 또는 OOM 출력. peak ~7.5GB 이하로 OK인 가장 큰 조합 선택.
-
-# (4) 위가 다 통과한 뒤에야 실제 학습
-python train.py --model sdum --num-cascades 4 --channels 32 64 \
-    -t <train_dir> -v <val_dir> -n sdum_test ...
-```
-
-**검증(1)~(3)이 통과하기 전에는 장시간 학습을 돌리지 말 것.**
+> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_analy/`, 수정 계획은 `docs/superpowers/plans/` 참조.
 
 ---
 
-## 2. 솔직한 리스크 (미검증 지점)
+## 1. 환경 · 실행
 
-개발 환경에서 실행을 못 했기 때문에 아래는 **런타임 미검증**이다. GPU에서 처음 돌릴 때 오류가 날 수 있다:
-
-- **가장 위험: 어댑터(`utils/model/sdum/adapter.py`).** 우리 파이프라인은 k-space `(B,C,H,W,2)` + mask `(B,1,1,W,1)`를 주는데, NV SDUM 모델은 **영상 도메인 `(B,T,C,H,W,2)`**를 받는다. 어댑터가 ifft·T=1 차원·mask broadcast·RSS·384 crop으로 잇는다.
-  - **불확실 포인트 1**: NV `restormer_mri.forward`의 mask가 `"b t c h w two -> (b t) c h w two"`로 rearrange되는데, 우리 `mask_b`(B,1,C,H,W,2) broadcast가 `soft_dc`/`get_acs_region`의 기대 shape과 정확히 맞는지.
-  - **불확실 포인트 2**: cascaded 출력이 영상 도메인 multicoil `(B,T,C,H,W,2)`이 맞는지(그래서 RSS로 합쳐 `(B,384,384)`가 되는지). 만약 coil-combined 단일 채널을 반환하면 RSS를 단순화해야 함.
-  - **증상**: `test_sdum_adapter`가 shape/rearrange 에러로 실패. → **수정 가이드는 플랜의 Task 3 ⚠️ 노트** 참조: `docs/superpowers/plans/2026-07-06-sdum-backbone-port.md`.
-- **의존성 해소 미검증**: NV 코드는 MONAI에 깊게 의존. `nv_utils.py`는 필요한 헬퍼 6개만 AST로 추출했는데, 실제 import 시 빠진 이름이 있으면 `ImportError`가 날 수 있음(그땐 `NV-SDUM-official/scripts/utils.py`에서 해당 함수를 추가 vendor).
-- **MONAI 버전 호환**: `monai.apps.reconstruction.*` 경로가 설치된 MONAI 버전에서 동일한지 확인(≥1.3 가정).
+- **GPU 서버(현재)**: Python **3.10.12**, torch **2.3.1+cu121**(CUDA 12.1, `cuda.is_available()=True`), monai 1.3.2, einops/timm/h5py/scikit-image/pytest 설치됨. GPU = **GTX 1080 8GB**(driver 550.90.12).
+  - **Pascal → FP32 전용**(AMP/BF16 금지), **batch=1**.
+  - README는 Python 3.12.9를 타깃으로 적지만 **서버 실제는 3.10.12에서 정상 동작**.
+- **로컬 개발 노트북**: torch/MONAI 없음, GPU 없음. → 로컬에서 한 검증은 **문법 파싱 수준뿐**. 실제 실행/pytest/학습은 **전부 GPU 서버(또는 Colab)** 에서.
+- **데이터**: `/root/Data/{train,val}/{image,kspace}/knee_acc{4,8}_{n}.h5` (train 각 1–85, val 각 1–15).
+- **학습 전 검증 게이트**(오래 돌리기 전에):
+  ```bash
+  pytest tests/test_sdum_build.py -v      # import + 빌드 + 파라미터 수
+  pytest tests/test_sdum_adapter.py -v     # forward (B,384,384) + finite + scale-equivariance + 1-step
+  python scripts/probe_oom.py --cascades 6 --channels 24 48   # 8GB 적재 스윕 (peak ~7.5GB 이하 최대 조합)
+  ```
+- **GPU 작업은 큐 스크립트로만 실행** (`shell_scripting/`): GPU를 쓰는 명령(학습·recon 등)은 `shell_scripting/shellN.sh` **슬롯**(= 작업 1개 = 파일 1개)에 써서 돌린다. 각 슬롯은 맨 위 목적 주석 + 시작 echo + `logs/<슬롯>_<timestamp>.log` 자동 기록. 실행은 `bash shell1.sh ; bash shell2.sh ; ...`로 이어서(큐), 다음 작업은 빈 슬롯에 미리 채워둔다. 규칙·상세: `shell_scripting/README.md`.
+  - ⚠️ **비-GPU 명령은 큐에 넣지 말고 그냥 바로 실행한다.** `h5_viewer.py`·`pytest`·`git` 등 가벼운 건 옆 분할 터미널에서 즉시 실행. 큐는 **GPU 독점 작업 전용**이다.
 
 ---
 
-## 3. 이 이식에서 확정된 설계 (배경)
+## 2. 대회 규칙 (repo 근거: `README.md`, `strategy/`)
 
-- 기존 **E2E-VarNet 백본을 SDUM으로 교체**. `--model sdum`으로 선택(기본은 여전히 `varnet`이라 기존 경로 안 깨짐).
-- 제약: **GTX 1080 8GB FP32**(Muon/BF16 안 씀 → **AdamW FP32**), knee 전용, acc4/acc8, 출력 384², 순위축 SSIM_bbox.
-- **사전학습 가중치/외부데이터 금지**(대회 규정) → NV HuggingFace 자동다운로드 코드는 vendor 안 함. 처음부터 학습.
-- 확정 결정(상세: `strategy/model_decision_points.md`): gradient checkpointing ON(NV cascade 루프 내장) · CSME per-cascade · SWDC 유지 · **UC 제거**(`time_cond/label_cond=False`) · batch=1 · coil compression 보류 · num_frames=1(2D).
-- **레버 스윕 대상**: `--num-cascades`(T), `--channels`(Restormer 폭). config 기본 `[32,64]`=2-level; `[C]` 하나면 1-level A/B(병변 과평활 대비, 상세: model_decision_points.md).
+- **knee 전용**, Cartesian **acc4/acc8**, 출력 **384×384**.
+- **평가 = SSIM 두 가지 + 추론시간**:
+  - `SSIM_full`: foreground mask 내부 평균 SSIM.
+  - **`SSIM_bbox`(순위 결정축)**: fastMRI+ 병변 bounding-box 안에서만 계산.
+  - 자가채점: `utils/common/metrics.py`의 `ssim_full`/`ssim_bbox`.
+- **사전학습 가중치·외부 데이터 금지** → NV SDUM의 HuggingFace 자동다운로드는 **vendor 안 함**, 처음부터 학습.
+- **annotation**: 각 image h5 `attrs['annotations']` JSON. 형식 `{"<slice>":[{x,y,width,height,label},...]}` (384² 공간 기준, w·h>16 박스만).
+- **재현성**: seed 고정 → 재학습 시 같은 결과.
+- **제출물**: 코드 repo(실행법 README) + loss 기록 + 모델 weight + 설명 ppt.
+- phase1 = train/val만 제공. leaderboard 데이터는 추후 배포(그때 `reconstruct.py` 사용).
 
-## 4. 범위 밖 (별도 작업/다른 팀원)
+---
 
-- **GRAPPA prior + residual** (다른 팀원 진행 중), **bbox 가중 손실**, SWDC 패턴 튜닝, CSME 옵션(c) 주기적 재추정, progressive expansion. 상세: `strategy/` 문서들 + 플랜의 "범위 밖" 절.
+## 3. 구조 (필수만)
 
-## 5. 참고 문서
+- **백본 선택**: `train.py --model {varnet(기본) | sdum}`. 기존 E2E-VarNet 경로는 그대로 유지되고, SDUM은 추가 경로.
+- **SDUM = NV 영상도메인 cascaded 모델(vendored) + 어댑터**:
+  - `utils/model/sdum/` — `nv_varnet.py`(cascade), `restormer.py`(regularizer), `latent_recon.py`, `nv_utils.py`, `config.py`, **`adapter.py`**.
+  - **어댑터가 핵심 접합부**: 우리 파이프라인은 k-space `(B,C,H,W,2)`+mask를 주고, NV 모델은 영상도메인을 받음. `adapter.forward`가 **ifft → per-sample 스케일 정규화(÷s) → cascaded → RSS → 384 crop → 출력 ×s 복원**으로 이음. 계약: `forward(kspace,mask)->(B,384,384)`, scale-equivariant.
+- **진입점/루프**: `train.py`(인자·seed) → `utils/learning/train_part.py`(`train`/`train_epoch`) / `test_part.py`.
+- **데이터**: `utils/data/load_data.py`(로딩·GRAPPA·dataloader), `transforms.py`(readout crop·정규화·GRAPPA·coil compression·`MRIAugmentor`).
+- **레버**: `--num-cascades`(T), `--channels`(Restormer 폭; `[32,64]`=2-level, `[C]`=1-level). 디버깅 레버: `--num-workers`, `--max-iters`.
+- **확정 설계**(SPEC = `strategy/confirmed_model.md`, 인덱스 `strategy/README.md`): readout crop 640→384(무손실) · 전역 스칼라 정규화 ÷s · GRAPPA 영상 prior+residual · 감도맵 1회 추정 후 재사용 · **gradient checkpointing ON** · CSME per-cascade · SWDC 유지 · **UC 제거**(time/label_cond=False) · num_frames=1(2D) · coil compression 보류.
 
-- 이식 플랜(태스크·수정 가이드): `docs/superpowers/plans/2026-07-06-sdum-backbone-port.md`
-- 모델 결정 로그: `strategy/model_decision_points.md`
-- 원본 SDUM 코드(참고용, repo 밖): `../NV-SDUM-official/` (NVIDIA-Medtech/NV-Raw2insights-MRI, Apache-2.0)
-- SDUM 논문: arXiv:2512.17137
+---
+
+## 4. Git · 협업
+
+- **remote**: `https://github.com/JunKyungSeo/FastMRI_SNU_2026_GMG.git` (HTTPS).
+  - 이 서버엔 gh CLI·credential helper 없음 → **push엔 PAT 필요**(Username=GitHub 아이디, Password=PAT). `!` 셸은 TTY가 없어 대화형 프롬프트 불가 → 토큰을 URL에 넣거나 `~/.git-credentials`에 직접 기입.
+- **브랜치**: `SDUM`(작업 브랜치, origin/SDUM과 동기) / `master`(안정·머지 대상). master가 `behind`로 보여도 그 커밋 내용은 대개 SDUM 히스토리에 포함돼 있음.
+- **팀 2명**:
+  - `kindofwater <bedso@snu.ac.kr>`
+  - `seojunkyung0428 <sjkdanny@naver.com>` (= GitHub `JunKyungSeo`, repo 소유자)
+  - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지). 지금은 `kindofwater`로 설정돼 있음 — 다른 팀원이면 `git config user.{name,email}` 바꿔 쓸 것.
+- Jupyter `.ipynb_checkpoints/`와 `viewer_result/` 대용량 산출물은 `.gitignore` 처리됨.
+
+---
+
+## 5. 범위 밖 (후순위 / 다른 팀원)
+
+GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`--aug-*` + `set_epoch`) · SVD coil compression · progressive expansion · config 스윕. 상세: `strategy/candidates.md`, `strategy/implementation.md`.
+
+---
+
+## 6. 참고 문서
+
+- 전략 인덱스·SPEC: `strategy/README.md` · `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
+- 학습 로그 분석·수정 계획(누적): `training_analy/` · `docs/superpowers/plans/`
+- 원본 SDUM 코드(참고, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137

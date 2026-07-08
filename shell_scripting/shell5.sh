@@ -40,7 +40,7 @@ set -x
 
 # run5: readout-crop(640→384, 무손실) + warmup 200→cosine, 2 epoch. resume 없음(scratch) → epoch 미리 확정.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2e-4 -e 2 -r 500 --num-workers 4 \
+    -b 1 -l 2.4e-4 -e 2 -r 500 --num-workers 4 \
     --readout-crop --warmup-iters 200 \
     -n sdum_run5 --run-tag run5 -t /root/Data/train/ -v /root/Data/val/
 

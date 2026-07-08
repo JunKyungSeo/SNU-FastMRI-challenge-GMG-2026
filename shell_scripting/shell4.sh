@@ -41,7 +41,7 @@ set -x
 # 스모크: run5(shell5)와 같은 config, 단 --max-iters 30 -e 1 로 몇 분만.
 # warmup 10 → 30 iters 안에 warmup(1~10)+cosine(11~) 둘 다 관찰 가능.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2e-4 -e 1 -r 5 --max-iters 30 --num-workers 4 \
+    -b 1 -l 2.4e-4 -e 1 -r 5 --max-iters 30 --num-workers 4 \
     --readout-crop --warmup-iters 10 \
     -n sdum_smoke --run-tag smoke -t /root/Data/train/ -v /root/Data/val/
 

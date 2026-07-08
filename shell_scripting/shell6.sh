@@ -41,7 +41,7 @@ set -x
 
 # run6 (5b): readout-crop 없음(=run4와 640 동일), warmup 200→cosine, 1 epoch.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2e-4 -e 1 -r 500 --num-workers 4 \
+    -b 1 -l 2.4e-4 -e 1 -r 500 --num-workers 4 \
     --warmup-iters 200 \
     -n sdum_run6 --run-tag run6 -t /root/Data/train/ -v /root/Data/val/
 

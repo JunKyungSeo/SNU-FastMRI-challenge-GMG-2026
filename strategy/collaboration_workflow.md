@@ -22,7 +22,7 @@ GPU 쓰는 명령(train/recon)은 **`shell_scripting/shellN.sh` 슬롯**에만 �
 **슬롯 채우기** — 슬롯 파일을 열어 (a) 맨 위 `# 목적:` 한 줄, (b) 실제 명령 작성:
 ```bash
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-  -b 1 -l 2e-4 -e 2 -r 500 --warmup-iters 200 --readout-crop \
+  -b 1 -l 2.4e-4 -e 2 -r 500 --warmup-iters 200 --readout-crop \
   -n sdum_run5 --run-tag run5 -t /root/Data/train/ -v /root/Data/val/
 ```
 - `-n <name>` : 결과 폴더 `../result/<name>/`. **run마다 다르게.**

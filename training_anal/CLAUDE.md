@@ -1,4 +1,4 @@
-# CLAUDE.md — `training_analy/` 학습 분석 작성 규칙
+# CLAUDE.md — `training_anal/` 학습 분석 작성 규칙
 
 이 폴더는 **SDUM 학습 run별 분석**을 모은다. 미래 세션의 Claude가 새 run 로그를 분석할 때 **아래 규칙을 반드시 따른다.**
 
@@ -49,3 +49,6 @@
 | 1 | `sdum_run1` | SDUM 첫 GPU 학습(풀 epoch) | loss ~1.0 고정 = 안 배움. 스케일 불일치 의심. | [run1](2026-07-07-run1-analysis.md) |
 | 2 | `sdum_scalefix` | 어댑터 per-sample 스케일 정규화(`c56351d`) | loss 1.0→~0.1(SSIM≈0.9). P0 해결. 속도 그대로(num_workers 무효). | [run2](2026-07-07-run2-scalefix-analysis.md) |
 | 3 | `sdum_learncheck` | `--max-iters 300` × 5 epoch + **매 epoch val** | val SSIM 0.842→0.855 ↑(학습 확인). 🐛 TrainLoss 평균 버그 발견. bbox/baseline 여전 미측정. | [run3](2026-07-07-run3-learncheck-analysis.md) |
+| 4–5 | `sdum_scalefix` (풀 epoch) | run3의 `--max-iters` 제거 → 풀 4651 iter 완주. run5 = `nw 6` 속도 실험 | 첫 풀 epoch: TrainLoss **0.1146**·Val **0.882**(whole SSIM). num_workers 무효 확정. 🐛 `val_loss_log` 2버그(SUM 저장·덮어쓰기) → **수정함**. | [run4–5](2026-07-08-run4-5-fullepoch-analysis.md) |
+
+> ⚠️ **이름 충돌 주의:** run2와 run4–5는 **둘 다 `-n sdum_scalefix`**(같은 명령). `../result/sdum_scalefix/`는 마지막 run이 덮어쓴 상태. (run6은 셸스크립트 확인용 중복이라 분석 제외 — 별도 최소 기록 예정.)

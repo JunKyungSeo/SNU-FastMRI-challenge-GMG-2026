@@ -9,7 +9,7 @@
 - **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
 - **팀 2명** (§4).
 
-> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_analy/`, 수정 계획은 `docs/superpowers/plans/` 참조.
+> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_anal/`, 수정 계획은 `docs/superpowers/plans/` 참조.
 
 ---
 
@@ -81,5 +81,5 @@ GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`-
 ## 6. 참고 문서
 
 - 전략 인덱스·SPEC: `strategy/README.md` · `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
-- 학습 로그 분석·수정 계획(누적): `training_analy/` · `docs/superpowers/plans/`
+- 학습 로그 분석·수정 계획(누적): `training_anal/` · `docs/superpowers/plans/`
 - 원본 SDUM 코드(참고, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137

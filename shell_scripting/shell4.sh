@@ -38,12 +38,13 @@ echo "=========================================================="
 # ==========================================================
 set -x
 
-# 스모크: run5(shell5)와 같은 config, 단 --max-iters 30 -e 1 로 몇 분만.
+# run6 = 스모크: run7(shell5)와 같은 config, 단 --max-iters 30 -e 1 로 몇 분만.
 # warmup 10 → 30 iters 안에 warmup(1~10)+cosine(11~) 둘 다 관찰 가능.
+# ※ 스모크는 -r 100 규칙의 예외 — --max-iters 30보다 작은 -r 5라야 capped iter가 로그에 찍힘.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
     -b 1 -l 2.4e-4 -e 1 -r 5 --max-iters 30 --num-workers 4 \
     --readout-crop --warmup-iters 10 \
-    -n sdum_smoke --run-tag smoke -t /root/Data/train/ -v /root/Data/val/
+    -n sdum_run6 --run-tag run6 -t /root/Data/train/ -v /root/Data/val/
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑

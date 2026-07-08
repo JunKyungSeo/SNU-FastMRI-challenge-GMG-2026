@@ -50,6 +50,7 @@
 | 2 | `sdum_scalefix` | 어댑터 per-sample 스케일 정규화(`c56351d`) | loss 1.0→~0.1(SSIM≈0.9). P0 해결. 속도 그대로(num_workers 무효). | [run2](2026-07-07-run2-scalefix-analysis.md) |
 | 3 | `sdum_learncheck` | `--max-iters 300` × 5 epoch + **매 epoch val** | val SSIM 0.842→0.855 ↑(학습 확인). 🐛 TrainLoss 평균 버그 발견. bbox/baseline 여전 미측정. | [run3](2026-07-07-run3-learncheck-analysis.md) |
 | 4–5 | `sdum_scalefix` (풀 epoch) | run3의 `--max-iters` 제거 → 풀 4651 iter 완주. run5 = `nw 6` 속도 실험 | 첫 풀 epoch: TrainLoss **0.1146**·Val **0.882**(whole SSIM). num_workers 무효 확정. 🐛 `val_loss_log` 2버그(SUM 저장·덮어쓰기) → **수정함**. | [run4–5](2026-07-08-run4-5-fullepoch-analysis.md) |
-| smoke | `sdum_smoke` | **+`--readout-crop`, +cosine/warmup 스케줄러** 코드 게이트(`--max-iters 30`) | 두 코드 크래시 없이 동작, **~4.0 s/iter → 1ep≈5.2h(≈40%↓)** 실측. 🐛 `validate()`가 `--max-iters` 무시 발견. base LR 2e-4(수정 전). | [smoke](2026-07-08-smoke-readoutcrop-sched-analysis.md) |
+| 6 | `sdum_smoke` (smoke) | **+`--readout-crop`, +cosine/warmup 스케줄러** 코드 게이트(`--max-iters 30`) | 두 코드 크래시 없이 동작, **~4.0 s/iter → 1ep≈5.2h(≈40%↓)** 실측. 🐛 `validate()`가 `--max-iters` 무시 발견. base LR 2e-4(수정 전). | [run6](2026-07-08-run6-smoke-readoutcrop-sched-analysis.md) |
+| 7 | `sdum_run5`* | +LR **2.4e-4**(논문값), readout-crop, cosine warmup 200, 풀 2ep | (진행 중, ~10h) *결과 dir가 `sdum_run5`인 건 태그 충돌 잔재. 다음 슬롯=run8. | — |
 
 > ⚠️ **이름 충돌 주의:** run2와 run4–5는 **둘 다 `-n sdum_scalefix`**(같은 명령). `../result/sdum_scalefix/`는 마지막 run이 덮어쓴 상태. (run6은 셸스크립트 확인용 중복이라 분석 제외 — 별도 최소 기록 예정.)

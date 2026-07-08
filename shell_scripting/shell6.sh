@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: run6 = 대안 5b (깨끗한 귀속) — readout-crop 빼고 -e 1.
+# 목적: run8 = 대안 5b (깨끗한 귀속) — readout-crop 빼고 -e 1. (run6=smoke, run7=현재 도는 것 다음)
 #       run4(640 해상도)와 해상도를 동일하게 두고 "cosine+warmup 만으로 정체가 풀리나"를
 #       readout-crop confound 없이 확인. (근거: run4-5-extra.md §대안 5b)
 #       ⚠️ SSIM_full/bbox 로깅(item 1·2) 아직 안 붙임 → val 로그는 whole-image SSIMLoss만.
@@ -39,11 +39,11 @@ echo "=========================================================="
 # ==========================================================
 set -x
 
-# run6 (5b): readout-crop 없음(=run4와 640 동일), warmup 200→cosine, 1 epoch.
+# run8 (5b): readout-crop 없음(=run4와 640 동일), warmup 200→cosine, 1 epoch. -r 100(heartbeat).
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2.4e-4 -e 1 -r 500 --num-workers 4 \
+    -b 1 -l 2.4e-4 -e 1 -r 100 --num-workers 4 \
     --warmup-iters 200 \
-    -n sdum_run6 --run-tag run6 -t /root/Data/train/ -v /root/Data/val/
+    -n sdum_run8 --run-tag run8 -t /root/Data/train/ -v /root/Data/val/
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑

@@ -37,6 +37,9 @@ def parse():
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
     parser.add_argument('--num-workers', type=int, default=4, help='DataLoader worker processes (0=main proc)')
     parser.add_argument('--max-iters', type=int, default=0, help='Cap train iters/epoch for debugging (0=full)')
+    parser.add_argument('--readout-crop', action='store_true', help='SDUM: k-space readout(높이) 640→384 crop을 입력단에 적용(무손실, ~40%% 공간연산·메모리 절감). --normalize와 함께 켜지 말 것(어댑터가 self-normalize)')
+    parser.add_argument('--crop-h', type=int, default=384, help='--readout-crop 시 crop 높이 (기본 384 = 대회 출력 크기)')
+    parser.add_argument('--warmup-iters', type=int, default=0, help='SDUM: linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR)')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
 
     args = parser.parse_args()

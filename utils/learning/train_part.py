@@ -3,6 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import time
+import math
 from pathlib import Path
 import copy
 
@@ -14,7 +15,7 @@ from utils.model.varnet import VarNet
 
 import os
 
-def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
+def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None):
     model.train()
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
@@ -34,6 +35,8 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type):
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        if scheduler is not None:
+            scheduler.step()   # per-iter (warmup→cosine)
         total_loss += loss.item()
 
         if iter % args.report_interval == 0:
@@ -122,12 +125,25 @@ def train(args):
     
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
-    
+
+    # --warmup-iters>0 이면(SDUM) linear warmup 후 cosine 감쇠. 0이면 스케줄러 없음(상수 LR, 기존 동작).
+    scheduler = None
+    if getattr(args, "model", "varnet") == "sdum" and getattr(args, "warmup_iters", 0) > 0:
+        total_iters = args.num_epochs * len(train_loader)
+        warmup = args.warmup_iters
+        def lr_lambda(step):
+            if step < warmup:
+                return (step + 1) / warmup
+            progress = (step - warmup) / max(1, total_iters - warmup)
+            return 0.5 * (1.0 + math.cos(math.pi * progress))
+        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+        print(f"[scheduler] warmup={warmup} → cosine, total_iters={total_iters}, base_lr={args.lr}")
+
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
         
-        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
+        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
         
         val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음

@@ -21,6 +21,8 @@ bash shell1.sh ; bash shell2.sh ; bash shell3.sh
 3. stdout+stderr 가 `logs/<슬롯>_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력).
 4. 끝나면 `[DONE ] <슬롯> ... exit=<코드>` 로 종료코드 고지.
 5. 실행되는 명령이 `set -x`로 로그에 그대로 찍힌다 — 어떤 config·`--num-workers`로 돌렸는지 **로그만 봐도** 안다. (슬롯이 `_template.sh` 기준으로 만들어졌을 때. 기존 슬롯은 `cp _template.sh shellN.sh`로 갱신.)
+6. **GPU 학습엔 순차 run 번호 필수** — `--run-tag runN -n sdum_runN`(스모크 포함, 번호 재사용·무번호 'smoke' 금지). 다음 번호는 `training_anal/CLAUDE.md` run 이력 표에서 "마지막+1".
+7. **`-r 100` 고정**(≈7분마다 heartbeat). 단 `--max-iters N` 스모크는 예외 — N보다 작은 `-r`(5~10)이라야 capped iter가 로그에 찍힌다.
 
 ## 파일
 

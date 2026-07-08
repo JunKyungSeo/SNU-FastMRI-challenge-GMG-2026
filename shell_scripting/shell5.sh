@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: run5 (추천 다음 run) — readout-crop(속도/VRAM 확보) + cosine+warmup(정체 tail 뽑기), 2 epoch.
+# 목적: run7 (추천 다음 run) — readout-crop(속도/VRAM 확보) + cosine+warmup(정체 tail 뽑기), 2 epoch.
+#       ※ 넘버링상 run7이나 결과 dir/태그는 sdum_run5 (라이브 결과 findable하게 그대로 둠 = 태그충돌 잔재).
 #       진단은 "underfit + 고정 LR" → 최적화에 예산, readout-crop으로 그걸 감당. (근거: run4-5-extra.md)
 #       ⚠️ SSIM_full/bbox 로깅(item 1·2)은 아직 안 붙임 → val 로그는 whole-image SSIMLoss만.
 #
@@ -40,7 +41,7 @@ set -x
 
 # run5: readout-crop(640→384, 무손실) + warmup 200→cosine, 2 epoch. resume 없음(scratch) → epoch 미리 확정.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2.4e-4 -e 2 -r 500 --num-workers 4 \
+    -b 1 -l 2.4e-4 -e 2 -r 100 --num-workers 4 \
     --readout-crop --warmup-iters 200 \
     -n sdum_run5 --run-tag run5 -t /root/Data/train/ -v /root/Data/val/
 

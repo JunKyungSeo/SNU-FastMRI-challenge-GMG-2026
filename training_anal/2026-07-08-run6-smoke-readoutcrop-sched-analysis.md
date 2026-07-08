@@ -1,8 +1,10 @@
-# smoke 분석 — `--readout-crop` + cosine/warmup 스케줄러 코드 검증 (2026-07-08)
+# run6 (smoke) 분석 — `--readout-crop` + cosine/warmup 스케줄러 코드 검증 (2026-07-08)
 
 **한 줄 결론:** 새 코드 2개(입력단 readout-crop, cosine+warmup 스케줄러)가 **크래시 없이 동작**하고, readout-crop으로 **~4.0 s/iter → 1 epoch ≈ 5.2h** (run4 ~9h 대비 **≈40% 단축**, extra.md 예측과 일치). 이건 "안 망가짐 + 속도 확보" 확인이지 "성능 좋다"는 아님(30 iter뿐).
 
-> 이 run은 **정식 run이 아니라 9h run5 전 게이트용 스모크**다. `--max-iters 30 -e 1`로 train 30 iter만 돌렸다.
+> 이 run은 **정식 run이 아니라 9h run7 전 게이트용 스모크(=run6)**다. `--max-iters 30 -e 1`로 train 30 iter만 돌렸다.
+>
+> 📌 **넘버링 정정:** 이 스모크 = **run6**, 뒤이어 도는 게 **run7**(단 결과 dir는 태그 충돌 잔재로 `sdum_run5`), 다음 큐 슬롯 = **run8**. (규칙: 모든 GPU 학습에 순차 run 번호.)
 
 ---
 
@@ -11,7 +13,7 @@
 - ✅ **readout-crop 배선 동작** — cropped 경로로 loss 유한, 크래시 없음. (extra.md의 "최대 속도 레버"가 실제로 켜짐)
 - ✅ **스케줄러 배선 동작** — `[scheduler] warmup=10 → cosine, total_iters=4651` 출력, per-iter step 정상.
 - ✅ **속도 ~40% 단축 실측** — steady ~4.0 s/iter → 1 epoch ≈ 5.2h (run4 ~9h 대비). *단 30 iter 외삽·val 제외 추정치.*
-- ⚠️ **base LR = 2e-4로 돌아감** — 이 스모크는 LR 수정(2.4e-4) **전에** 시작돼 2e-4. run5부터 논문값 2.4e-4 적용됨(코드/슬롯 이미 수정).
+- ⚠️ **base LR = 2e-4로 돌아감** — 이 스모크는 LR 수정(2.4e-4) **전에** 시작돼 2e-4. run7부터 논문값 2.4e-4 적용됨(코드/슬롯 이미 수정).
 - 🐛 **`validate()`가 `--max-iters`를 무시** — train은 30 iter(~2분)에 끝났으나 **full val set을 다 forward**(~5분+)해서 스모크가 총 11분 걸림. SIGTERM으로 val 중단.
 - ❌ **순위 지표(SSIM_full/bbox) 여전 미로깅** — 이번엔 cv2 이슈로 item 1·2 스킵. whole-image loss만.
 
@@ -38,7 +40,7 @@
 |---|---|---|
 | ⭐ readout crop이 SDUM 경로에 안 걸림 = 최대 속도 레버 (extra.md A) | ✅**해결** | `--readout-crop` 플래그 추가·플러밍 확인, 스모크에서 ~4s/iter(≈40%↓) 실측 |
 | ⭐ 고정 LR (상수 2e-4)가 정체 원인 (extra.md C) | ✅**해결(배선)** | cosine+warmup LambdaLR 배선, `[scheduler]…` 출력으로 활성 확인. *효과(정체 풀림)는 run5 풀 epoch에서 판정* |
-| LR을 논문(2.4e-4)과 다르게 2e-4로 씀 | 🐛→✅ | 이번 세션에 발견, shell4/5/6 + 예시 `-l 2.4e-4`로 수정. run5부터 적용(스모크 자체는 2e-4) |
+| LR을 논문(2.4e-4)과 다르게 2e-4로 씀 | 🐛→✅ | 이번 세션에 발견, shell4/5/6 + 예시 `-l 2.4e-4`로 수정. run7부터 적용(스모크 자체는 2e-4) |
 | 🐛 `val_loss_log` SUM 저장·run별 덮어쓰기 (run4–5 §5-A/B) | ✅**해결** | 이전 커밋에서 per-subject 정규화 + `--run-tag` 분리 |
 | SSIM_full/bbox 로깅 없음 = 순위 지표 못 봄 (extra.md D, item 1·2) | ⬜**여전** | cv2(libGL) 이슈로 이번 스킵. val 로그는 whole-image SSIMLoss만 |
 | 🐛 `validate()`가 `--max-iters` 무시 | 🐛**새로발견** | `train_epoch`만 early-break(`train_part.py:24`), `validate()`엔 상한 없음 → 스모크가 full val 지불 |
@@ -62,13 +64,14 @@
 | 1 epoch(4651) 외삽 | **≈ 5.17 h** | run4 ~9h/epoch 대비 **≈43% 단축** |
 
 - extra.md의 "readout-crop ~40% 단축" 예측이 **실측으로 확인**됨(무손실 crop이 공간연산을 줄인 결과).
-- ⚠️ **정직성:** 30 iter 외삽 + validation 시간 제외. 실제 epoch 벽시계는 val·디스크 I/O 포함이라 다를 수 있음 → **run5 풀 epoch 로그로 확정**.
+- ⚠️ **정직성:** 30 iter 외삽 + validation 시간 제외. 실제 epoch 벽시계는 val·디스크 I/O 포함이라 다를 수 있음 → **run7 풀 epoch 로그로 확정**.
 - VRAM: GPU util 99%, mem ~7.5GB (crop이 640 대비 메모리를 **줄임** → OOM 위험 없음).
 
 ## §5 다음 액션
 
-- **P0 (진행 중):** **run5** = `-l 2.4e-4 --readout-crop --warmup-iters 200 -e 2` 시작됨(`sdum_run5`). 완주 후 분석 — ⓐ TrainLoss가 run4 0.1146보다 내려가나, ⓑ cosine tail로 val 정체가 풀리나, ⓒ 실제 epoch 벽시계.
+- **P0 (진행 중):** **run7** = `-l 2.4e-4 --readout-crop --warmup-iters 200 -e 2` 시작됨(결과 dir `sdum_run5` = 태그충돌 잔재). 완주 후 분석 — ⓐ TrainLoss가 run4 0.1146보다 내려가나, ⓑ cosine tail로 val 정체가 풀리나, ⓒ 실제 epoch 벽시계.
 - **P1:** `validate()`에 스모크용 iter 상한(예: val 20슬라이스) → 앞으로 스모크가 진짜 몇 분에 끝남. *실제 run은 full val 유지(순위 지표 필요).*
+- **다음 슬롯:** shell6 = **run8**(대안 5b, readout-crop 없음, `-r 100`).
 - **P2:** SSIM_full 로깅 (metrics.py cv2→scipy 후). "SSIM_full 먼저" 우선순위대로 bbox는 뒤로.
 
 ---
@@ -81,6 +84,26 @@
 | 2 | `sdum_scalefix` | 어댑터 스케일 정규화 | loss→~0.1, P0 해결 |
 | 3 | `sdum_learncheck` | `--max-iters 300`×5ep + val | val SSIM 0.842→0.855↑. TrainLoss 평균 버그 발견 |
 | 4–5 | `sdum_scalefix` 풀 | max-iters 제거, 풀 4651 완주 | TrainLoss 0.1146 / Val 0.882(whole). val_loss_log 2버그 수정 |
-| **smoke** | `sdum_smoke` | **+readout-crop, +cosine/warmup** (30 iter 게이트) | **두 코드 동작·크래시 없음, ~40% 속도↓ 실측.** validate() max-iters 무시 발견 |
+| **6** (smoke) | `sdum_smoke` | **+readout-crop, +cosine/warmup** (30 iter 게이트) | **두 코드 동작·크래시 없음, ~40% 속도↓ 실측.** validate() max-iters 무시 발견 |
+| 7 (진행중) | `sdum_run5`* | +LR 2.4e-4 논문값, 풀 2ep | (진행 중) *dir는 태그충돌 잔재 |
 
-> ⚠️ 이 스모크는 base LR **2e-4**(수정 전). 정식 run5부터 논문값 **2.4e-4**. 스모크는 성능이 아니라 **코드·속도 게이트**로만 해석할 것.
+> ⚠️ 이 스모크(run6)는 base LR **2e-4**(수정 전). 정식 run7부터 논문값 **2.4e-4**. 스모크는 성능이 아니라 **코드·속도 게이트**로만 해석할 것.
+
+---
+
+## 💬 코멘트 (사람)
+
+> max iter 시 trainloss에 문제가 있다는 분석을 training_anal 사이에서 본 거 같은데 그게 이번에도 영향을 미쳤는지 궁금하고, crash 나는지 보려고 넣은 거니까 이정도면 굿
+
+**→ 답변 (max-iters TrainLoss 버그, 이번 스모크 영향 여부):**
+
+맞습니다 — 그 버그는 **run3 분석**에서 발견한 것: `train_epoch`가 `--max-iters`로 조기 break하는데(`train_part.py:24`) epoch 끝 평균을 `total_loss / len_loader`(=full **4651**)로 나눔(`:47`) → **epoch-요약 "TrainLoss=" 값이 ~155배(4651/30) 축소**된다. 코드엔 아직 그대로(§5-C "보류").
+
+**이번 스모크(run6)엔 영향 없음** — 근거:
+- 그 버그는 **epoch 끝 "TrainLoss=" 요약줄에만** 영향. 이번 스모크는 **validation 중 kill**돼서 그 줄이 **아예 안 찍힘**(로그 `grep -c TrainLoss` = **0**).
+- 우리가 본 값은 **per-iter `Loss=`(0.19~0.25)** 뿐 — raw `loss.item()`이라 **분모 버그와 무관**.
+- 즉 스모크 결론(크래시 없음·~40% 속도)은 이 버그와 **독립**.
+
+**run7(진행 중, 풀 run)엔 애초에 안 걸림** — `--max-iters`가 없으니 early break 자체가 없다 → epoch-요약 TrainLoss 정상 계산. (버그는 `--max-iters` 쓸 때만 발현)
+
+→ crash 체크 목적 달성 → **"굿" 동의.** ✅ (근본 수정은 §5-C대로 보류, `--max-iters` 스모크에서만 요약 TrainLoss를 안 믿으면 됨)

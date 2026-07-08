@@ -20,6 +20,7 @@ bash shell1.sh ; bash shell2.sh ; bash shell3.sh
 2. 실행하면 `[START] <슬롯>` 배너로 **어디서 시작됐는지** echo.
 3. stdout+stderr 가 `logs/<슬롯>_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력).
 4. 끝나면 `[DONE ] <슬롯> ... exit=<코드>` 로 종료코드 고지.
+5. 실행되는 명령이 `set -x`로 로그에 그대로 찍힌다 — 어떤 config·`--num-workers`로 돌렸는지 **로그만 봐도** 안다. (슬롯이 `_template.sh` 기준으로 만들어졌을 때. 기존 슬롯은 `cp _template.sh shellN.sh`로 갱신.)
 
 ## 파일
 

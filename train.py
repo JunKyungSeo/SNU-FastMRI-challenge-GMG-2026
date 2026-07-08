@@ -37,6 +37,7 @@ def parse():
     parser.add_argument('--seed', type=int, default=430, help='Fix random seed')
     parser.add_argument('--num-workers', type=int, default=4, help='DataLoader worker processes (0=main proc)')
     parser.add_argument('--max-iters', type=int, default=0, help='Cap train iters/epoch for debugging (0=full)')
+    parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
 
     args = parser.parse_args()
     return args

@@ -130,17 +130,16 @@ def train(args):
         train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
         
+        val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
-        file_path = os.path.join(args.val_loss_dir, "val_loss_log")
+        run_tag = getattr(args, "run_tag", "")
+        fname = f"val_loss_log_{run_tag}" if run_tag else "val_loss_log"   # §5-B: run별 분리 저장(덮어쓰기 방지)
+        file_path = os.path.join(args.val_loss_dir, fname)
         np.save(file_path, val_loss_log)
         print(f"loss file saved! {file_path}")
 
         train_loss = torch.tensor(train_loss).cuda(non_blocking=True)
         val_loss = torch.tensor(val_loss).cuda(non_blocking=True)
-        num_subjects = torch.tensor(num_subjects).cuda(non_blocking=True)
-
-        val_loss = val_loss / num_subjects
-
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 

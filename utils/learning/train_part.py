@@ -113,6 +113,22 @@ def check_resume_compat(saved_args, args):
             )
 
 
+def load_resume_checkpoint(exp_dir, args):
+    """model.pt(마지막 epoch) 로드 + config 일치 확인. 없으면 FileNotFoundError."""
+    ckpt_path = Path(exp_dir) / "model.pt"
+    if not ckpt_path.exists():
+        raise FileNotFoundError(f"--resume인데 checkpoint 없음: {ckpt_path}")
+    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    check_resume_compat(ckpt["args"], args)
+    return ckpt
+
+
+def load_val_log(file_path):
+    """val_loss_log 이어쓰기용. np.save는 '.npy'를 붙이므로 그 경로를 확인."""
+    p = file_path + ".npy"
+    return np.load(p) if os.path.exists(p) else np.empty((0, 2))
+
+
 def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
     torch.save(
         {

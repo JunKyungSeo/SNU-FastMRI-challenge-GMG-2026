@@ -81,6 +81,12 @@ def validate(args, model, data_loader):
     return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start
 
 
+def steps_per_epoch(args, len_loader):
+    """--max-iters면 epoch당 실제 train step은 min(max_iters, len_loader)."""
+    mi = getattr(args, "max_iters", 0)
+    return min(mi, len_loader) if mi and mi > 0 else len_loader
+
+
 def build_scheduler(optimizer, args, len_loader):
     """SDUM & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR)."""
     if getattr(args, "model", "varnet") != "sdum" or getattr(args, "warmup_iters", 0) <= 0:

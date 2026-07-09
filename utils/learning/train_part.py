@@ -103,6 +103,16 @@ def build_scheduler(optimizer, args, len_loader):
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def check_resume_compat(saved_args, args):
+    """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
+    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters"):
+        s, c = getattr(saved_args, f, None), getattr(args, f, None)
+        if s != c:
+            raise ValueError(
+                f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."
+            )
+
+
 def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
     torch.save(
         {

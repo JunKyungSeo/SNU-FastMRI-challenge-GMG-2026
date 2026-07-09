@@ -1,7 +1,8 @@
 import math
+import pytest
 from types import SimpleNamespace
 import torch
-from utils.learning.train_part import build_scheduler, steps_per_epoch
+from utils.learning.train_part import build_scheduler, steps_per_epoch, check_resume_compat
 
 
 def _dummy_opt(lr):
@@ -50,3 +51,23 @@ def test_fast_forward_lands_at_correct_lr():
     progress = (k - args.warmup_iters) / max(1, total - args.warmup_iters)
     expected = 2e-4 * 0.5 * (1.0 + math.cos(math.pi * progress))
     assert abs(opt.param_groups[0]["lr"] - expected) < 1e-9
+
+
+def _args(**kw):
+    base = dict(model="sdum", num_cascades=4, channels=[16, 32], num_epochs=4, warmup_iters=200)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_check_resume_compat_ok():
+    check_resume_compat(_args(), _args())          # no raise
+
+
+def test_check_resume_compat_arch_mismatch():
+    with pytest.raises(ValueError):
+        check_resume_compat(_args(num_cascades=4), _args(num_cascades=6))
+
+
+def test_check_resume_compat_horizon_mismatch():
+    with pytest.raises(ValueError):
+        check_resume_compat(_args(num_epochs=4), _args(num_epochs=2))

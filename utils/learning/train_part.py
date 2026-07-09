@@ -105,7 +105,7 @@ def build_scheduler(optimizer, args, len_loader):
 
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
-    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters"):
+    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr"):
         s, c = getattr(saved_args, f, None), getattr(args, f, None)
         if s != c:
             raise ValueError(
@@ -178,7 +178,7 @@ def train(args):
         start_epoch = resume_ckpt["epoch"]
         best_val_loss = resume_ckpt["best_val_loss"]
         if torch.is_tensor(best_val_loss):
-            best_val_loss = best_val_loss.item()   # ckpt는 map_location='cpu'로 로드됨; cuda val_loss와 비교 시 device 불일치 방지
+            best_val_loss = best_val_loss.item()   # best_val_loss를 python float로 정규화(fresh run의 1.0과 타입 일치; is_new_best 비교 안전)
         print(f"[resume] {args.exp_dir/'model.pt'} → start_epoch={start_epoch} best_val={best_val_loss:.4f}")
 
 

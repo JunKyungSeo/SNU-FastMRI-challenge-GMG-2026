@@ -3,8 +3,8 @@
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
 # 목적: --resume 스모크(Task 5) — epoch0만 돌고 죽은 SDUM run을 --resume으로 이어붙여
 #       start_epoch=1부터 재개되는지, scheduler fast-forward lr / val_loss_log 이어쓰기가
-#       맞는지 확인. ⚠️ 1번 명령 완료(epoch0 "loss file saved!" 로그) 후 수동 kill 필요 —
-#       완전 무인 큐 잡이 아님. 아래 절차대로 "수동 2단계"로 실행할 것.
+#       맞는지 확인. ⚠️ 1번 명령 완료(epoch0 "Epoch = [ 0/ 2] TrainLoss=... ValLoss=..." 요약
+#       로그) 후 수동 kill 필요 — 완전 무인 큐 잡이 아님. 아래 절차대로 "수동 2단계"로 실행할 것.
 #
 # 실행:  bash shellN.sh                          (단독)
 #        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
@@ -42,8 +42,10 @@ set -x
 # ⚠️ 수동 2단계 스모크 (자동 큐잡 아님) — Task 5 브리프 Step 4:
 #
 # [1단계] 아래 명령을 먼저 실행. 2-epoch 계획(-e 2)이지만 epoch0가 끝나
-#   ("loss file saved! ..." 로그 + val_loss_log_resume_smoke.npy 저장) 되는 즉시
-#   Ctrl-C로 죽인다 (epoch0만 돌고 죽은 상황을 흉내).
+#   ("Epoch = [ 0/ 2] TrainLoss=... ValLoss=..." 요약 로그) 되는 즉시 Ctrl-C로 죽인다
+#   (epoch0만 돌고 죽은 상황을 흉내). ⚠️ "loss file saved!" 로그에서 죽이면 안 됨 —
+#   model.pt는 save_model이 그 다음에 쓰므로 거기서 죽이면 model.pt가 없거나 부분
+#   기록만 남아 --resume 단계가 FileNotFoundError로 실패한다.
 #
 # python train.py --model sdum --num-cascades 4 --channels 16 32 \
 #     -b 1 -l 2.4e-4 -e 2 -r 50 --max-iters 60 --readout-crop --warmup-iters 20 \

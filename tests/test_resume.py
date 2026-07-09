@@ -56,7 +56,7 @@ def test_fast_forward_lands_at_correct_lr():
 
 
 def _args(**kw):
-    base = dict(model="sdum", num_cascades=4, channels=[16, 32], num_epochs=4, warmup_iters=200)
+    base = dict(model="sdum", num_cascades=4, channels=[16, 32], num_epochs=4, warmup_iters=200, lr=2.4e-4)
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -73,6 +73,11 @@ def test_check_resume_compat_arch_mismatch():
 def test_check_resume_compat_horizon_mismatch():
     with pytest.raises(ValueError):
         check_resume_compat(_args(num_epochs=4), _args(num_epochs=2))
+
+
+def test_check_resume_compat_lr_mismatch():
+    with pytest.raises(ValueError):
+        check_resume_compat(_args(lr=2.4e-4), _args(lr=1e-4))
 
 
 def test_load_resume_checkpoint_missing(tmp_path):

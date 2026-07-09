@@ -10,7 +10,7 @@
 
 - ✅ **속도 = 유일한 확실 이득**: readout-crop으로 **~5.21h/epoch**(18,756s), run4-5 ~9h 대비 ~40%↓. 8GB에 ~6.4GB 안착. (cosine은 FLOP 중립이라 속도엔 0 기여 → **속도는 100% crop 몫**.)
 - ⚠️ **정확도 개선은 modest를 넘어 "거의 없음"**: val SSIM 0.8812(ep0)→0.8846(ep1). 근데 **ep0(crop+cosine, 1ep) 0.8812 ≈ run4-5(no-crop/no-cosine, 1ep) 0.882** → matched-epoch면 crop+cosine 품질 기여 **≈0**, +0.003은 순전히 **2번째 epoch** 덕.
-- ⚠️ **순위축 SSIM_bbox 여전히 blind**: 전부 whole-image SSIM. 배경이 지배하는 지표라 +0.003이 **순수 배경 스무딩(병변 이득 0)**일 수 있음.
+- ⚠️ **새 채점(2026-07-09 규칙변경) = `0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`**. 우리 val whole-image는 **SSIM_full의 거친 대리(=점수 절반)** 일 뿐 — foreground-mask·bbox·추론시간은 미측정. full·bbox는 **5:5 동일 가중**이라 bbox만 볼 게 아니고, 추론시간(~0.00n)도 SSIM 접전 시 순위를 가름. → **recon_eval(shell7)로 3축 한 번에** 봐야 함.
 - ⚠️ **N=1·노이즈 바닥 미상**: per-slice loss 0.037~0.29 진동. 15 subject에서 +0.003은 유의성 검정 없음 = **run-to-run 노이즈 범위**.
 - ✅ **과적합 아님(팀 판단 맞음) → under-training**: train·val 둘 다 계속 하강 중. cosine이 2 epoch만에 LR→0으로 **수렴 전 조기 종료**. (capacity wall 아님)
 - 🐛 **train/val 지표가 서로 다른 구현**: train=conv2d `SSIMLoss`(loss_function.py), val=skimage `structural_similarity`(utils.py). + train 0.100은 epoch running-mean이라 end-state 과소. → 0.015 갭은 **soft한 숫자**.
@@ -37,8 +37,8 @@
 | 고정 LR 정체 원인 (extra.md C) | ⚠️**배선했으나 효과 미미** | cosine 켜짐. 단 matched-epoch 품질 기여 ≈0 |
 | LR 논문값 2.4e-4 | ✅**해결** | 적용 확인 |
 | 🐛 `val_loss_log` SUM/덮어쓰기 (§5-A/B) | ✅**해결·검증** | 이번 로그가 per-subject 정규화·run별 저장 정상 동작 |
-| SSIM_full/bbox 로깅 없음 (extra.md D) | ⬜**여전** | 순위축 여전히 미측정 |
-| baseline(zero-filled) 대비 | ⬜**여전** | extra.md 1회 측정만 |
+| SSIM_full/bbox 로깅 없음 (extra.md D) | ⬜여전(학습중 로깅) → **사후 채점은 가능** | validate엔 미배선. 단 `recon_eval.py`로 checkpoint 사후 3축 채점 가능(cv2 headless로 해결) |
+| baseline(zero-filled) 대비 | ⬜**여전** | extra.md 1회 측정만(full 0.833/bbox 0.820) |
 
 ## §3 손실 · 속도 · 지표
 
@@ -49,7 +49,8 @@
 | 1 | **0.1001** | **0.1154** | **0.8846** |
 
 - **귀속 (적대적 검증 결과)**: 속도 = crop 100%(cosine FLOP 중립). **품질 = confounded + matched-epoch로 ≈0** — ep0(0.8812) ≈ run4-5(0.882)라, crop·cosine 어느 쪽도 1-epoch 시점에 품질을 못 샀고, +0.003은 2번째 epoch 몫. crop-only vs cosine-only ablation 없이는 분리 불가(하지만 anchor가 "둘 다 미미"를 시사).
-- **정직성**: 전부 whole-image. **순위축(SSIM_bbox) 미측정** → 리더보드로 전이될지 불명. N=1, 노이즈 바닥 미상.
+- **추론시간 관점(새 규칙)**: readout-crop은 공간을 40% 줄여 **추론시간 점수에도 이득**(작지만 접전 시 유효). 반대로 run8의 큰 모델은 추론시간 손해 → 새 규칙에선 "capacity vs 속도" 트레이드가 점수에 직접 반영됨.
+- **정직성**: 전부 whole-image(= SSIM_full의 대리, data_range도 gt.max()로 채점식과 다름). **실제 채점 3축(full/bbox/시간) 미측정** → recon_eval(shell7)로 처음 봄. N=1, 노이즈 바닥 미상.
 
 ## §3.5 일반 ML 구현 점검 (코드 접지)
 
@@ -76,7 +77,7 @@
 ## §4 다음 액션 + 다음 학습 고려사항 (run9)
 
 **P0 — 지금 바로 (학습 아님, 최고 EV):**
-- ⭐ **SSIM_bbox 측정**: run7(·run8) checkpoint를 `metrics.py:ssim_bbox`로 병변 박스(attrs['annotations']) 채점 → zero-filled bbox 0.820과 비교. **GPU 학습 0, 순위축을 처음으로 봄.** 이거 없이는 여태 개선이 병변에 닿았는지 모름. (단 metrics.py cv2→scipy 선행 필요)
+- ⭐ **recon_eval로 실제 3축 채점(shell7)**: run7(`-n sdum_run5`)·run8(`-n sdum_run8`)을 `recon_eval.py -p /root/Data/leaderboard`로 **SSIM_full + SSIM_bbox + 추론시간** 한 번에 측정 → zero-filled(full 0.833/bbox 0.820)과 비교. 여태 whole-image 대리만 봤으니 **실제 점수를 처음 보는 것**. (cv2는 opencv-python-headless로 해결됨.)
 
 **다음 학습 고려사항 (이 run이 시사):**
 - 🔎 **run7은 under-training**이지 capacity 한계가 아님(둘 다 하강 중 LR이 0됨). → **가장 싼 고EV 레버 = 현재 capacity로 더 오래 학습**(epoch↑ 또는 cosine `total_iters`를 늘려 하강 중에 LR이 0 안 되게).
@@ -96,4 +97,4 @@
 | **7** | `sdum_run5`* | +crop, +cosine warmup200, +LR2.4e-4, 2ep | **속도 ~5.2h/ep(확실). 정확도 val 0.881→0.885(=2nd epoch 몫, crop·cosine 기여 matched-epoch로 ≈0). under-training. bbox 미측정.** |
 | 8 | `sdum_run8` | (진행중) +cascades6+[24,48] | VRAM ~6GiB(OOM 기우). capacity 베팅은 run7 데이터로 약함 |
 
-> ⚠️ **결론**: run7의 진짜 교훈은 "cosine이 정체를 뚫었다"가 **아니라** "우리는 아직 **under-training**이고 **순위축(bbox)을 한 번도 안 봤다**"는 것. run9 최우선은 **bbox 측정 + 더 오래 학습**이지 capacity가 아니다.
+> ⚠️ **결론**: run7의 진짜 교훈은 "cosine이 정체를 뚫었다"가 **아니라** "아직 **under-training**이고 **실제 채점(full+bbox+시간)을 한 번도 안 봤다**"는 것. 다음: **recon_eval로 3축 채점(shell7) + 현재 capacity로 더 오래 학습(shell8=run9)**. bbox 한쪽이 아니라 **full·bbox 5:5 + 추론시간** 균형으로 판단할 것.

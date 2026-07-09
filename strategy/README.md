@@ -40,4 +40,4 @@
 - 구조: GRAPPA fft · 완전 384²(폭 pad) · x0 대체 · 2.5D 인접슬라이스 입력
 
 ## 하드 제약 (전 문서 공통)
-knee 전용 · SSIM_full + **SSIM_bbox(순위축)** + 추론시간 채점 · GTX 1080 8GB FP32 · external/pretrained 금지 · 세부는 [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).
+knee 전용 · **`0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** 채점(full·bbox 5:5, 2026-07-09 규칙변경) · GTX 1080 8GB FP32 · external/pretrained 금지 · 세부는 [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).

@@ -31,18 +31,20 @@
 
 ---
 
-## 2. 대회 규칙 (repo 근거: `README.md`, `strategy/`)
+## 2. 대회 규칙 (repo 근거: `README.md`, `recon_eval.py`, `strategy/`)
 
 - **knee 전용**, Cartesian **acc4/acc8**, 출력 **384×384**.
-- **평가 = SSIM 두 가지 + 추론시간**:
-  - `SSIM_full`: foreground mask 내부 평균 SSIM.
-  - **`SSIM_bbox`(순위 결정축)**: fastMRI+ 병변 bounding-box 안에서만 계산.
-  - 자가채점: `utils/common/metrics.py`의 `ssim_full`/`ssim_bbox`.
+- **평가 점수 = `0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** (⚠️ 규칙 변경 2026-07-09):
+  - `SSIM_full`: foreground mask 내부 평균 SSIM (data_range=`attrs['max']`).
+  - `SSIM_bbox`: fastMRI+ 병변 bounding-box 안에서만 계산.
+  - **full·bbox는 5:5 동일 가중 — 한쪽(특히 bbox)에 치우치지 말 것.** 추론시간은 **~0.00n 단위**로 작지만, SSIM 차이가 미미할 때 순위를 가름 → **속도·모델 크기도 점수 요소**(readout-crop이 이득, 큰 모델은 손해).
+  - 공식/자가 채점 = `recon_eval.py`(고정, 수정 금지) + `utils/common/metrics.py`(고정)로 SSIM_full·SSIM_bbox·시간 3축 동시 산출.
 - **사전학습 가중치·외부 데이터 금지** → NV SDUM의 HuggingFace 자동다운로드는 **vendor 안 함**, 처음부터 학습.
 - **annotation**: 각 image h5 `attrs['annotations']` JSON. 형식 `{"<slice>":[{x,y,width,height,label},...]}` (384² 공간 기준, w·h>16 박스만).
 - **재현성**: seed 고정 → 재학습 시 같은 결과.
 - **제출물**: 코드 repo(실행법 README) + loss 기록 + 모델 weight + 설명 ppt.
-- phase1 = train/val만 제공. leaderboard 데이터는 추후 배포(그때 `reconstruct.py` 사용).
+- **leaderboard 데이터 배포됨**: `/root/Data/leaderboard/acc{4,8}/{image,kspace}` (`public_*.h5`, `image_label`·`annotations` 포함 → self-scoring 가능). 채점: `python recon_eval.py -n <net_name> -p /root/Data/leaderboard`.
+  - ⚠️ 이 서버 `cv2`는 libGL 없어 깨짐 → **`opencv-python-headless`** 로 설치해야 `metrics.py` import 됨(metrics.py는 **불변** = 제출 호환).
 
 ---
 

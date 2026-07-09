@@ -62,7 +62,7 @@
 - **확정 vs 의심 구분.** 코드로 확인한 건 파일:줄 근거를 달고 "확정", 아니면 "의심".
 - **지표 함정을 항상 명시**:
   - SSIM은 MRI에서 **zero-filled만 해도 0.7~0.85** → 낮은 loss가 실력이 아닐 수 있음. 베이스라인 대비로만 판단.
-  - **train loss ≠ val loss**, **whole-image SSIM ≠ SSIM_bbox(순위축)**. 무엇을 보고 있는지 매번 밝힐 것.
+  - **train loss ≠ val loss**, **whole-image SSIM(우리 val) ≠ 채점식 SSIM_full/SSIM_bbox**. 채점 = `0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`(full·bbox 5:5, 시간 ~0.00n). 무엇을 보고 있는지 매번 밝히고, **한 지표(특히 bbox)에 치우치지 말 것**. 실채점은 `recon_eval.py`.
 - **하니스/코드 자체의 버그도 분석 대상.** 로그 숫자가 이상하면 코드를 열어 확인(예: run3에서 `--max-iters` × 평균 분모 버그로 TrainLoss가 15× 축소된 것). 로그를 곧이곧대로 믿지 말 것.
 - 과장 금지: "안 망가짐"과 "잘한다"를 구분해서 쓴다.
 

@@ -81,6 +81,22 @@ def validate(args, model, data_loader):
     return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start
 
 
+def build_scheduler(optimizer, args, len_loader):
+    """SDUM & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR)."""
+    if getattr(args, "model", "varnet") != "sdum" or getattr(args, "warmup_iters", 0) <= 0:
+        return None
+    total_iters = args.num_epochs * len_loader
+    warmup = args.warmup_iters
+
+    def lr_lambda(step):
+        if step < warmup:
+            return (step + 1) / warmup
+        progress = (step - warmup) / max(1, total_iters - warmup)
+        return 0.5 * (1.0 + math.cos(math.pi * progress))
+
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+
+
 def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
     torch.save(
         {
@@ -126,18 +142,10 @@ def train(args):
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
 
-    # --warmup-iters>0 이면(SDUM) linear warmup 후 cosine 감쇠. 0이면 스케줄러 없음(상수 LR, 기존 동작).
-    scheduler = None
-    if getattr(args, "model", "varnet") == "sdum" and getattr(args, "warmup_iters", 0) > 0:
-        total_iters = args.num_epochs * len(train_loader)
-        warmup = args.warmup_iters
-        def lr_lambda(step):
-            if step < warmup:
-                return (step + 1) / warmup
-            progress = (step - warmup) / max(1, total_iters - warmup)
-            return 0.5 * (1.0 + math.cos(math.pi * progress))
-        scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-        print(f"[scheduler] warmup={warmup} → cosine, total_iters={total_iters}, base_lr={args.lr}")
+    scheduler = build_scheduler(optimizer, args, len(train_loader))
+    if scheduler is not None:
+        print(f"[scheduler] warmup={args.warmup_iters} → cosine, "
+              f"total_iters={args.num_epochs * len(train_loader)}, base_lr={args.lr}")
 
     val_loss_log = np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):

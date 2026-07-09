@@ -161,6 +161,11 @@ def train(args):
                        sens_chans=args.sens_chans)
     model.to(device=device)
 
+    resume_ckpt = None
+    if getattr(args, "resume", False):
+        resume_ckpt = load_resume_checkpoint(args.exp_dir, args)
+        model.load_state_dict(resume_ckpt["model"])
+
     loss_type = SSIMLoss().to(device=device)
     if getattr(args, "model", "varnet") == "sdum":
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-3)
@@ -169,8 +174,14 @@ def train(args):
 
     best_val_loss = 1.
     start_epoch = 0
+    if resume_ckpt is not None:
+        start_epoch = resume_ckpt["epoch"]
+        best_val_loss = resume_ckpt["best_val_loss"]
+        if torch.is_tensor(best_val_loss):
+            best_val_loss = best_val_loss.item()   # ckpt는 map_location='cpu'로 로드됨; cuda val_loss와 비교 시 device 불일치 방지
+        print(f"[resume] {args.exp_dir/'model.pt'} → start_epoch={start_epoch} best_val={best_val_loss:.4f}")
 
-    
+
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
     val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
 
@@ -179,7 +190,17 @@ def train(args):
         print(f"[scheduler] warmup={args.warmup_iters} → cosine, "
               f"total_iters={args.num_epochs * len(train_loader)}, base_lr={args.lr}")
 
-    val_loss_log = np.empty((0, 2))
+    if resume_ckpt is not None:
+        optimizer.load_state_dict(resume_ckpt["optimizer"])   # scheduler 생성 후에 로드(initial_lr=base 유지)
+        if scheduler is not None:
+            for _ in range(start_epoch * steps_per_epoch(args, len(train_loader))):
+                scheduler.step()
+            print(f"[resume] scheduler fast-forward {start_epoch}ep, lr={optimizer.param_groups[0]['lr']:.3e}")
+
+    run_tag = getattr(args, "run_tag", "")
+    fname = f"val_loss_log_{run_tag}" if run_tag else "val_loss_log"
+    val_log_path = os.path.join(args.val_loss_dir, fname)
+    val_loss_log = load_val_log(val_log_path) if resume_ckpt is not None else np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
         
@@ -188,11 +209,9 @@ def train(args):
         
         val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
-        run_tag = getattr(args, "run_tag", "")
-        fname = f"val_loss_log_{run_tag}" if run_tag else "val_loss_log"   # §5-B: run별 분리 저장(덮어쓰기 방지)
-        file_path = os.path.join(args.val_loss_dir, fname)
-        np.save(file_path, val_loss_log)
-        print(f"loss file saved! {file_path}")
+        # run_tag/fname/val_log_path: §5-B(run별 분리 저장) — resume 시 이어쓰기와 같은 경로 재사용(위에서 계산)
+        np.save(val_log_path, val_loss_log)
+        print(f"loss file saved! {val_log_path}")
 
         train_loss = torch.tensor(train_loss).cuda(non_blocking=True)
         val_loss = torch.tensor(val_loss).cuda(non_blocking=True)

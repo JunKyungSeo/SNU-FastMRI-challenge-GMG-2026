@@ -41,6 +41,7 @@ def parse():
     parser.add_argument('--crop-h', type=int, default=384, help='--readout-crop 시 crop 높이 (기본 384 = 대회 출력 크기)')
     parser.add_argument('--warmup-iters', type=int, default=0, help='SDUM: linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR)')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
+    parser.add_argument('--resume', action='store_true', help='<net_name>/checkpoints/model.pt(마지막 epoch)에서 이어학습. 같은 config로만.')
 
     args = parser.parse_args()
     return args

@@ -24,12 +24,29 @@
 기존 `train()` 안 인라인 scheduler 생성 로직을 순수 helper로 뽑아 테스트·재사용 가능하게 한다. 동작 불변.
 
 **Files:**
+- Create: `tests/conftest.py` (테스트 import path)
 - Modify: `utils/learning/train_part.py` (현재 인라인 scheduler = 라인 129-140 부근)
 - Test: `tests/test_resume.py` (신규)
 
 **Interfaces:**
 - Produces: `build_scheduler(optimizer, args, len_loader) -> torch.optim.lr_scheduler.LambdaLR | None`
   - `args.model=='sdum'` & `args.warmup_iters>0` 일 때만 LambdaLR(linear warmup→cosine), 아니면 `None`.
+
+- [ ] **Step 0: `tests/conftest.py` 생성** (테스트가 `train_part`→`varnet`→vendored `fastmri`를 import하려면 필요)
+
+```python
+import os
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if ROOT not in sys.path:
+    sys.path.insert(0, ROOT)
+_model = os.path.join(ROOT, "utils", "model")
+if _model not in sys.path:
+    sys.path.append(_model)   # vendored fastmri(varnet.py:11)용. append = utils 네임스페이스 패키지 shadow 방지.
+```
+
+> ⚠️ `utils/`는 namespace 패키지(no `__init__.py`)라 `utils/common`을 path에 넣으면 `utils/common/utils.py`가 `utils`를 가림 → **`utils/model`만 append**. (실증: root+utils/model append 시 `from utils.learning.train_part import train` 통과.)
 
 - [ ] **Step 1: 실패 테스트 작성** — `tests/test_resume.py`
 
@@ -111,7 +128,7 @@ Expected: PASS (3 passed)
 - [ ] **Step 5: 커밋**
 
 ```bash
-git add utils/learning/train_part.py tests/test_resume.py
+git add tests/conftest.py utils/learning/train_part.py tests/test_resume.py
 git commit -m "refactor(train): extract build_scheduler helper (behavior-preserving, testable)"
 ```
 

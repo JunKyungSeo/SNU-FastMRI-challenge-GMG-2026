@@ -78,6 +78,8 @@
 | 4–5 | `sdum_scalefix` (풀 epoch) | run3의 `--max-iters` 제거 → 풀 4651 iter 완주. run5 = `nw 6` 속도 실험 | 첫 풀 epoch: TrainLoss **0.1146**·Val **0.882**(whole SSIM). num_workers 무효 확정. 🐛 `val_loss_log` 2버그(SUM 저장·덮어쓰기) → **수정함**. | [run4–5](2026-07-08-run4-5-fullepoch-analysis.md) |
 | 6 | `sdum_smoke` (smoke) | **+`--readout-crop`, +cosine/warmup 스케줄러** 코드 게이트(`--max-iters 30`) | 두 코드 크래시 없이 동작, **~4.0 s/iter → 1ep≈5.2h(≈40%↓)** 실측. 🐛 `validate()`가 `--max-iters` 무시 발견. base LR 2e-4(수정 전). | [run6](2026-07-08-run6-smoke-readoutcrop-sched-analysis.md) |
 | 7 | `sdum_run5`* | +LR **2.4e-4**, readout-crop, cosine warmup 200, 풀 2ep | 속도 **~5.2h/ep(확실, crop)**. Train 0.116→0.100 / Val SSIM 0.881→**0.885**(=2nd epoch 몫, crop·cosine 품질기여 matched-epoch로 ≈0). **under-training**·bbox 미측정. *dir는 태그충돌로 sdum_run5. | [run7](2026-07-09-run7-crop-cosine-analysis.md) |
-| 8 | `sdum_run8` | (예정, shell6) run7 + **cascades 4→6 + channels [24,48]** — 헤드룸을 용량에 투자. readout-crop 유지 | (훈련 전) OOM borderline~medium([24,48]×6 ~7.1–8.1GB), ~18–20h. | [run8(pre)](2026-07-09-run8-capacity-analysis.md) |
+| 8 | `sdum_run8` | run7 + **cascades 4→6 + channels [24,48]** (capacity), 2ep | 완주. Val whole 0.887→0.887. **recon_eval: full 0.906/bbox 0.898(run7 +0.006)이나 추론 1515→2820 ms/slice(~1.86×), 느림경고 79건** → 새 규칙(시간항)상 capacity 순손해 가능. VRAM ~7.4GB OOM 없음. | [run8](2026-07-09-run8-capacity-analysis.md) |
+
+> 📊 **recon_eval 스코어카드**(리더보드 실채점, 새 규칙 0.5·full+0.5·bbox+시간): run7 = full **0.9004**/bbox **0.8911**/**1515ms** ([스코어카드](2026-07-10-run7-reconeval-scorecard.md)) · run8 = full 0.9062/bbox 0.8979/**2820ms**. baseline(zf) full 0.833/bbox 0.820. **교훈: 추론시간이 1급 제약 — 큰 모델은 SSIM 소폭↑·시간 대폭↑로 손해.**
 
 > ⚠️ **이름 충돌 주의:** run2와 run4–5는 **둘 다 `-n sdum_scalefix`**(같은 명령). `../result/sdum_scalefix/`는 마지막 run이 덮어쓴 상태. (run6은 셸스크립트 확인용 중복이라 분석 제외 — 별도 최소 기록 예정.)

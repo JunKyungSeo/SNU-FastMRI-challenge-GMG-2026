@@ -1,10 +1,73 @@
 # CLAUDE.md — 이 repo에서 작업하는 Claude에게
 
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+## 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+---
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 미래 세션(GPU 서버 포함)의 Claude가 먼저 읽는 핸드오프 노트. **구조 + 현재 상태**만 담는다.
 
 ---
 
-## 0. 지금 상황
+## 5. 지금 상황
 
 - **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
 - **팀 2명** (§4).
@@ -13,25 +76,17 @@
 
 ---
 
-## 1. 환경 · 실행
+## 6. 환경 · 실행
 
 - **GPU 서버(현재)**: Python **3.10.12**, torch **2.3.1+cu121**(CUDA 12.1, `cuda.is_available()=True`), monai 1.3.2, einops/timm/h5py/scikit-image/pytest 설치됨. GPU = **GTX 1080 8GB**(driver 550.90.12).
   - **Pascal → FP32 전용**(AMP/BF16 금지), **batch=1**.
   - README는 Python 3.12.9를 타깃으로 적지만 **서버 실제는 3.10.12에서 정상 동작**.
-- **로컬 개발 노트북**: torch/MONAI 없음, GPU 없음. → 로컬에서 한 검증은 **문법 파싱 수준뿐**. 실제 실행/pytest/학습은 **전부 GPU 서버(또는 Colab)** 에서.
-- **데이터**: `/root/Data/{train,val}/{image,kspace}/knee_acc{4,8}_{n}.h5` (train 각 1–85, val 각 1–15).
-- **학습 전 검증 게이트**(오래 돌리기 전에):
-  ```bash
-  pytest tests/test_sdum_build.py -v      # import + 빌드 + 파라미터 수
-  pytest tests/test_sdum_adapter.py -v     # forward (B,384,384) + finite + scale-equivariance + 1-step
-  python scripts/probe_oom.py --cascades 6 --channels 24 48   # 8GB 적재 스윕 (peak ~7.5GB 이하 최대 조합)
-  ```
 - **GPU 작업은 큐 스크립트로만 실행** (`shell_scripting/`): GPU를 쓰는 명령(학습·recon 등)은 `shell_scripting/shellN.sh` **슬롯**(= 작업 1개 = 파일 1개)에 써서 돌린다. 각 슬롯은 맨 위 목적 주석 + 시작 echo + `logs/<슬롯>_<timestamp>.log` 자동 기록. 실행은 `bash shell1.sh ; bash shell2.sh ; ...`로 이어서(큐), 다음 작업은 빈 슬롯에 미리 채워둔다. 규칙·상세: `shell_scripting/README.md`.
   - ⚠️ **비-GPU 명령은 큐에 넣지 말고 그냥 바로 실행한다.** `h5_viewer.py`·`pytest`·`git` 등 가벼운 건 옆 분할 터미널에서 즉시 실행. 큐는 **GPU 독점 작업 전용**이다.
 
 ---
 
-## 2. 대회 규칙 (repo 근거: `README.md`, `recon_eval.py`, `strategy/`)
+## 7. 대회 규칙 (repo 근거: `README.md`, `recon_eval.py`, `strategy/`)
 
 - **knee 전용**, Cartesian **acc4/acc8**, 출력 **384×384**.
 - **평가 점수 = `0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** (⚠️ 규칙 변경 2026-07-09):
@@ -44,11 +99,10 @@
 - **재현성**: seed 고정 → 재학습 시 같은 결과.
 - **제출물**: 코드 repo(실행법 README) + loss 기록 + 모델 weight + 설명 ppt.
 - **leaderboard 데이터 배포됨**: `/root/Data/leaderboard/acc{4,8}/{image,kspace}` (`public_*.h5`, `image_label`·`annotations` 포함 → self-scoring 가능). 채점: `python recon_eval.py -n <net_name> -p /root/Data/leaderboard`.
-  - ⚠️ 이 서버 `cv2`는 libGL 없어 깨짐 → **`opencv-python-headless`** 로 설치해야 `metrics.py` import 됨(metrics.py는 **불변** = 제출 호환).
 
 ---
 
-## 3. 구조 (필수만)
+## 8. 구조 (필수만)
 
 - **백본 선택**: `train.py --model {varnet(기본) | sdum}`. 기존 E2E-VarNet 경로는 그대로 유지되고, SDUM은 추가 경로.
 - **SDUM = NV 영상도메인 cascaded 모델(vendored) + 어댑터**:
@@ -61,7 +115,7 @@
 
 ---
 
-## 4. Git · 협업
+## 9. Git · 협업
 
 - **remote**: `https://github.com/JunKyungSeo/FastMRI_SNU_2026_GMG.git` (HTTPS).
   - 이 서버엔 gh CLI·credential helper 없음 → **push엔 PAT 필요**(Username=GitHub 아이디, Password=PAT). `!` 셸은 TTY가 없어 대화형 프롬프트 불가 → 토큰을 URL에 넣거나 `~/.git-credentials`에 직접 기입.
@@ -74,13 +128,13 @@
 
 ---
 
-## 5. 범위 밖 (후순위 / 다른 팀원)
+## 10. 범위 밖 (후순위 / 다른 팀원)
 
 GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`--aug-*` + `set_epoch`) · SVD coil compression · progressive expansion · config 스윕. 상세: `strategy/candidates.md`, `strategy/implementation.md`.
 
 ---
 
-## 6. 참고 문서
+## 11. 참고 문서
 
 - 전략 인덱스·SPEC: `strategy/README.md` · `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
 - 학습 로그 분석·수정 계획(누적): `training_anal/` · `docs/superpowers/plans/`

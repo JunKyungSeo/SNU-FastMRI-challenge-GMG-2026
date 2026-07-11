@@ -79,6 +79,7 @@
 | 6 | `sdum_smoke` (smoke) | **+`--readout-crop`, +cosine/warmup 스케줄러** 코드 게이트(`--max-iters 30`) | 두 코드 크래시 없이 동작, **~4.0 s/iter → 1ep≈5.2h(≈40%↓)** 실측. 🐛 `validate()`가 `--max-iters` 무시 발견. base LR 2e-4(수정 전). | [run6](2026-07-08-run6-smoke-readoutcrop-sched-analysis.md) |
 | 7 | `sdum_run5`* | +LR **2.4e-4**, readout-crop, cosine warmup 200, 풀 2ep | 속도 **~5.2h/ep(확실, crop)**. Train 0.116→0.100 / Val SSIM 0.881→**0.885**(=2nd epoch 몫, crop·cosine 품질기여 matched-epoch로 ≈0). **under-training**·bbox 미측정. *dir는 태그충돌로 sdum_run5. | [run7](2026-07-09-run7-crop-cosine-analysis.md) |
 | 8 | `sdum_run8` | run7 + **cascades 4→6 + channels [24,48]** (capacity), 2ep | 완주. Val whole 0.887→0.887. **recon_eval: full 0.906/bbox 0.898(run7 +0.006)이나 추론 1515→2820 ms/slice(~1.86×), 느림경고 79건** → 새 규칙(시간항)상 capacity 순손해 가능. VRAM ~7.4GB OOM 없음. | [run8](2026-07-09-run8-capacity-analysis.md) |
+| 9 | `sdum_run9` | run7과 동일 [16,32]×4, **epoch 2→4** (순수 epoch A/B) | 완주. Val whole **0.8846→0.8890(+0.0044)**, 아직 미세 상승 = under-training 확인. **run9(작은·4ep) > run8(큰·2ep)** SSIM·추론 양쪽. epoch3 +0.0005는 cosine tail 의심(미확정). recon_eval 미측정. | [run9](2026-07-11-run9-epoch-analysis.md) |
 
 > 📊 **recon_eval 스코어카드**(리더보드 실채점, 새 규칙 0.5·full+0.5·bbox+시간): run7 = full **0.9004**/bbox **0.8911**/**1515ms** ([스코어카드](2026-07-10-run7-reconeval-scorecard.md)) · run8 = full 0.9062/bbox 0.8979/**2820ms**. baseline(zf) full 0.833/bbox 0.820. **교훈: 추론시간이 1급 제약 — 큰 모델은 SSIM 소폭↑·시간 대폭↑로 손해.**
 

@@ -20,18 +20,23 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     start_epoch = start_iter = time.perf_counter()
     len_loader = len(data_loader)
     total_loss = 0.
+    fg = getattr(args, "fg_loss", False)   # B5: 켜지면 tuple에 fg_mask가 하나 더 붙고 손실을 그 안에서만 계산
 
     for iter, data in enumerate(data_loader):
         if getattr(args, "max_iters", 0) and iter >= args.max_iters:
             break
-        mask, kspace, target, maximum, _, _ = data
+        if fg:
+            mask, kspace, target, maximum, _, _, fg_mask = data
+            fg_mask = fg_mask.cuda(non_blocking=True)
+        else:
+            mask, kspace, target, maximum, _, _ = data
         mask = mask.cuda(non_blocking=True)
         kspace = kspace.cuda(non_blocking=True)
         target = target.cuda(non_blocking=True)
         maximum = maximum.cuda(non_blocking=True)
 
         output = model(kspace, mask)
-        loss = loss_type(output, target, maximum)
+        loss = loss_type(output, target, maximum, mask=fg_mask) if fg else loss_type(output, target, maximum)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -57,12 +62,27 @@ def validate(args, model, data_loader):
     targets = defaultdict(dict)
     start = time.perf_counter()
 
+    # B5: fg_loss면 검증도 채점 정합(masked SSIM_full)으로 계산 → val이 실채점 SSIM_full을 예측.
+    fg = getattr(args, "fg_loss", False)
+    if fg:
+        fg_ssim = SSIMLoss().to(device=next(model.parameters()).device)
+        fg_loss_sum, fg_count = 0.0, 0
+
     with torch.no_grad():
-        for iter, data in enumerate(data_loader):
-            mask, kspace, target, _, fnames, slices = data
+        for data in data_loader:
+            if fg:
+                mask, kspace, target, maximum, fnames, slices, fg_mask = data
+            else:
+                mask, kspace, target, _, fnames, slices = data
             kspace = kspace.cuda(non_blocking=True)
             mask = mask.cuda(non_blocking=True)
             output = model(kspace, mask)
+
+            if fg:
+                l = fg_ssim(output, target.cuda(non_blocking=True),
+                            maximum.cuda(non_blocking=True), mask=fg_mask.cuda(non_blocking=True))
+                fg_loss_sum += l.item() * output.shape[0]   # 슬라이스 단위 누적(batch=1이면 슬라이스=1)
+                fg_count += output.shape[0]
 
             for i in range(output.shape[0]):
                 reconstructions[fnames[i]][int(slices[i])] = output[i].cpu().numpy()
@@ -76,6 +96,11 @@ def validate(args, model, data_loader):
         targets[fname] = np.stack(
             [out for _, out in sorted(targets[fname].items())]
         )
+    if fg:
+        # train()이 val_loss/num_subjects로 나누므로 (합, 슬라이스수)를 넘겨 '슬라이스 평균 (1-SSIM_full)'이 되게 함.
+        # → 채점의 슬라이스 평균 SSIM_full과 동일 단위. best-model 선택도 이 값(작을수록 좋음) 기준.
+        return fg_loss_sum, max(1, fg_count), reconstructions, targets, None, time.perf_counter() - start
+
     metric_loss = sum([ssim_loss(targets[fname], reconstructions[fname]) for fname in reconstructions])
     num_subjects = len(reconstructions)
     return metric_loss, num_subjects, reconstructions, targets, None, time.perf_counter() - start

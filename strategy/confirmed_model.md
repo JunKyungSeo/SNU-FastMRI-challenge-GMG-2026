@@ -24,6 +24,8 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 - **image_GRAPPA** (384²·magnitude): **영상 도메인 유지. fft 하지 않음.**
 
 ### 2. 정규화 `÷s` (합류 지점, 증강 전)
+> ⚠️ **STALE (2026-07-11): 어댑터 self-normalize로 사실상 대체됨 — 켜지 말 것.** 이 SPEC은 SDUM 어댑터가 self-normalize를 넣기 전에 작성됨. 현재 `adapter.py:40-56`이 **per-sample ÷std → ×std**(scale-equivariant)를 이미 수행한다. 앞단에서 전역 `÷s`를 해도 어댑터가 std로 재정규화하며 씻어내 **loss·SSIM에 ≈no-op**(캐스케이드 입력이 수학적으로 동일). 즉 이 절이 원했던 "DC·손실 스케일 안정"은 **이미 어댑터가 제공**한다. `--normalize`는 train.py에 인자 미등록이고, `--readout-crop` help도 "함께 켜지 말 것(어댑터 self-normalize)"이라 명시. 켜면 (1) 6-튜플 언패킹 크래시, (2) 실익 ≈0, (3) 추론경로 ×s 미배선 시 스케일 버그 리스크만 남는다. 배경: `training_anal/`(run 분석) 및 3-1 논의.
+
 - **입력 유도 전역 스칼라 1개.** zero-filled RSS 영상의 robust percentile(예: p99)에서 산출. **`maximum` attr 사용 금지**(label 통계 → 추론 시 없음).
 - **k-space · GRAPPA · target에 동일한 s로 나눔.** 출력단에서 `×s`로 역정규화.
 - **acc4/acc8/기타 구분 없이 전부 동일한 방식**(가속률 무관 단일 규칙).
@@ -76,7 +78,7 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 
 ### ✅ 데이터 측 구현·검증 완료 (2026-07-04, utils/data/) — 전부 플래그 게이트, 기본 off=기존 비트 동일
 - **GRAPPA 로딩(train/val)**: `load_data.py` `return_grappa` 플래그 → `image_grappa` 로드, flip 동기 정렬.
-- **정규화 ÷s**: `transforms.py` `normalize` 플래그 → `global_scale()` 로 k-space·GRAPPA·target 동일 ÷s, `scale` 반환.
+- **정규화 ÷s**: `transforms.py` `normalize` 플래그 → `global_scale()` 로 k-space·GRAPPA·target 동일 ÷s, `scale` 반환. ⚠️ **어댑터 self-normalize(`adapter.py:40-56`, per-sample ÷std)로 대체 → 켜지 말 것**(§2 STALE 주석 참조).
 - **readout crop**: `readout_crop` 플래그 → `readout_crop()`(높이만 640→384, 폭 native). 실측 recon corr 1.0.
 
 ### ⬜ 미배선 (network·학습 측 = 동료 담당)

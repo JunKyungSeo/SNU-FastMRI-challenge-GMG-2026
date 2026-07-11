@@ -32,7 +32,7 @@
 | **병변 슬라이스 오버샘플링** | 병변 슬라이스 샘플 확률↑ (픽셀 미변형, 위험 0) | 1순위(저위험) | model_strategy §2.5 |
 | 중간 감독(deep supervision) | cascade 중간 출력에도 bbox 손실 | 보조 | §2.2 (출처: **Lee, Xie, Gallagher, Zhang, Tu, "Deeply-Supervised Nets," *AISTATS* 2015**) |
 | 고주파 집중 손실 | 미획득 PE 라인/고역통과에 손실 가중 | 실험 후보 | §2.4 (⚠ hallucination 양날) |
-| foreground 마스크 손실 | 배경 제외 영역에서만 SSIM_full (채점 정합) | **eval code 대기** | preprocessing B5 |
+| foreground 마스크 손실 | 배경 제외 영역에서만 SSIM_full (채점 정합) | ✅ **구현됨**(`--fg-loss`, off·검증전, 2026-07-11) | preprocessing B5 · implementation §3c |
 
 ## 효율 레버 A군 (SME 비용 절감 — 택1/AB, 동시적용 금지)
 > 아래 4개는 **목적이 겹쳐(sens/코일/해상도/cascade 비용 절감) 동시적용 금지**, 하나만 택해 A/B.

@@ -2,6 +2,8 @@ import json
 import numpy as np
 import torch
 
+from utils.common.metrics import foreground_mask  # B5: 채점과 동일한 foreground 마스크 정의 재사용(중복정의 금지)
+
 
 def to_tensor(data):
     """
@@ -307,8 +309,9 @@ class DataTransform:
     아래 플래그가 켜지면 그 뒤에 이 순서로만 덧붙는다 (bbox는 항상 맨 끝):
         normalize=True     → + scale        (float; 출력 역정규화용, output*scale)
         return_grappa=True → + grappa        (Tensor (384,384) real; regularizer prior 채널로 concat)
+        return_fg_mask=True→ + fg_mask       (Tensor (384,384) 0/1; B5 손실·검증 정합용. forward엔 미포함)
         return_bbox=True   → + bbox          (list[dict]; 가변 길이라 _bbox_collate 필요)
-    즉 최대 형태: (mask, kspace, target, maximum, fname, slice, [scale], [grappa], [bbox]).
+    즉 최대 형태: (mask, kspace, target, maximum, fname, slice, [scale], [grappa], [fg_mask], [bbox]).
 
     ⚠️ 기본값 전부 off → 정확히 6-튜플 → train_part.py/test_part.py의 6개 언패킹과 비트 동일.
        플래그를 켜면 소비부(train_epoch/validate/test의 `... = data`)를 그에 맞게 확장해야 함.
@@ -331,12 +334,15 @@ class DataTransform:
 
     def __init__(self, isforward, max_key, augmentor=None, is_train=False, return_bbox=False,
                  normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
-                 return_grappa=False, coil_compress=False, n_virtual_coils=8):
+                 return_grappa=False, coil_compress=False, n_virtual_coils=8,
+                 return_fg_mask=False):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
         self.is_train = bool(is_train) and (not isforward)
         self.return_bbox = bool(return_bbox)
+        # ---- B5: 채점 정합 foreground 마스크 반환 (손실·검증을 몸통 영역으로 제한). 기본 off ----
+        self.return_fg_mask = bool(return_fg_mask)
         # ---- 확정 전처리 플래그 (기본 off = 기존 동작 보존) ----
         self.normalize = bool(normalize)          # 전역 스칼라 ÷s (+ scale 반환)
         self.readout_crop = bool(readout_crop)    # readout 640→crop_h crop
@@ -391,6 +397,13 @@ class DataTransform:
         else:
             kspace_c = kspace_c * (mask1d >= 1).astype(mask1d.dtype)  # 기존 동작 유지(val/forward)
 
+        # (B5) foreground 마스크 — 채점 정의(metrics.foreground_mask)를 그대로 적용.
+        #   ⚠️ ÷s 정규화 전의 raw-scale target에서 계산해야 임계값(2e-5, 절대 스케일)이 채점과 일치.
+        #   증강(flip) 후·정규화 전 시점의 tgt(384²)에서 뽑는다. 이진·기하라 이후 정규화 공간에도 유효.
+        fg_mask_arr = None
+        if self.return_fg_mask and (tgt is not None):
+            fg_mask_arr = foreground_mask(tgt).astype(np.float32)
+
         # (1) readout crop 640→crop_h (높이만, 폭 native). flip/mask와 commute라 순서 무관.
         if self.readout_crop:
             kspace_c = readout_crop(kspace_c, self.crop_h)
@@ -429,6 +442,8 @@ class DataTransform:
             out.append(np.float32(scale))
         if self.return_grappa:
             out.append(to_tensor(grappa_arr) if grappa_arr is not None else torch.empty(0))
+        if self.return_fg_mask and not self.isforward:   # bbox보다 앞(고정크기 텐서 → 기본 collate). forward엔 target 없어 미포함.
+            out.append(to_tensor(fg_mask_arr))
         if self.return_bbox:
             out.append(bbox if bbox is not None else [])
         return tuple(out)

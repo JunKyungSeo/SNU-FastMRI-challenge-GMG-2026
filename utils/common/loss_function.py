@@ -28,10 +28,17 @@ class SSIMLoss(nn.Module):
         NP = win_size ** 2
         self.cov_norm = NP / (NP - 1)
 
-    def forward(self, X, Y, data_range):
+    def forward(self, X, Y, data_range, mask=None):
+        """mask=None이면 기존 그대로(전체 384² 평균). mask((B,H,W) 0/1)를 주면
+        채점(utils/common/metrics.py::ssim_full)과 동일하게 foreground 안에서만 평균:
+        입력을 마스크로 곱한 뒤 SSIM 맵을 win//2 valid 영역으로 crop한 마스크로 가중평균."""
         X = X.unsqueeze(1)
         Y = Y.unsqueeze(1)
         data_range = data_range[:, None, None, None]
+        if mask is not None:
+            m = mask.unsqueeze(1)                 # (B,1,H,W)
+            X = X * m
+            Y = Y * m
         C1 = (self.k1 * data_range) ** 2
         C2 = (self.k2 * data_range) ** 2
         ux = F.conv2d(X, self.w)
@@ -51,4 +58,11 @@ class SSIMLoss(nn.Module):
         D = B1 * B2
         S = (A1 * A2) / D
 
-        return 1 - S.mean()
+        if mask is None:
+            return 1 - S.mean()
+        # ssim_full 정합: 마스크를 conv-valid 영역(win//2 pad)만큼 crop 후 샘플별 가중평균.
+        pad = self.win_size // 2
+        m_valid = m[:, :, pad:-pad, pad:-pad]
+        num = (S * m_valid).sum(dim=(1, 2, 3))
+        den = m_valid.sum(dim=(1, 2, 3)).clamp_min(1.0)  # 빈 마스크(드묾) 방어
+        return 1 - (num / den).mean()

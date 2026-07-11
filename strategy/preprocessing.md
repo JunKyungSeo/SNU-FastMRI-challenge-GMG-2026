@@ -1,7 +1,7 @@
 # Preprocessing 전략 — FastMRI 2026
 
 > 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
-> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`confirmed_model.md`](confirmed_model.md).** 나머지(A2·B3·B5·C6)는 [`candidates.md`](candidates.md). 아래는 그 근거.
+> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`confirmed_model.md`](confirmed_model.md).** A2·**B5는 구현됨**(플래그 off, 검증 전), B3·C6은 미구현 후보 → [`candidates.md`](candidates.md). 아래는 그 근거.
 > augmentation([`augmentation.md`](augmentation.md))·모델/메모리([`model_strategy.md`](model_strategy.md))와 별개로,
 > **입력 데이터를 네트워크에 넣기 전 결정적으로 가공하는 preprocessing**만 모은 문서.
 > 여기 항목들은 **현재 코드·다른 전략 문서 어디에도 없는(미구현·미계획) 신규 후보**다.
@@ -28,7 +28,7 @@
 | **A2. Coil compression(SVD/GCC)** | △ | ⚠ 과압축시↓ | ⭐⭐⭐ | ⭐⭐⭐ | 준무손실 | §3.2 SME와 택1/AB, §A2 |
 | B3. Coil noise pre-whitening | ⭐ | ⭐(acc8) | — | — | 근사 | §B3 |
 | **B4. 전역 스칼라 intensity 정규화** | ⭐ | — | — | — | 무손실 | ✅**확정**, §B4 |
-| B5. eval 정합 foreground 마스크 사전계산 | ⭐⭐ | ⭐ | — | — | — | 채점정합, §B5 |
+| **B5. eval 정합 foreground 마스크 손실·검증** | ⭐⭐ | ⭐ | — | — | — | ✅**구현됨**(off, 검증전), §B5 |
 | C6. ACS-only 저해상도 앵커 채널 | △ | △ | ⚠(채널↑) | — | 무손실 | GRAPPA 상시제공으로 강등, §C6 |
 
 **우선순위**: **A1 → (A2 ↔ §3.2 SME 택1) → B5 → B4·B3 → C6(여력시).**
@@ -86,11 +86,13 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
 - **효과**: DC·손실 스케일 안정 + acc4/acc8 스케일차 흡수 + GRAPPA↔입력 스케일 정합(residual 성립) + **FP32 재현성↑**. 저비용·무손실.
 - **위치**: `DataTransform.__call__`(증강 후·`to_tensor` 전), 학습·추론 공통 경로. 스칼라 `s` 저장해 출력단 역정규화(384² 채점 crop과 혼동 금지).
 
-### B5. eval 정합 foreground(배경) 마스크 사전계산
+### B5. eval 정합 foreground 마스크 손실·검증 ✅ **구현됨** (2026-07-11, @esel34)
 
-- **동기**: SSIM_full은 **배경을 마스크로 날린 영상 안에서만** 채점(CLAUDE.md; eval code 7/8 공개 예정). 현재 손실은 전체 384²에 걸림 → **채점과 불일치**.
-- **아이디어**: label/GRAPPA에서 threshold(Otsu 등)로 **동일 성격의 배경 마스크를 미리 계산**해 (a) 손실을 그 영역으로 제한(채점 정합), (b) 필요시 crop 참고.
-- **관계**: [`model_strategy.md`](model_strategy.md) §2.1 bbox 가중 손실과 자연 결합(`L = (1−SSIM_full_masked) + λ(1−SSIM_bbox)`). ⚠ **배경 마스크 정의는 미확정** → eval code 공개 후 **정의 재동기화** 필수([`augmentation.md`](augmentation.md) §4.2).
+- **동기**: SSIM_full은 **배경을 마스크로 날린 영상 안에서만** 채점. 기존 손실·검증은 전체 384²에 걸려 **채점과 불일치** → 배경(쉬운 영역)이 손실/지표를 희석, val이 실채점을 예측 못 함.
+- **정의 확정(핵심 변화)**: 채점 코드가 고정·공개돼(`utils/common/metrics.py:48-56` `foreground_mask` = `target>2e-5` → erode1/dilate15/erode14) **근사 없이 그대로 재사용**. target 기반이라 학습 시 정확 계산 가능 → 예전의 "마스크 정의 미확정" 걸림돌 해소.
+- **구현(2026-07-11)**: `--fg-loss` 플래그(기본 off). 데이터측 `DataTransform.return_fg_mask`가 **÷s 정규화 전 raw target**에서 `foreground_mask` 계산해 튜플로 전달; `SSIMLoss.forward(mask=...)`가 `ssim_full` 정합(입력 마스킹→win//2 valid 가중평균); `train_epoch`·`validate` 소비. **검증**: masked-loss == `1−ssim_full`(diff 2.4e-08), off=byte-identical. 상세: [`implementation.md`](implementation.md) §3c.
+- **관계**: [`model_strategy.md`](model_strategy.md) §2.1 bbox 가중 손실과 자연 결합(`L = (1−SSIM_full_masked) + λ(1−SSIM_bbox)`).
+- **남은 것(검증 전)**: 실제 화질 이득은 **matched-epoch A/B(bbox 비퇴행 게이트)** 로만 확정. normalize와 조합 미검증(현 regime은 정규화 off).
 - **채점축**: SSIM_full ⭐⭐ / SSIM_bbox ⭐ / 추론시간 무해.
 
 ---

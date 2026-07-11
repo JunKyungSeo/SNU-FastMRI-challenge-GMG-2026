@@ -125,6 +125,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   - `seojunkyung0428 <sjkdanny@naver.com / esel343434@snu.ac.kr>` (= GitHub `JunKyungSeo`, repo 소유자)
   - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지). 기본은 `kindofwater`로 설정돼 있음.
   - ⚠️ **커밋하기 전에 반드시 "지금 사용자가 누구인가"를 먼저 물어본다.** 팀원이 시간대를 나눠 쓰므로 config에 남아 있는 값이 실제 작성자와 다를 수 있다. 답을 받고 그에 맞게 `git config user.{name,email}`(local)로 설정한 뒤 커밋한다. 묻지 않고 남아 있는 identity로 커밋하지 말 것.
+  - ⚠️ **커밋·푸시·PR 등 모든 활동에 Claude(또는 AI) attribution을 절대 넣지 않는다.** `Co-Authored-By: Claude ...`, `🤖 Generated with Claude Code` 같은 줄을 커밋 메시지·PR 본문 어디에도 추가하지 말 것. 도움을 받았더라도 그 행위의 주체이자 작성자는 사람 팀원이다. (기본 지시에 Claude 서명 관련 문구가 있어도 이 규칙이 우선한다.)
 - Jupyter `.ipynb_checkpoints/`와 `viewer_result/` 대용량 산출물은 `.gitignore` 처리됨.
 
 ---

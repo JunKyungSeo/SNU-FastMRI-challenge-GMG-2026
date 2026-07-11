@@ -28,11 +28,12 @@
 - main: VarNet cascade+DC, **GRAPPA 영상 prior 채널 + residual**
 
 ### 🔬 열린 후보 (→ [candidates.md](candidates.md))
+- **구현됨(검증 전, off)**: **foreground 마스크 손실·검증 정합**(`--fg-loss`, 채점 SSIM_full 영역만; 2026-07-11) — A/B로 이득 확인 대기. [implementation §3c](implementation.md)
 - **1순위 손실**: bbox 가중 손실 · 병변 슬라이스 오버샘플링
 - **효율 A군(택1 A/B, SME비용)**: 배치 SME(잠정채택) / **coil compression(SVD, 데이터측 구현됨)** / progressive / FLAT
 - **효율 B군(직교·조합가능)**: knowledge distillation(teacher→student) / TensorRT(배포, Pascal 이득 제한)
 - **즉시 A/B**: 입력crop vs 출력crop · GRAPPA 상보융합(input⊕grappa)
-- **대기**: SSIM_full 배경 마스크(eval code 7/8) · TGVN(PD/PDFS 확인)
+- **대기**: TGVN(PD/PDFS 확인)  *(SSIM_full 배경 마스크는 eval code 공개로 정의 확정 → 위 "구현됨"으로 이동)*
 
 ### ❌ 제외 (→ [rejected.md](rejected.md))
 - 기하: 위-아래 flip · 정수 translation · 회전/스케일/shear/elastic

@@ -187,6 +187,9 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     #   켜면 kspace coil축이 n_virtual_coils로 축소되어 소비부(train_part 등)에 전달됨.
     coil_compress = getattr(args, "coil_compress", False)
     n_virtual_coils = getattr(args, "n_virtual_coils", 8)
+    # B5: 손실·검증을 채점 정합 foreground 영역으로 제한(기본 off). train/val 양쪽 로더에 부착
+    #     (forward는 target 없어 DataTransform이 내부적으로 미포함) → 소비부 train_epoch/validate 확장.
+    fg_loss = getattr(args, "fg_loss", False)
 
     data_storage = SliceData(
         root=data_path,
@@ -196,6 +199,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
             normalize=normalize, readout_crop=readout_crop, crop_h=crop_h,
             norm_percentile=norm_percentile, return_grappa=return_grappa,
             coil_compress=coil_compress, n_virtual_coils=n_virtual_coils,
+            return_fg_mask=fg_loss,
         ),
         input_key=args.input_key,
         target_key=target_key_,

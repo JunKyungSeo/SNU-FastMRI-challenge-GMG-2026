@@ -29,6 +29,15 @@
 - ⚠️ **화질 neutral**: 속도/VRAM 레버(SSIM 상승 아님). 근거·출처: preprocessing A2, related_work, candidates 효율레버 A군.
 - 근거: preprocessing A2, candidates.md. 출처: SVD=Buehrer et al. MRM 2007 / GCC=Zhang et al. MRM 2013.
 
+### 3c. ✅ Foreground 마스크 손실·검증 정합 (B5) — [`transforms.py`](../utils/data/transforms.py) · [`loss_function.py`](../utils/common/loss_function.py) · [`train_part.py`](../utils/learning/train_part.py) **(구현·검증됨, 2026-07-11 @esel34)**
+- ✅ `--fg-loss` 플래그(기본 off): 켜면 SSIM 손실·검증을 **채점(`metrics.foreground_mask`) 정합 foreground 영역 안에서만** 계산. off면 기존 전체 384² 그대로(byte-identical).
+- ✅ 데이터측: `DataTransform(return_fg_mask=True)`가 **÷s 정규화 전 raw target**에서 `metrics.foreground_mask`(재사용, 중복정의 금지) 계산 → 튜플에 `fg_mask`(384², bbox보다 앞) 추가. `not isforward` 게이트라 추론 튜플은 6개 유지.
+- ✅ 손실측: `SSIMLoss.forward(mask=...)`가 `metrics.ssim_full` 정합(입력 마스킹 후 win//2 valid 영역 가중평균). off 경로(`mask=None`)는 기존 정의 불변.
+- ✅ 소비부: `train_epoch`·`validate` 튜플 언패킹 확장. **val을 masked SSIM(=1−SSIM_full)의 슬라이스 평균으로** 바꿔 val이 실채점 SSIM_full을 예측.
+- ✅ 검증: masked-loss == `1 − metrics.ssim_full` (diff 2.4e-08) · off=6/on=7/forward=6 튜플 · import smoke(recon_eval 포함) 통과.
+- ⚠️ **normalize와 조합은 미검증**(현 regime은 readout-crop+정규화 off). ⚠️ 실제 화질 이득은 **matched-epoch A/B(bbox 비퇴행 게이트)로 확인 필요** — 아직 정합만 완료, 이득 미확정.
+- 근거: preprocessing B5, candidates.md.
+
 ### 4. ⬜ GRAPPA 영상 prior + residual — [`utils/model/varnet.py`](../utils/model/varnet.py) (network 측)
 - `VarNet.forward`에 GRAPPA 영상 보조 채널 경로 + **residual 출력**(`out = grappa + f(...)`).
 - GRAPPA(384²) ↔ k-space 격자(384×폭) 정합: 폭 crop 또는 출력단 384² refinement head.

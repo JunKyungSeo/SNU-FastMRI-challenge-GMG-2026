@@ -93,6 +93,7 @@ A1은 무위험·무손실이라 즉시 후보, 나머지는 SSIM_bbox 비퇴행
 - **구현(2026-07-11)**: `--fg-loss` 플래그(기본 off). 데이터측 `DataTransform.return_fg_mask`가 **÷s 정규화 전 raw target**에서 `foreground_mask` 계산해 튜플로 전달; `SSIMLoss.forward(mask=...)`가 `ssim_full` 정합(입력 마스킹→win//2 valid 가중평균); `train_epoch`·`validate` 소비. **검증**: masked-loss == `1−ssim_full`(diff 2.4e-08), off=byte-identical. 상세: [`implementation.md`](implementation.md) §3c.
 - **관계**: [`model_strategy.md`](model_strategy.md) §2.1 bbox 가중 손실과 자연 결합(`L = (1−SSIM_full_masked) + λ(1−SSIM_bbox)`).
 - **남은 것(검증 전)**: 실제 화질 이득은 **matched-epoch A/B(bbox 비퇴행 게이트)** 로만 확정. normalize와 조합 미검증(현 regime은 정규화 off).
+- **A/B 세팅 완료(2026-07-11)**: off-팔 = run10 epoch2 체크포인트(`result/sdum_run10_off2ep`, run10 재활용), on-팔 = run11(`shell_scripting/shell10.sh`, run10과 동일+`--fg-loss`, 2에폭 self-stop). run10 완주 후 shell10 수동 실행 → 둘 다 `recon_eval`로 채점 비교 예정.
 - **채점축**: SSIM_full ⭐⭐ / SSIM_bbox ⭐ / 추론시간 무해.
 
 ---

@@ -122,8 +122,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **브랜치**: `SDUM`(작업 브랜치, origin/SDUM과 동기) / `master`(안정·머지 대상). master가 `behind`로 보여도 그 커밋 내용은 대개 SDUM 히스토리에 포함돼 있음.
 - **팀 2명**:
   - `kindofwater <bedso@snu.ac.kr>`
-  - `seojunkyung0428 <sjkdanny@naver.com>` (= GitHub `JunKyungSeo`, repo 소유자)
-  - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지). 지금은 `kindofwater`로 설정돼 있음 — 다른 팀원이면 `git config user.{name,email}` 바꿔 쓸 것.
+  - `seojunkyung0428 <sjkdanny@naver.com / esel343434@snu.ac.kr>` (= GitHub `JunKyungSeo`, repo 소유자)
+  - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지). 기본은 `kindofwater`로 설정돼 있음.
+  - ⚠️ **커밋하기 전에 반드시 "지금 사용자가 누구인가"를 먼저 물어본다.** 팀원이 시간대를 나눠 쓰므로 config에 남아 있는 값이 실제 작성자와 다를 수 있다. 답을 받고 그에 맞게 `git config user.{name,email}`(local)로 설정한 뒤 커밋한다. 묻지 않고 남아 있는 identity로 커밋하지 말 것.
 - Jupyter `.ipynb_checkpoints/`와 `viewer_result/` 대용량 산출물은 `.gitignore` 처리됨.
 
 ---

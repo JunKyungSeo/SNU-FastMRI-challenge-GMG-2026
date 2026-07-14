@@ -2,11 +2,11 @@
 
 For each file it picks 3 evenly-spaced slices (12 slices -> 4, 8, 12), shows
 Label | Input | GRAPPA for each (bbox drawn on Label), and prints the file
-attrs at the bottom. Output goes to  <this folder>/viewer_result/<name>_summary.png
+attrs at the bottom. Output goes to  <repo root>/viewer_result/<name>_summary.png
 
 Usage:
-    python summarize.py file1.h5 [file2.h5 ...]
-    python summarize.py                 # summarize every *.h5 in current dir
+    python scripts/summarize.py file1.h5 [file2.h5 ...]
+    python scripts/summarize.py         # summarize every *.h5 in current dir
 Deps: pip install h5py numpy matplotlib
 """
 
@@ -150,7 +150,8 @@ def main():
         print("h5 파일을 찾을 수 없습니다. 파일 경로를 인자로 주세요.")
         sys.exit(1)
 
-    out_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), OUT_DIRNAME)
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out_dir = os.path.join(repo_root, OUT_DIRNAME)
     made = 0
     for path in files:
         if not os.path.isfile(path):

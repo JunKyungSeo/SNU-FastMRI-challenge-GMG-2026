@@ -59,7 +59,7 @@ python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
 # ==========================================================
 # ---- self-stop 설정: N에폭 완료되면 학습 자동 종료 (부분 A/B용) ----
 #   -e 10 은 그대로 둔다(초반 LR 스케줄을 run10과 동일하게 맞추기 위함). 실제 정지는 아래 감시 루프가 한다.
-STOP_AFTER_EPOCHS=2
+STOP_AFTER_EPOCHS=10
 VALLOG="/root/result/sdum_run11/val_loss_log_run11.npy"   # 완료 epoch 1개당 1줄 append됨
 
 set -x
@@ -72,27 +72,27 @@ python train.py --model sdum --num-cascades 4 --channels 16 32 \
 TRAIN_PID=$!
 { set +x; } 2>/dev/null
 
-echo "[self-stop] train PID=$TRAIN_PID — ${STOP_AFTER_EPOCHS}에폭 완료 시 자동 종료 (감시: $VALLOG)"
-STOPPED_OK=0
-while kill -0 "$TRAIN_PID" 2>/dev/null; do
-    rows=$(python -c "import numpy as np,os; p='$VALLOG'; print(np.load(p).shape[0] if os.path.exists(p) else 0)" 2>/dev/null || echo 0)
-    if [ "${rows:-0}" -ge "$STOP_AFTER_EPOCHS" ]; then
-        echo "[self-stop] ${rows}에폭 완료 감지 → 체크포인트 저장 마무리 대기(30s) 후 종료"
-        sleep 30                                    # np.save 뒤 save_model(model.pt=epoch2)까지 완료 대기
-        kill -INT "$TRAIN_PID" 2>/dev/null           # KeyboardInterrupt → torch가 dataloader 워커·CUDA 정리
-        sleep 15
-        if kill -0 "$TRAIN_PID" 2>/dev/null; then    # 안 죽으면 강제 종료 + 남은 워커 정리
-            kill -9 "$TRAIN_PID" 2>/dev/null
-            pkill -9 -P "$TRAIN_PID" 2>/dev/null
-        fi
-        STOPPED_OK=1
-        break
-    fi
-    sleep 60
-done
+# echo "[self-stop] train PID=$TRAIN_PID — ${STOP_AFTER_EPOCHS}에폭 완료 시 자동 종료 (감시: $VALLOG)"
+# STOPPED_OK=0
+# while kill -0 "$TRAIN_PID" 2>/dev/null; do
+#     rows=$(python -c "import numpy as np,os; p='$VALLOG'; print(np.load(p).shape[0] if os.path.exists(p) else 0)" 2>/dev/null || echo 0)
+#     if [ "${rows:-0}" -ge "$STOP_AFTER_EPOCHS" ]; then
+#         echo "[self-stop] ${rows}에폭 완료 감지 → 체크포인트 저장 마무리 대기(30s) 후 종료"
+#         sleep 30                                    # np.save 뒤 save_model(model.pt=epoch2)까지 완료 대기
+#         kill -INT "$TRAIN_PID" 2>/dev/null           # KeyboardInterrupt → torch가 dataloader 워커·CUDA 정리
+#         sleep 15
+#         if kill -0 "$TRAIN_PID" 2>/dev/null; then    # 안 죽으면 강제 종료 + 남은 워커 정리
+#             kill -9 "$TRAIN_PID" 2>/dev/null
+#             pkill -9 -P "$TRAIN_PID" 2>/dev/null
+#         fi
+#         STOPPED_OK=1
+#         break
+#     fi
+#     sleep 60
+# done
 
-wait "$TRAIN_PID" 2>/dev/null; RC=$?
-# 의도한 2에폭 정지면 성공(0), 그 전에 스스로 죽었으면(크래시) 실제 코드 보고.
+# wait "$TRAIN_PID" 2>/dev/null; RC=$?
+# # 의도한 2에폭 정지면 성공(0), 그 전에 스스로 죽었으면(크래시) 실제 코드 보고.
 if [ "$STOPPED_OK" = 1 ]; then STATUS=0; else STATUS=$RC; fi
 echo "[self-stop] 학습 종료(exit=$STATUS). run11 epoch${STOP_AFTER_EPOCHS} 체크포인트: ../result/sdum_run11/checkpoints/{best_model,model}.pt"
 echo "[self-stop] 채점:  python recon_eval.py -n sdum_run10_off2ep -p /root/Data/leaderboard   # off-팔"

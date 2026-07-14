@@ -40,6 +40,8 @@
 
 한 줄 요약: B5 효과를 확인할 A/B 실험을 세팅했다. off-팔은 지금 도는 run10을 재활용하고, on-팔(run11)만 새로 짧게 돌린다.
 
+B5란: strategy/preprocessing.md의 후보 번호로, 손실과 검증을 대회 채점과 똑같이 foreground(몸통) 영역 안에서만 계산하는 것을 말한다. 코드에서는 train.py의 --fg-loss 플래그이고, 기본은 꺼져 있다. 채점은 배경을 마스크로 날린 뒤 SSIM_full을 재는데 기존 손실·검증은 배경까지 포함한 전체 384²로 재고 있어서, 배경이 점수를 부풀리고 검증값이 실제 채점을 예측하지 못했다. 구현 경위는 바로 아래 07-11 16:21 엔트리, 근거와 남은 검증 항목은 preprocessing.md의 B5 항목을 보면 된다. 참고로 model_decision_points.md에도 B5가 나오는데 그건 UC(universal conditioning) 제거를 가리키는 별개 항목이라 번호만 같다.
+
 무엇: run10(B5 꺼진 학습)의 2에폭 시점 체크포인트를 따로 복사해 off-팔로 확보했고, 같은 설정에 B5만 켠 run11을 새 큐 슬롯(shell10.sh)에 준비했다. run11은 2에폭까지 돌면 스스로 멈추도록(self-stop) 만들어, off-팔과 같은 지점에서 비교되게 했다. 겸사겸사 4일째 정지돼 있던 옛 프로세스(run4)도 정리했다.
 
 왜: B5를 풀 학습으로 off/on 두 번 돌리면 며칠이 걸린다. 지금 도는 run10이 이미 off-팔이라, on-팔만 2에폭 돌리면 훨씬 빨리 방향을 볼 수 있다. 2에폭에서 멈추는 건 off-팔 체크포인트가 그 시점이라 맞춘 것이고, 초반 LR 곡선을 run10과 똑같이 두려고 스케줄(-e 10)은 유지한 채 학습만 멈춘다.
@@ -71,6 +73,16 @@
 상태: 커밋 6bf6679.
 
 핸드오프 → @esel34: run10을 준비해 뒀다 (shell9, run9와 같은 설정에 epoch만 10, 커밋 9025bd2). 끝나면 recon_eval로 세 축(full SSIM, bbox, 시간) 채점 부탁한다. full SSIM 우선.
+
+## 2026-07-13 17:55 KST - @bedso
+
+한 줄 요약 : run10 종료 run10 eval, leaderboard 등록, run11 시작
+
+무엇 : run 10 종료 run 11 수정(2epoch 종료 -> 10epoch 시작) run 10 eval 돌리고 있고 run11 이후에 시작할것임
+
+왜 : 그냥
+
+상태 : 커밋 안됨
 
 ## 관련 문서
 - strategy/collaboration_workflow.md — 작업 절차(train→분석→코멘트→반영 루프). worklog는 그 흐름의 시간순 인덱스.

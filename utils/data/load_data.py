@@ -173,7 +173,9 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         seed=getattr(args, "seed", 430),
     )
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None
-    return_bbox = getattr(args, "return_bbox", False)
+    # C1: bbox는 **학습 전용** 신호(bbox 가중 손실). val/leaderboard 로더에는 절대 붙이지 않는다 —
+    #     검증은 자연 분포·기존 언패킹을 그대로 유지해야 지표가 거짓말을 안 한다.
+    return_bbox = getattr(args, "return_bbox", False) and is_train
 
     # ---- 확정 전처리 플래그 (기본 전부 off = 기존 학습과 100% 동일) ----
     #   켤 때는 network/학습 코드(train_part.py 등)의 배치 언패킹도 함께 확장해야 함

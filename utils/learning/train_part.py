@@ -10,7 +10,7 @@ import copy
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
-from utils.common.loss_function import SSIMLoss
+from utils.common.loss_function import SSIMLoss, bbox_ssim_loss
 from utils.model.varnet import VarNet
 
 import os
@@ -21,13 +21,20 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     len_loader = len(data_loader)
     total_loss = 0.
     fg = getattr(args, "fg_loss", False)   # B5: 켜지면 tuple에 fg_mask가 하나 더 붙고 손실을 그 안에서만 계산
+    lam = float(getattr(args, "bbox_loss_lambda", 0.0))   # C1: >0이면 tuple 맨 끝에 bbox가 붙고 λ항을 더함
+    use_bbox = lam > 0
 
     for iter, data in enumerate(data_loader):
         if getattr(args, "max_iters", 0) and iter >= args.max_iters:
             break
+        # bbox는 규약상 항상 맨 끝(DataTransform docstring) → 먼저 떼어내면 나머지는 기존 언패킹 그대로.
+        bboxes = None
+        if use_bbox:
+            bboxes = data[-1]
+            data = data[:-1]
         if fg:
-            mask, kspace, target, maximum, _, _, fg_mask = data
-            fg_mask = fg_mask.cuda(non_blocking=True)
+            mask, kspace, target, maximum, _, _ = data[:6]
+            fg_mask = data[6].cuda(non_blocking=True)
         else:
             mask, kspace, target, maximum, _, _ = data
         mask = mask.cuda(non_blocking=True)
@@ -37,6 +44,9 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
 
         output = model(kspace, mask)
         loss = loss_type(output, target, maximum, mask=fg_mask) if fg else loss_type(output, target, maximum)
+        if use_bbox:
+            # L = (1-SSIM_full) + λ·(1-SSIM_bbox). 박스 없는 슬라이스는 λ항이 정확히 0 → 기존 손실과 동일.
+            loss = loss + lam * bbox_ssim_loss(loss_type, output, target, maximum, bboxes)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()

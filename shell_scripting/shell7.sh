@@ -45,17 +45,9 @@ DATA=/root/Data/leaderboard
 # --- run7 (checkpoint: sdum_run5, 태그충돌 잔재) ---
 if [ -f "../result/sdum_run5/checkpoints/best_model.pt" ]; then
     echo "===== recon_eval: run7 (sdum_run5) ====="
-    python recon_eval.py -n sdum_run5 -p "$DATA"
+    python recon_eval.py -n sdum_run10 -p "$DATA"
 else
     echo "[skip] run7 checkpoint(../result/sdum_run5/checkpoints/best_model.pt) 없음"
-fi
-
-# --- run8 (sdum_run8) — 학습 완료돼 best_model.pt 있을 때만 ---
-if [ -f "../result/sdum_run8/checkpoints/best_model.pt" ]; then
-    echo "===== recon_eval: run8 (sdum_run8) ====="
-    python recon_eval.py -n sdum_run8 -p "$DATA"
-else
-    echo "[skip] run8 checkpoint(../result/sdum_run8/checkpoints/best_model.pt) 없음 (run8 미완료?)"
 fi
 
 # ==========================================================

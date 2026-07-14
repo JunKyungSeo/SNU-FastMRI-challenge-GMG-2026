@@ -40,6 +40,7 @@ def parse():
     parser.add_argument('--readout-crop', action='store_true', help='SDUM: k-space readout(높이) 640→384 crop을 입력단에 적용(무손실, ~40%% 공간연산·메모리 절감). --normalize와 함께 켜지 말 것(어댑터가 self-normalize)')
     parser.add_argument('--crop-h', type=int, default=384, help='--readout-crop 시 crop 높이 (기본 384 = 대회 출력 크기)')
     parser.add_argument('--fg-loss', action='store_true', help='B5: SSIM 손실·검증을 채점(metrics.foreground_mask) 정합 foreground 영역 안에서만 계산. 기본 off=전체 384². 소비부 train_part(train_epoch/validate) 확장됨.')
+    parser.add_argument('--bbox-loss-lambda', type=float, default=0.0, help='C1: 병변 bbox 가중 손실. L = (1-SSIM_full) + λ·(1-SSIM_bbox). 기본 0.0=off(기존과 비트 동일). >0이면 train 로더가 bbox를 함께 반환(val/leaderboard는 자연 분포 유지 위해 미적용). 유효 박스 판정은 채점(metrics.ssim_bbox, win_size=7)과 동일.')
     parser.add_argument('--warmup-iters', type=int, default=0, help='SDUM: linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR)')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
     parser.add_argument('--resume', action='store_true', help='<net_name>/checkpoints/model.pt(마지막 epoch)에서 이어학습. 같은 config로만.')
@@ -53,6 +54,9 @@ if __name__ == '__main__':
     # fix seed
     if args.seed is not None:
         seed_fix(args.seed)
+
+    # C1: bbox 가중 손실을 켜면 train 로더가 bbox를 실어와야 한다(λ=0이면 off → 기존 6-튜플 그대로).
+    args.return_bbox = args.bbox_loss_lambda > 0
 
     args.exp_dir = '../result' / args.net_name / 'checkpoints'
     args.val_dir = '../result' / args.net_name / 'reconstructions_val'

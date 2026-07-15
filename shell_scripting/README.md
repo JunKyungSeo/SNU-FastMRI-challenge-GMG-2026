@@ -8,7 +8,8 @@ GPU를 쓰는 명령은 **여기 스크립트에서만** 실행한다.
 슬롯을 순서대로 채우고 세미콜론으로 이어서 실행:
 
 ```bash
-bash shell1.sh ; bash shell2.sh ; bash shell3.sh
+for i in $(seq 1 10); do bash
+  shell_scripting/shell$i.sh; done
 ```
 
 다음에 다른 걸 돌리고 싶으면 **비어 있는 다음 슬롯**(`shell4.sh` …)에 명령을 미리 써두면 된다.

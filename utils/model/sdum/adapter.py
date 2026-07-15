@@ -60,6 +60,7 @@ class SDUMReconModel(nn.Module):
 
         # non-flow 경로는 영상 (B,T,C,H,W,2) 반환
         out = out[:, 0]                           # T 제거 -> (B,C,H,W,2)
+        # magnitude로 coil-combine: NV 출력은 이미 영상 도메인 multicoil
         mag = root_sum_of_squares_t(complex_abs_t(out), spatial_dim=1)  # (B,H,W)
         mag = mag * scale.view(B, 1, 1)           # 출력 스케일 복원 -> 타깃 물리 스케일
         # center_crop은 (C,H,W)를 받음 -> B를 C자리로 취급, (B,384,384) 반환(폭 372->384 zero-pad 포함)

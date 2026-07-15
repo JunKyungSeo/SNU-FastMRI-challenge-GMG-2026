@@ -141,7 +141,8 @@ def build_scheduler(optimizer, args, len_loader):
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
     for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr", "uc"):
-        s, c = getattr(saved_args, f, None), getattr(args, f, None)
+        default = False if f == "uc" else None   # uc: 옛 체크포인트(필드 없음)=UC off로 간주(하위호환)
+        s, c = getattr(saved_args, f, default), getattr(args, f, default)
         if s != c:
             raise ValueError(
                 f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."

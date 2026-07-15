@@ -28,6 +28,10 @@ class SDUMReconModel(nn.Module):
         self.out_size = out_size
         self.mask_type = str(args.train_mask_types[0])  # "uniform"
         self.acq_type = str(args.acq_types[0])          # "knee"
+        # UC(Universal Conditioning) on 여부. on이면 forward에서 timestep을 넘겨 cascade-index 조건화.
+        # ⚠️ acc는 _extract_acc(마스크 frac) 휴리스틱. 마스크 증강을 켜면 frac이 낮아져 acc4→acc8 오판 →
+        #    UC 실험은 마스크 증강 off에서만.
+        self.uc = bool(getattr(args, "time_cond", False) or getattr(args, "label_cond", False))
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         B, C, H, W, two = masked_kspace.shape
@@ -46,11 +50,15 @@ class SDUMReconModel(nn.Module):
         mask_b = mask.bool().view(B, 1, 1, 1, W, 1).expand(B, 1, C, H, W, two)
         acc = _extract_acc(mask.reshape(B, W)[0])
 
-        out = self.cascaded(
-            x, mask_b, self.mask_type, acc, self.acq_type
-        )  # non-flow 경로는 영상 (B,T,C,H,W,2) 반환
+        if self.uc:
+            # timestep=0 → latent_recon가 actual_timestep = 0*T + i = i (cascade 번호)로 사용.
+            # timestep!=None이면 (x, cas_skips, sensitivity_maps) 3-튜플 반환 → [0]으로 텐서만.
+            out = self.cascaded(x, mask_b, self.mask_type, acc, self.acq_type, timestep=0)
+            out = out[0]
+        else:
+            out = self.cascaded(x, mask_b, self.mask_type, acc, self.acq_type)
 
-        # magnitude로 coil-combine: NV 출력은 이미 영상 도메인 multicoil
+        # non-flow 경로는 영상 (B,T,C,H,W,2) 반환
         out = out[:, 0]                           # T 제거 -> (B,C,H,W,2)
         mag = root_sum_of_squares_t(complex_abs_t(out), spatial_dim=1)  # (B,H,W)
         mag = mag * scale.view(B, 1, 1)           # 출력 스케일 복원 -> 타깃 물리 스케일

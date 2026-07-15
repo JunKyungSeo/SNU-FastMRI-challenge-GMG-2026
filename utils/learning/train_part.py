@@ -140,7 +140,7 @@ def build_scheduler(optimizer, args, len_loader):
 
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
-    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr"):
+    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr", "uc"):
         s, c = getattr(saved_args, f, None), getattr(args, f, None)
         if s != c:
             raise ValueError(
@@ -188,7 +188,8 @@ def train(args):
     if getattr(args, "model", "varnet") == "sdum":
         from utils.model.sdum.config import tiny_8gb_args
         from utils.model.sdum.adapter import build_sdum
-        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels))
+        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels),
+                                  uc=getattr(args, "uc", False))
         model = build_sdum(sdum_args)
     else:
         model = VarNet(num_cascades=args.cascade,

@@ -1,8 +1,9 @@
 """C1 (--bbox-loss-lambda) 검증 — 전부 CPU, GPU/모델 불필요.
 
-핵심 두 가지:
-  1. 학습 손실이 **채점식과 동일**한가 (utils/common/metrics.py::ssim_bbox 는 고정 파일).
-  2. 플래그를 끄면(λ=0) 기존 학습과 **비트 동일**한가.
+핵심:
+  1. per-box 값이 채점식(metrics.ssim_bbox, 고정 파일)과 동일한가.
+  2. 집계가 슬라이스별 cap=2 합(스케일 X)인가 — min(m,2)·mean, 박스 순서 무관.
+  3. 플래그를 끄면(λ=0)·박스 없으면 기존 학습과 비트 동일한가.
 """
 import json
 import types
@@ -12,7 +13,7 @@ import numpy as np
 import pytest
 import torch
 
-from utils.common.loss_function import SSIMLoss, bbox_ssim_loss
+from utils.common.loss_function import BBOX_CAP, SSIMLoss, bbox_ssim_loss
 from utils.common.metrics import SSIM, ssim_bbox
 from utils.data.transforms import DataTransform
 
@@ -29,26 +30,66 @@ def _real_slice_with_boxes():
     return target, ann[str(s)], maximum
 
 
-def test_bbox_loss_matches_scoring_function():
-    """bbox_ssim_loss = 1 - mean(metrics.ssim_bbox) 를 소수점 8자리까지 재현해야 한다.
-    (학습 신호와 채점식이 어긋나면 bbox를 미는 의미가 없다.)"""
+def test_per_box_value_matches_scoring():
+    """각 박스의 SSIM 값이 채점식(metrics.ssim_bbox)과 소수점 8자리까지 일치.
+    (집계 방식과 무관하게, 박스 하나하나의 crop·SSIM 계산이 채점과 어긋나면 안 된다.)"""
     target, boxes, maximum = _real_slice_with_boxes()
     rng = np.random.default_rng(0)
     recon = target + rng.normal(0, target.std() * 0.05, target.shape).astype(np.float32)
-
-    t = torch.from_numpy(target)[None]          # (1,H,W)
+    t = torch.from_numpy(target)[None]
     r = torch.from_numpy(recon)[None]
     dr = torch.tensor([maximum], dtype=torch.float32)
 
-    ours = bbox_ssim_loss(SSIMLoss(), r, t, dr, [boxes]).item()
-
     scorer = SSIM()
-    vals = [ssim_bbox(scorer, r[0], t[0], b, maximum) for b in boxes]
-    vals = [v for v in vals if v is not None]
-    expected = 1.0 - float(np.mean(vals))
+    ssim = SSIMLoss()
+    n_valid = 0
+    for box in boxes:
+        scored = ssim_bbox(scorer, r[0], t[0], box, maximum)
+        # 박스 하나만 넘기면 bbox_ssim_loss = min(1,2)·mean(1개) = 그 박스의 1-SSIM
+        ours = bbox_ssim_loss(ssim, r, t, dr, [[box]]).item()
+        if scored is None:                      # win_size<7 → 학습도 스킵(=0)
+            assert ours == 0.0
+            continue
+        n_valid += 1
+        assert ours == pytest.approx(1.0 - scored, abs=1e-8), f"box 값 {ours} != 1-채점 {1 - scored}"
+    assert n_valid > 0, "테스트 슬라이스에 유효 박스가 없음"
 
-    assert len(vals) > 0, "테스트 슬라이스에 유효 박스가 없음"
-    assert ours == pytest.approx(expected, abs=1e-8), f"학습손실 {ours} != 채점식 {expected}"
+
+def test_cap2_aggregation():
+    """집계 = min(m,2)·mean. m=1→박스, m=2→합, m=3→2·평균(cap). 손계산과 1e-6 일치."""
+    assert BBOX_CAP == 2
+    ssim = SSIMLoss()
+    t = torch.rand(1, 384, 384)
+    r = t + 0.03 * torch.rand(1, 384, 384)
+    dr = torch.tensor([1.0])
+    # 서로 다른 위치의 유효 박스 3개(겹치지 않게)
+    B = [{"x": 10, "y": 10, "width": 40, "height": 40},
+         {"x": 200, "y": 60, "width": 30, "height": 50},
+         {"x": 90, "y": 250, "width": 60, "height": 30}]
+    L = [bbox_ssim_loss(ssim, r, t, dr, [[b]]).item() for b in B]   # 개별 박스 손실
+
+    m1 = bbox_ssim_loss(ssim, r, t, dr, [B[:1]]).item()
+    m2 = bbox_ssim_loss(ssim, r, t, dr, [B[:2]]).item()
+    m3 = bbox_ssim_loss(ssim, r, t, dr, [B[:3]]).item()
+
+    assert m1 == pytest.approx(L[0], abs=1e-6)                       # m=1: 박스 그대로
+    assert m2 == pytest.approx(L[0] + L[1], abs=1e-6)               # m=2: 합 (min(2,2)·mean=2·mean)
+    assert m3 == pytest.approx(2.0 * np.mean(L), abs=1e-6)          # m=3: 2·평균 (cap)
+    assert m3 < L[0] + L[1] + L[2]                                   # cap이 순수 합보다 작아야 함
+
+
+def test_cap2_order_independent():
+    """박스 순서를 섞어도 값 동일 (min(m,2)·mean 은 순서 무관)."""
+    ssim = SSIMLoss()
+    t = torch.rand(1, 384, 384)
+    r = t + 0.03 * torch.rand(1, 384, 384)
+    dr = torch.tensor([1.0])
+    B = [{"x": 10, "y": 10, "width": 40, "height": 40},
+         {"x": 200, "y": 60, "width": 30, "height": 50},
+         {"x": 90, "y": 250, "width": 60, "height": 30}]
+    a = bbox_ssim_loss(ssim, r, t, dr, [B]).item()
+    b = bbox_ssim_loss(ssim, r, t, dr, [list(reversed(B))]).item()
+    assert a == pytest.approx(b, abs=1e-6)
 
 
 def test_win_size_filter_matches_scoring():

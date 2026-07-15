@@ -68,18 +68,28 @@ class SSIMLoss(nn.Module):
         return 1 - (num / den).mean()
 
 
-def bbox_ssim_loss(ssim, output, target, data_range, bboxes):
-    """C1: 병변 박스 안에서만 계산한 SSIM 손실 = 1 - mean_over_boxes SSIM(box).
+BBOX_CAP = 2   # C1: 슬라이스당 박스 개수 상한. batch=1에서 박스 많은 슬라이스의 과대 gradient 스파이크 억제.
 
-    유효 박스 판정·crop·평균 방식을 채점(utils/common/metrics.py::ssim_bbox, 고정 파일)과
-    **동일**하게 맞춘다 — 학습 신호와 채점식이 어긋나면 안 되므로:
+
+def bbox_ssim_loss(ssim, output, target, data_range, bboxes):
+    """C1: 병변 박스 안에서 계산한 SSIM 손실. 집계 = 슬라이스별 cap=2 합(스케일 X).
+
+    per-box 값은 채점(utils/common/metrics.py::ssim_bbox, 고정 파일)과 **동일**하게 맞춘다
+    — 학습 신호와 채점식이 어긋나면 안 되므로:
       · 박스를 이미지 경계로 클리핑 → 클리핑 '후' w·h 가 win_size(7) 미만이면 제외(채점도 None 처리)
       · crop 한 뒤 그 위에서 SSIM 맵을 구하고 평균 (전체 이미지 맵을 잘라내는 게 아님)
-    ssim(=SSIMLoss)이 `1 - S.mean()`을 돌려주므로 `1 - 반환값` = metrics.ssim_bbox 값.
+    ssim(=SSIMLoss)이 `1 - S.mean()`을 돌려주므로 박스 하나의 반환값 = 1 - metrics.ssim_bbox 값.
 
-    배치의 모든 유효 박스에 대해 **박스 단위 평균** (채점의 bbox_total/bbox_idx 와 같은 단위 —
-    박스가 많은 슬라이스가 그만큼 더 기여). 유효 박스가 하나도 없으면 0 을 돌려주므로
-    박스 없는 슬라이스에서는 손실이 기존과 정확히 같다.
+    집계는 **박스 평균이 아니라 슬라이스별 cap=2 합**이다(설계: docs/superpowers/specs/…-bbox-loss-design):
+      한 슬라이스의 유효 박스 손실이 ℓ₁..ℓ_m 일 때
+        slice_term = min(m, 2) · mean(ℓ₁..ℓ_m)     # m≤2면 합, m≥3면 2·평균(초과분 cap). 순서 무관.
+      L_bbox = 박스가 있는 슬라이스들의 slice_term 평균 (batch=1이라 보통 그 슬라이스 하나).
+    이유: 채점은 전역 박스 누산기라 박스를 다 세지만(박스 평균은 multi-box 슬라이스를 1/m로 저평가),
+    순수 합은 batch=1에서 박스 많은 슬라이스가 학습을 흔든다. cap=2가 둘의 절충 — 박스의 82%(≤2개)는
+    합과 동일하게 세고, 나머지(≥3개, drop 6.9%)만 2개어치로 자른다. 스케일 X = 채점 정합 배율 k를
+    넣지 않음 → 단일 박스 gradient가 λ 그대로(비병변 대비 1.55×), cap으로 최대 2.11×.
+
+    유효 박스가 하나도 없으면 0 을 돌려주므로 박스 없는 슬라이스에서는 손실이 기존과 정확히 같다.
 
     Args:
         ssim: SSIMLoss 인스턴스 (win_size 등 채점과 동일 설정)
@@ -89,17 +99,23 @@ def bbox_ssim_loss(ssim, output, target, data_range, bboxes):
     """
     win = ssim.win_size
     H, W = output.shape[-2], output.shape[-1]
-    terms = []
+    slice_terms = []
     for b, boxes in enumerate(bboxes):
+        box_losses = []
         for box in boxes:
             x0, y0 = max(0, int(box["x"])), max(0, int(box["y"]))
             x1 = min(W, int(box["x"]) + int(box["width"]))
             y1 = min(H, int(box["y"]) + int(box["height"]))
             if (x1 - x0) < win or (y1 - y0) < win:
                 continue                                  # 채점이 None 으로 버리는 박스 → 학습에서도 제외
-            terms.append(ssim(output[b:b + 1, y0:y1, x0:x1],
-                              target[b:b + 1, y0:y1, x0:x1],
-                              data_range[b:b + 1]))
-    if not terms:
+            box_losses.append(ssim(output[b:b + 1, y0:y1, x0:x1],
+                                   target[b:b + 1, y0:y1, x0:x1],
+                                   data_range[b:b + 1]))
+        if not box_losses:
+            continue
+        m = len(box_losses)
+        # cap=2 합 = min(m,2)·mean. mean이라 박스 순서에 무관(합-of-first-2 방식은 조용히 틀림).
+        slice_terms.append(min(m, BBOX_CAP) * torch.stack(box_losses).mean())
+    if not slice_terms:
         return output.new_zeros(())                       # 유효 박스 없음 → λ항 0 (= 기존 손실과 동일)
-    return torch.stack(terms).mean()
+    return torch.stack(slice_terms).mean()

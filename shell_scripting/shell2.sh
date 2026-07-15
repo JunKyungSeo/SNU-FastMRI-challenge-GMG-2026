@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: GPU usage / num-workers 6
+# 목적: <이 스크립트가 무엇을 하는지 한 줄로 작성>
 #
 # 실행:  bash shellN.sh                          (단독)
 #        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
@@ -31,17 +31,24 @@ echo "[LOG  ] $LOG"
 echo "=========================================================="
 
 # ==========================================================
-#  ↓↓↓  실제 GPU 명령  ↓↓↓
+#  ↓↓↓  실제 GPU 명령을 여기에 작성 (이 아래만 고치면 됨)  ↓↓↓
+#  set -x 로 실행되는 명령을 로그에 그대로 남긴다 (로그가 명령을 안 찍던 문제 해결)
 # ==========================================================
+set -x
 
-python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2e-4 -e 1 -r 10 --num-workers 6 \
-    -n sdum_scalefix -t /root/Data/train/ -v /root/Data/val/
+# 예시 — 지우고 실제 명령으로 교체:
+# python train.py --model sdum --num-cascades 4 --channels 16 32 \
+#     -b 1 -l 2e-4 -e 1 --max-iters 200 -r 10 --num-workers 4 \
+#     -n sdum_q_${SLOT} -t /root/Data/train/ -v /root/Data/val/
+
+# ↓ 빈 슬롯 표시: 명령을 채우면 이 echo 와 false 두 줄을 지우세요
+echo "[TODO] $SLOT: 실제 명령이 비어 있습니다. 이 두 줄을 지우고 명령을 채우세요."
+false
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑
 # ==========================================================
-STATUS=$?
+{ STATUS=$?; set +x; } 2>/dev/null
 
 echo "=========================================================="
 echo "[DONE ] $SLOT   $(date '+%F %T')   exit=$STATUS"

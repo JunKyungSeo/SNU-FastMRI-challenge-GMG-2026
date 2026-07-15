@@ -24,7 +24,8 @@ def load_model(args, device):
         from utils.model.sdum.config import tiny_8gb_args
         from utils.model.sdum.adapter import build_sdum
         model = build_sdum(tiny_8gb_args(
-            num_cascades=saved.num_cascades, channels=list(saved.channels)))
+            num_cascades=saved.num_cascades, channels=list(saved.channels),
+            uc=getattr(saved, "uc", False)))
     else:
         model = VarNet(
             num_cascades=getattr(saved, 'cascade', args.cascade),
@@ -83,7 +84,8 @@ def forward(args):
     if getattr(args, "model", "varnet") == "sdum":
         from utils.model.sdum.config import tiny_8gb_args
         from utils.model.sdum.adapter import build_sdum
-        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels))
+        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels),
+                                  uc=getattr(args, "uc", False))
         model = build_sdum(sdum_args)
     else:
         model = VarNet(num_cascades=args.cascade,

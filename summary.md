@@ -321,7 +321,7 @@ acc8이 acc4보다 0.05 이상 뒤처져 있으므로(§2.1) **개선 여지가 
 ### P2
 - 채점 스크립트의 라벨과 실제 명령 불일치(화면엔 "run7 채점", 실제로는 run10 채점) — 지금은 우연히 동작하지만 옛 체크포인트가 사라지면 **채점이 조용히 건너뛰어진다**
 - worklog 최신순 규칙 위반
-- gradient clipping · NaN/발산 감지 · augmentation 배선 · 자동 베이스라인 비교 미구현
+- NaN/발산 감지 · augmentation 배선 · 자동 베이스라인 비교 미구현 (gradient clipping·accumulation은 PromptMR+에서 `--grad-clip`·`--accum-steps`로 구현됨 / 증강 RNG 재현성 버그는 2026-07-19 수정 → 배선 시 재현성 보장)
 - 이어학습 스모크 미실행 (단위 테스트로만 검증)
 - **확정 설계 전체를 통합해 돌려본 적이 한 번도 없다** — GRAPPA prior, 감도맵 재사용 등이 각각 구현만 되어 있고 함께 동작한 적이 없다
 

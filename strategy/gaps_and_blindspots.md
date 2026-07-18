@@ -54,7 +54,8 @@
 - **방향**: k-space 폭 pad(mask=0) 유틸 + 배치에 acc4/acc8 균형 혼합.
 
 ## ✅ 참고: 이미 잘 되어 있는 것 (헛다리 방지)
-- **재현성 seed는 이미 걸려 있음** — [`utils.py:76`](../utils/common/utils.py#L76) `seed_fix`가 `cudnn.deterministic=True`까지 설정([`train.py:43`](../train.py#L43) 호출). 문서 강조 대비 이미 구현.
+- **재현성 seed는 이미 걸려 있음** — [`utils.py:76`](../utils/common/utils.py#L76) `seed_fix`가 `cudnn.deterministic=True`까지 설정. 문서 강조 대비 이미 구현.
+  - ⚠️ **단, blindspot이 하나 있었음(2026-07-19 수정)**: 증강 RNG(`MRIAugmentor._rng`)가 builtin `hash()`(문자열 salt, `PYTHONHASHSEED` 미설정)를 써서 **프로세스마다 달라졌다** — `seed_fix`로도 안 잡히는 구멍. `zlib.crc32(repr(...))`로 교체해 재실행 간 동일 추출 확인. 증강이 dead라 잠복 상태였고 이제 배선해도 재현성 보장.
 - 데이터측 전처리 조각의 **수치 검증(무손실·DC 보존)**은 탄탄.
 
 ---

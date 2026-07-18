@@ -12,18 +12,13 @@ def _dummy_opt(lr):
     return torch.optim.AdamW([p], lr=lr)
 
 
-def test_build_scheduler_none_for_varnet():
-    args = SimpleNamespace(model="varnet", warmup_iters=200, num_epochs=2)
-    assert build_scheduler(_dummy_opt(1e-3), args, 100) is None
-
-
 def test_build_scheduler_none_when_warmup_zero():
-    args = SimpleNamespace(model="sdum", warmup_iters=0, num_epochs=2)
+    args = SimpleNamespace(model="varnet", warmup_iters=0, num_epochs=2)
     assert build_scheduler(_dummy_opt(1e-3), args, 100) is None
 
 
 def test_build_scheduler_warmup_then_cosine():
-    args = SimpleNamespace(model="sdum", warmup_iters=10, num_epochs=1)
+    args = SimpleNamespace(model="varnet", warmup_iters=10, num_epochs=1)
     opt = _dummy_opt(2e-4)
     sch = build_scheduler(opt, args, 100)          # total_iters = 100
     assert sch is not None
@@ -42,7 +37,7 @@ def test_steps_per_epoch():
 
 
 def test_fast_forward_lands_at_correct_lr():
-    args = SimpleNamespace(model="sdum", warmup_iters=10, num_epochs=2, max_iters=0)
+    args = SimpleNamespace(model="varnet", warmup_iters=10, num_epochs=2, max_iters=0)
     len_loader = 50
     k = 1 * steps_per_epoch(args, len_loader)       # 1 epoch fast-forward = 50 step
     opt = _dummy_opt(2e-4)
@@ -56,7 +51,7 @@ def test_fast_forward_lands_at_correct_lr():
 
 
 def _args(**kw):
-    base = dict(model="sdum", num_cascades=4, channels=[16, 32], num_epochs=4, warmup_iters=200, lr=2.4e-4)
+    base = dict(model="varnet", num_cascades=4, channels=[16, 32], num_epochs=4, warmup_iters=200, lr=2.4e-4)
     base.update(kw)
     return SimpleNamespace(**base)
 

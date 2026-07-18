@@ -123,8 +123,8 @@ def steps_per_epoch(args, len_loader):
 
 
 def build_scheduler(optimizer, args, len_loader):
-    """SDUM & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR)."""
-    if getattr(args, "model", "varnet") != "sdum" or getattr(args, "warmup_iters", 0) <= 0:
+    """warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR)."""
+    if getattr(args, "warmup_iters", 0) <= 0:
         return None
     total_iters = args.num_epochs * len_loader
     warmup = args.warmup_iters
@@ -140,9 +140,8 @@ def build_scheduler(optimizer, args, len_loader):
 
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
-    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr", "uc"):
-        default = False if f == "uc" else None   # uc: 옛 체크포인트(필드 없음)=UC off로 간주(하위호환)
-        s, c = getattr(saved_args, f, default), getattr(args, f, default)
+    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr"):
+        s, c = getattr(saved_args, f, None), getattr(args, f, None)
         if s != c:
             raise ValueError(
                 f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."
@@ -186,16 +185,9 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    if getattr(args, "model", "varnet") == "sdum":
-        from utils.model.sdum.config import tiny_8gb_args
-        from utils.model.sdum.adapter import build_sdum
-        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels),
-                                  uc=getattr(args, "uc", False))
-        model = build_sdum(sdum_args)
-    else:
-        model = VarNet(num_cascades=args.cascade,
-                       chans=args.chans,
-                       sens_chans=args.sens_chans)
+    model = VarNet(num_cascades=args.cascade,
+                   chans=args.chans,
+                   sens_chans=args.sens_chans)
     model.to(device=device)
 
     resume_ckpt = None
@@ -204,10 +196,7 @@ def train(args):
         model.load_state_dict(resume_ckpt["model"])
 
     loss_type = SSIMLoss().to(device=device)
-    if getattr(args, "model", "varnet") == "sdum":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-3)
-    else:
-        optimizer = torch.optim.Adam(model.parameters(), args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     best_val_loss = 1.
     start_epoch = 0

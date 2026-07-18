@@ -19,10 +19,6 @@ def parse():
     parser.add_argument('--cascade', type=int, default=1, help='Number of cascades | Should be less than 12')
     parser.add_argument('--chans', type=int, default=9, help='Number of channels for cascade U-Net')
     parser.add_argument('--sens_chans', type=int, default=4, help='Number of channels for sensitivity map U-Net')
-    parser.add_argument('--model', type=str, default='varnet', choices=['varnet', 'sdum'], help='Backbone: varnet or sdum')
-    parser.add_argument('--num-cascades', type=int, default=4, help='SDUM cascade depth T')
-    parser.add_argument('--channels', type=int, nargs='+', default=[32, 64], help='SDUM Restormer per-level channel widths')
-    parser.add_argument('--uc', action='store_true', help='SDUM Universal Conditioning: acc4/acc8(label)+cascade-index(timestep) 조건화. 기본 off. ⚠️ 마스크 증강과 동시 사용 금지(frac 변동→acc 오판). UC on/off는 resume 호환 안 됨.')
     parser.add_argument("--input_key", type=str, default='kspace', help='Name of input key')
 
     args = parser.parse_args()

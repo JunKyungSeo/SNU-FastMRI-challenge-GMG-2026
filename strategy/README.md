@@ -9,7 +9,8 @@
 
 | 파일 | 역할 | 언제 보나 |
 |---|---|---|
-| **[confirmed_model.md](confirmed_model.md)** | ✅ **SPEC — 확정 파이프라인 단일 기준** | 구현 시작·구조 논의 |
+| **[promptmr_plus.md](promptmr_plus.md)** | ✅ **현재 백본 SPEC (PromptMR+, 2026-07-19~)** | 백본·손실·학습 설정 |
+| [confirmed_model.md](confirmed_model.md) | 📦 구 SDUM SPEC(superseded) — 모델 무관 요소는 유효 | 입력·정규화·GRAPPA 등 |
 | **[implementation.md](implementation.md)** | 🔧 코드 배선 체크리스트(의존성 순서) | 배선하는 중 |
 | **[candidates.md](candidates.md)** | 🔬 미결정 후보·열린 A/B | 다음에 뭘 실험할지 |
 | **[gaps_and_blindspots.md](gaps_and_blindspots.md)** | 🕳️ 구현 정합성 갭(코드 확인) + 전략 사각지대(가설) | "우리가 뭘 놓쳤지?" |

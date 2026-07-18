@@ -1,5 +1,9 @@
 # 확정 모델 (Confirmed Architecture) — FastMRI 2026
 
+> ⚠️ **SUPERSEDED (2026-07-19): 백본이 SDUM → PromptMR+로 교체됨. 현재 SPEC = [`promptmr_plus.md`](promptmr_plus.md).**
+> 아래 내용은 SDUM 시기의 확정 파이프라인 기록으로 보존한다(입력 2분기·readout crop·GRAPPA·감도맵 등
+> **모델 무관 요소는 여전히 유효**). 백본·손실·옵티마이저 관련 서술은 `promptmr_plus.md`가 우선한다.
+
 > 상태: **확정 (2026-07-04)** · 이 문서가 파이프라인 구조의 **단일 기준(source of truth)**.
 > 세부 근거는 [`model_strategy.md`](model_strategy.md) · [`augmentation.md`](augmentation.md) · [`preprocessing.md`](preprocessing.md) · [`todo.md`](todo.md).
 > 실측 검증(2026-07-04): readout crop 무손실·정규화·GRAPPA 정렬을 acc4/acc8 · slice 13에서 확인(검증 스크립트는 전략 검증용 임시라 삭제, 결과만 아래 표에 유지).

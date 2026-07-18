@@ -108,14 +108,18 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 8. 구조 (필수만)
 
-- **백본 선택**: `train.py --model {varnet(기본) | sdum}`. 기존 E2E-VarNet 경로는 그대로 유지되고, SDUM은 추가 경로.
-- **SDUM = NV 영상도메인 cascaded 모델(vendored) + 어댑터**:
-  - `utils/model/sdum/` — `nv_varnet.py`(cascade), `restormer.py`(regularizer), `latent_recon.py`, `nv_utils.py`, `config.py`, **`adapter.py`**.
-  - **어댑터가 핵심 접합부**: 우리 파이프라인은 k-space `(B,C,H,W,2)`+mask를 주고, NV 모델은 영상도메인을 받음. `adapter.forward`가 **ifft → per-sample 스케일 정규화(÷s) → cascaded → RSS → 384 crop → 출력 ×s 복원**으로 이음. 계약: `forward(kspace,mask)->(B,384,384)`, scale-equivariant.
+> 🔄 **2026-07-19: 백본을 SDUM → PromptMR+로 교체.** 새 권위 문서 = `strategy/promptmr_plus.md`.
+> SDUM 코드(`utils/model/sdum/`)는 **삭제하지 않고 보존**하되 `--model` 배선에서 제거됨(더 이상 학습·추론 안 됨).
+
+- **백본 선택**: `train.py --model {varnet(기본) | promptmr}`. E2E-VarNet 경로 유지, PromptMR+가 현재 주 경로.
+- **PromptMR+ = 영상도메인 cascaded DUM(vendored) + 어댑터** (`utils/model/promptmr/`):
+  - `promptmr_plus.py`(백본, sMartify-fastmri/2025_final에서 벤더·slim), `config.py`(구조 팩토리), **`adapter.py`**(접합부), `reentrant_wrapper.py`(checkpointing). fft/complex 유틸은 기존 `utils/model/fastmri/` 재사용(sens_expand/sens_reduce 추가함).
+  - **어댑터 계약**: `forward(kspace (B,C,H,W,2), mask (B,1,1,W,1)) -> (B,384,384)`. SDUM과 달리 **iFFT·외부 정규화 없음** — PromptMR+가 감도맵 추정·DC·정규화·RSS·384 crop을 내부 수행. 어댑터는 mask를 `(B,1,H,W,1)`로 확장해 넘길 뿐.
+  - **slim**: knee·단일 슬라이스·Cartesian 전용 → 인접-슬라이스 SME(`num_adj_slices`/`use_sens_adj`)·비-Cartesian(poisson/kt_radial) 분기 **제거**(원본과 bit-단위 등가 검증). 유지: adaptive gradient(`adaptive_input`,`n_buffer`)·momentum(`n_history`).
 - **진입점/루프**: `train.py`(인자·seed) → `utils/learning/train_part.py`(`train`/`train_epoch`) / `test_part.py`.
-- **데이터**: `utils/data/load_data.py`(로딩·GRAPPA·dataloader), `transforms.py`(readout crop·정규화·GRAPPA·coil compression·`MRIAugmentor`).
-- **레버**: `--num-cascades`(T), `--channels`(Restormer 폭; `[32,64]`=2-level, `[C]`=1-level). 디버깅 레버: `--num-workers`, `--max-iters`.
-- **확정 설계**(SPEC = `strategy/confirmed_model.md`, 인덱스 `strategy/README.md`): readout crop 640→384(무손실) · 전역 스칼라 정규화 ÷s · GRAPPA 영상 prior+residual · 감도맵 1회 추정 후 재사용 · **gradient checkpointing ON** · CSME per-cascade · SWDC 유지 · **UC 제거**(time/label_cond=False) · num_frames=1(2D) · coil compression 보류.
+- **데이터**: `utils/data/load_data.py`(로딩·GRAPPA·dataloader), `transforms.py`(readout crop·정규화·GRAPPA·coil compression·`MRIAugmentor`) — 모델 무관, 그대로.
+- **레버(promptmr)**: `--num-cascades`(기본 10) · `--n-feat0`(48) · `--sens-n-feat0`(24) · `--n-history`(3) · `--use-checkpoint`(기본 on) · 학습: `--fg-loss --area-weight`(masked SSIM×√면적비) · `--grad-clip`(0.1) · `--accum-steps`(2) · `-l 1e-6`(AdamW). 디버깅: `--num-workers`, `--max-iters`.
+- **확정 설계**(SPEC = `strategy/promptmr_plus.md`): cascade 10 · feature 48 · sens 24 · 단일 슬라이스 · Cartesian · gradient checkpointing ON · 손실 masked SSIM×√면적비(+선택 bbox λ) · AdamW(1e-6)+clip0.1+accum2. (구 SDUM SPEC = `strategy/confirmed_model.md`, 상단 배너로 superseded 표시.)
 
 ---
 
@@ -142,6 +146,8 @@ GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`-
 
 ## 11. 참고 문서
 
-- 전략 인덱스·SPEC: `strategy/README.md` · `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
-- 학습 로그 분석·수정 계획(누적): `training_anal/` · `docs/superpowers/plans/`
-- 원본 SDUM 코드(참고, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137
+- **현재 백본 SPEC: `strategy/promptmr_plus.md`** (PromptMR+, 2026-07-19~).
+- 전략 인덱스: `strategy/README.md` · 구 SDUM SPEC(superseded) `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
+- 학습 로그 분석·수정 계획(누적, 대부분 SDUM 시기 기록): `training_anal/` · `docs/superpowers/plans/`
+- PromptMR+ 원본 벤더 출처: `sMartify-fastmri/2025_final`(작년 대회) · 논문 arXiv:2411.xxxx(Xin et al., ECCV'24)
+- 원본 SDUM 코드(보존, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137

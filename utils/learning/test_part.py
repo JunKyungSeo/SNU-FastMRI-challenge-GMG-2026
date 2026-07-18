@@ -19,13 +19,11 @@ INPUT_KIND = "kspace"
 
 def load_model(args, device):
     ckpt = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
-    saved = ckpt.get('args', args)  # 학습 때 저장된 args(model/num_cascades/channels 포함)
-    if getattr(saved, 'model', 'varnet') == 'sdum':
-        from utils.model.sdum.config import tiny_8gb_args
-        from utils.model.sdum.adapter import build_sdum
-        model = build_sdum(tiny_8gb_args(
-            num_cascades=saved.num_cascades, channels=list(saved.channels),
-            uc=getattr(saved, "uc", False)))
+    saved = ckpt.get('args', args)  # 학습 때 저장된 args(model/num_cascades/n_feat0 등 포함)
+    if getattr(saved, 'model', 'varnet') == 'promptmr':
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(saved)
+        model.use_checkpoint = False   # 추론: gradient checkpointing 불필요
     else:
         model = VarNet(
             num_cascades=getattr(saved, 'cascade', args.cascade),
@@ -81,12 +79,10 @@ def forward(args):
     torch.cuda.set_device(device)
     print ('Current cuda device ', torch.cuda.current_device())
 
-    if getattr(args, "model", "varnet") == "sdum":
-        from utils.model.sdum.config import tiny_8gb_args
-        from utils.model.sdum.adapter import build_sdum
-        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels),
-                                  uc=getattr(args, "uc", False))
-        model = build_sdum(sdum_args)
+    if getattr(args, "model", "varnet") == "promptmr":
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(args)
+        model.use_checkpoint = False   # 추론: gradient checkpointing 불필요
     else:
         model = VarNet(num_cascades=args.cascade,
                        chans=args.chans,

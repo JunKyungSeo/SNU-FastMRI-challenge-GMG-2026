@@ -5,7 +5,7 @@ import torch
 from collections import defaultdict
 from utils.common.utils import save_reconstructions
 from utils.data.load_data import create_data_loaders
-from utils.data.transforms import to_tensor
+from utils.data.transforms import to_tensor, coil_compress
 from utils.model.varnet import VarNet
 
 # ---------------------------------------------------------------------------
@@ -29,6 +29,9 @@ def load_model(args, device):
             num_cascades=getattr(saved, 'cascade', args.cascade),
             chans=getattr(saved, 'chans', args.chans),
             sens_chans=getattr(saved, 'sens_chans', args.sens_chans))
+    # coil compression: 학습과 동일 설정을 ckpt에서 읽어 recon_slice가 per-slice 재적용(train/infer 정합).
+    model.coil_compress = bool(getattr(saved, 'coil_compress', False))
+    model.n_virtual_coils = int(getattr(saved, 'n_virtual_coils', 8))
     model.load_state_dict(ckpt['model'])
     model.eval()
     return model.to(device=device)
@@ -46,7 +49,11 @@ def recon_slice(model, ctx, s):
     """슬라이스 1장 복원(batch=1). 하네스가 이 호출의 시간만 잰다."""
     device = ctx["device"]
     mask = ctx["mask"]
-    kspace = to_tensor(ctx["kspace"][s] * mask)
+    ks = ctx["kspace"][s] * mask
+    if getattr(model, "coil_compress", False):
+        # 학습(DataTransform)과 동일하게 per-slice ACS 기반 SVD 압축(정합). SVD 비용은 타이밍에 포함(정직).
+        ks = coil_compress(ks, np.ravel(mask), getattr(model, "n_virtual_coils", 8)).astype(ctx["kspace"].dtype)
+    kspace = to_tensor(ks)
     kspace = torch.stack((kspace.real, kspace.imag), dim=-1).unsqueeze(0).to(device=device)
     mask_t = torch.from_numpy(mask.reshape(1, 1, kspace.shape[-2], 1).astype(np.float32)).byte()
     mask_t = mask_t.unsqueeze(0).to(device=device)

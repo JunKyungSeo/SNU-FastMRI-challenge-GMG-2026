@@ -60,6 +60,10 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
+## 파괴적 행동은 허락받고
+
+돌이킬 수 없는 행동 — 프로세스 `kill`, 학습 중단, 사용자가 열어둔 셸/터미널 종료, 체크포인트·결과 덮어쓰기·삭제, 큐 구조 변경 — 은 실행 전 **무엇을·왜 할지 알리고 허락을 받는다.** "작업에 필요해 보여서"는 사유가 안 된다. 내가 시작하지 않은 프로세스·터미널은 건드리지 않는다. 확인 못 한 것은 단정하지 말고 물어본다.
+
 ---
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

@@ -1,27 +1,22 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: run12 = C1(병변 bbox 가중 손실) A/B의 ON-팔.  λ=0.5, cap=2(합), 스케일 X.
-#       Stage-0 진단(training_anal/2026-07-14-stage0-lesion-diagnosis.md) → 분기 C.
-#       근거: ACL sprain(High/Low)·Subchondral edema·Bone-Fracture 4개 label이 "자기 슬라이스"
-#       대비 -0.03~-0.05 로 유의하게 무너짐(볼륨 클러스터 부트스트랩). 오버샘플링(w)은 p=0.392라 기각.
+# 목적: run11(--fg-loss) 공식 채점 — recon_eval.py로 leaderboard에서 SSIM_full+SSIM_bbox+추론시간 3축 산출.
+#       목적 = shell3(run12)의 BASELINE(run10 vs run11) 결정.
+#       ⚠️ load_model 이 best_model.pt 를 읽음(test_part.py) → run11의 best-val 체크포인트가 채점된다.
+#       recon_eval는 checkpoint 저장 args로 SDUM config 자동 복원 → --cascade/--chans 불필요.
 #
-# 실행:  bash shell1.sh                          (단독)
-#        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
+#   판정 규칙 (repo 컨벤션 = 직전 best 위에 하나만 얹는 A/B):
+#       비교 대상: run10 = full 0.9118 / bbox 0.9021 (현재 best).
+#       run11 의 0.5·full+0.5·bbox 가 run10 보다 높으면 → shell3 BASELINE=run11 (fg-loss 유지)
+#       낮으면                                        → shell3 BASELINE=run10 (fg-loss 뺌)
 #
-# ⚠️⚠️ 실행 전 필수 — 사람이 결정할 것 ⚠️⚠️
-#   run11(--fg-loss)이 **아직 학습 중**이다. run11 채점이 끝나야 A/B baseline이 정해진다:
-#       python recon_eval.py -n sdum_run11 -p /root/Data/leaderboard
-#       (비교 대상: run10 = full 0.9118 / bbox 0.9021 = 현재 best)
-#   그 결과로 아래 BASELINE 을 **명시적으로** 골라라. repo 컨벤션 = 직전 best 위에 하나만 얹는 A/B.
-#       BASELINE=run11 → run11 승 (fg-loss 유지한 채 C1 추가)
-#       BASELINE=run10 → run11 패 (fg-loss 빼고 C1만 추가)
-#   비워두면 이 스크립트는 실행을 거부한다(임의 baseline 으로 54h 태우기 방지).
+# 실행:  bash shell1.sh                          (단독, GPU 비었을 때)
 # ============================================================
 set -uo pipefail
 export PYTHONUNBUFFERED=1   # tee 파이프로 가도 python 출력을 실시간으로 (버퍼링 방지)
 
-# --- repo 루트로 이동 (train.py 등은 repo 루트 기준으로 돈다) ---
+# --- repo 루트로 이동 (recon_eval.py 등은 repo 루트 기준으로 돈다) ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
@@ -42,39 +37,14 @@ echo "[CWD  ] $(pwd)"
 echo "[LOG  ] $LOG"
 echo "=========================================================="
 
-# ==========================================================
-#  ↓↓↓  실제 GPU 명령을 여기에 작성 (이 아래만 고치면 됨)  ↓↓↓
-#  set -x 로 실행되는 명령을 로그에 그대로 남긴다 (로그가 명령을 안 찍던 문제 해결)
-# ==========================================================
-# ---- 사람이 채울 것: run11 채점 결과에 따라 baseline 선택 ----
-BASELINE=""          # <-- "run10" 또는 "run11". 비어 있으면 실행 거부.
-
-if [ -z "$BASELINE" ]; then
-    echo "[STOP] BASELINE 이 비어 있다. run11 채점(recon_eval)을 먼저 보고 run10/run11 중 하나를 고른 뒤"
-    echo "       이 스크립트의 BASELINE= 에 적어라. (임의 baseline 으로 54h를 태우지 않기 위한 가드)"
-    exit 2
-fi
-case "$BASELINE" in
-    run11) FG_FLAG="--fg-loss" ;;      # fg-loss 가 이겼다 → 유지한 채 C1만 추가
-    run10) FG_FLAG="" ;;               # fg-loss 가 졌다 → 빼고 C1만 추가
-    *) echo "[STOP] BASELINE 은 run10 또는 run11 이어야 한다 (받은 값: '$BASELINE')"; exit 2 ;;
-esac
-echo "[config] BASELINE=$BASELINE → FG_FLAG='$FG_FLAG' + C1(--bbox-loss-lambda 0.5)"
-
-# --- cv2 보장: fg-loss/bbox 경로가 transforms → metrics(cv2) 를 import. headless 서버. ---
+# --- cv2 보장: metrics.py 가 cv2 import (headless 서버 = opencv-python-headless). ---
 python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
 
-# λ=0.5 (사용자 확정). 손실 형태 = cap=2 합·스케일 X (loss_function.py::bbox_ssim_loss).
-#   병변 슬라이스 gradient(비병변=1.00): b=1 1.55 / b=2 2.11 / b≥3 2.11(cap). 평균병변 1.73.
-#   "신호부터 확인, 되면 다음 run에서 0.72 승급." A/B 게이트 = SSIM_full 비퇴행(방향이 평소와 반대).
-# 그 외 조건은 run10/run11과 **완전히 동일**해야 A/B 성립: [16,32]×4, LR 2.4e-4, 10ep,
-#   readout-crop, warmup 200, seed 기본 430.
+# ==========================================================
+#  ↓↓↓  실제 GPU 명령 (recon_eval)  ↓↓↓
+# ==========================================================
 set -x
-python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2.4e-4 -e 10 -r 100 --num-workers 4 \
-    --readout-crop --warmup-iters 200 $FG_FLAG \
-    --bbox-loss-lambda 0.5 \
-    -n sdum_run12 --run-tag run12 -t /root/Data/train/ -v /root/Data/val/
+python recon_eval.py -n sdum_run11 -p /root/Data/leaderboard
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑
@@ -83,14 +53,7 @@ python train.py --model sdum --num-cascades 4 --channels 16 32 \
 
 echo "=========================================================="
 echo "[DONE ] $SLOT   $(date '+%F %T')   exit=$STATUS"
-echo "[다음] best-model 선택 = C: model.pt·best_model.pt 둘 다 채점해 높은 쪽 채택."
-echo "  # 마지막 epoch 체크포인트(model.pt)로 채점:"
-echo "    python recon_eval.py -n sdum_run12 -p /root/Data/leaderboard"
-echo "  # full 기준 best(best_model.pt)로 채점하려면 checkpoints/model.pt를 best_model.pt로 바꿔 재채점:"
-echo "    cp ../result/sdum_run12/checkpoints/best_model.pt ../result/sdum_run12/checkpoints/model.pt"
-echo "    python recon_eval.py -n sdum_run12 -p /root/Data/leaderboard"
-echo "  → 0.5·SSIM_full + 0.5·SSIM_bbox 높은 쪽을 최종본으로. (val 161박스로 고르지 말 것 — leaderboard 1,229박스가 실채점)"
-echo "  게이트: SSIM_bbox ↑ **그리고 SSIM_full 비퇴행**(≥ baseline). full 깎이면 λ 과함(λ↓ 또는 롤백)."
-echo "  label별 재분해: scripts/bbox_ssim_breakdown.py 의 RECON 경로를 sdum_run12 로 바꿔 실행"
+echo "[다음] 위 run11 3축을 run10(full 0.9118/bbox 0.9021)과 비교 →"
+echo "       shell3(run12) 의 BASELINE= 을 run10/run11 로 채운 뒤 → shell2(smoke) → shell3(run12)."
 echo "=========================================================="
 exit "$STATUS"

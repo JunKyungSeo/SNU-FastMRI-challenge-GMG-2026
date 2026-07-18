@@ -13,6 +13,7 @@
 | [confirmed_model.md](confirmed_model.md) | 📦 구 SDUM SPEC(superseded) — 모델 무관 요소는 유효 | 입력·정규화·GRAPPA 등 |
 | **[implementation.md](implementation.md)** | 🔧 코드 배선 체크리스트(의존성 순서) | 배선하는 중 |
 | **[candidates.md](candidates.md)** | 🔬 미결정 후보·열린 A/B | 다음에 뭘 실험할지 |
+| [augmentation_and_preprocessing.md](augmentation_and_preprocessing.md) | 🔖 증강·전처리 **결정 대기 항목**(사람 판단 필요, 일부 미반영) | 증강/전처리 켤지 정할 때 |
 | **[gaps_and_blindspots.md](gaps_and_blindspots.md)** | 🕳️ 구현 정합성 갭(코드 확인) + 전략 사각지대(가설) | "우리가 뭘 놓쳤지?" |
 | **[rejected.md](rejected.md)** | ❌ 제외된 것 + 이유 | 재논의 방지 |
 | [model_strategy.md](model_strategy.md) · [augmentation.md](augmentation.md) · [preprocessing.md](preprocessing.md) · [related_work.md](related_work.md) | 📚 근거(rationale)·출처 아카이브 | "왜 이렇게 정했지?"·"선례 논문?" |

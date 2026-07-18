@@ -1,6 +1,9 @@
-# run11 분석 — fg-loss(B5) 정합, 진행 중 (2026-07-14)
+# run11 분석 — fg-loss(B5) 정합, 완료 (2026-07-14, 완주·채점 2026-07-15)
 
-> ⏳ **진행 중 문서.** run11은 지금 **epoch 4/10** 학습 중(-e 10). 여기선 epoch 0~3까지 + 반영된 개선을 정리하고, 최종 판정(fg-loss가 실채점을 올리나)은 **recon_eval 후** 채운다.
+> ✅ **완료.** run11 10ep 완주 + recon_eval 채점 끝. **판정: fg-loss 승 = 새 best.**
+> **최종 recon_eval:** SSIM_full **0.9161** / SSIM_bbox **0.9095** / **1514 ms/slice** (acc4 full 0.9390·bbox 0.9361 / acc8 full 0.8933·bbox 0.8828).
+> → run10(0.9118 / 0.9021 / 1523ms) 대비 **full +0.0043 · bbox +0.0074 · 시간 −9ms = 3축 전부 개선.** fg-loss가 SSIM_full을 올리면서 **우려했던 bbox 하락도 없이 동반 상승**. **run11 = 현재 best.**
+> 최종 fg-val(foreground-masked) = ep8 **0.9041**(1−0.09587). val이 실채점 SSIM_full(0.9161)을 방향·근사값까지 예측함(신뢰 예측기 확정).
 
 **한 줄 결론:** run10과 **완전히 동일한 config([16,32]×4, 10ep)에 `--fg-loss`(B5)만 켰다** — 손실·검증을 대회 채점처럼 **foreground(몸통) 마스크 안에서만** 계산. fg-정합 val이 0.8908→**0.9011**(ep3)로 상승 중. **단 fg-loss는 val 지표 자체를 바꿔(whole→foreground) run10 val과 직접 비교가 안 됨** — 진짜 효과(SSIM_full↑·bbox 유지)는 **recon_eval A/B로만** 확정. (미측정)
 
@@ -10,7 +13,7 @@
 
 - 🔑 **개선 = fg-loss**: 기존 손실·검증은 배경 포함 전체 384²로 SSIM을 재서 **배경이 점수를 부풀리고 val이 실채점을 예측 못 함**. fg-loss는 채점과 같은 foreground 영역만 봐서 이 어긋남을 잡는다.
 - ⚠️ **run10 val과 직접 비교 금지(함정)**: run10 val=whole-image, run11 val=**foreground-masked(≈SSIM_full)**. 지표가 달라 run11 val(0.9011)이 run10 val(0.8927)보다 높은 건 **일부가 지표 차이**(fg-masked가 원래 더 높게 나옴). fg-loss "효과"를 val 숫자 빼기로 주장하면 안 됨.
-- ⏳ **효과는 recon_eval A/B로만**: 팀원이 통제 arm(`sdum_run10_off2ep` vs `sdum_run11_on2ep`, 같은 2epoch)을 만들어 둠 → recon_eval로 채점하면 fg-loss가 SSIM_full 올리는지 깨끗이 나옴. **아직 안 됨.**
+- ✅ **효과 확정(recon_eval)**: run11 완주 채점 **full 0.9161 / bbox 0.9095** > run10 **0.9118 / 0.9021** → fg-loss가 full·bbox **동반 상승**(bbox 하락 우려 기각). 시간도 1514ms로 동등. **fg-loss 승, 새 best.**
 - ⚠️ **bbox 하락 감시**(@esel34 인계): fg-loss는 몸통 전체 정합이라 병변 박스(bbox) 점수가 떨어질 수 있음 → recon_eval에서 **bbox 안 떨어지는지 꼭 확인**.
 - ✅ **fg-val이 실채점을 예측**: run11 fg-val(≈SSIM_full)이 ep3에 0.9011 — run10의 실채점 SSIM_full 0.9118(ep9)에 근접, 아직 6 epoch 남음. val이 이제 점수를 제대로 추종.
 

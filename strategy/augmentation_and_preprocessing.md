@@ -21,7 +21,7 @@
 즉 이건 **과적합이 아니라 수렴**이다. 학습 데이터를 외우고 있는 게 아니라, 이 config·이 손실의
 한계치에 도달한 것이다. **Augmentation은 본질적으로 과적합 대응 도구**이므로, 막을 과적합이
 없으면 도구 자체가 쓸 데가 없다. 게다가 우리는 에폭 하나에 5.2시간을 쓴다.
-근거: [`training_anal/2026-07-13-run10-longtrain-analysis.md`](training_anal/2026-07-13-run10-longtrain-analysis.md)
+근거: [`training_anal/2026-07-13-run10-longtrain-analysis.md`](../training_anal/2026-07-13-run10-longtrain-analysis.md)
 
 ### 사실 2 — 데이터가 슬라이스 수준에서 희소하지 않다 (신규)
 
@@ -38,8 +38,8 @@
 - → 노출 부족이 아니라 **저대비·확산성 신호를 prior가 뭉개는** 문제다.
   **샘플을 더 보여주거나 뒤집는다고 대비가 살아나지 않는다.**
 
-근거: [`training_anal/2026-07-14-stage0-lesion-diagnosis.md`](training_anal/2026-07-14-stage0-lesion-diagnosis.md) ·
-[`training_anal/2026-07-14-stage-a-wiring.md`](training_anal/2026-07-14-stage-a-wiring.md)
+근거: [`training_anal/2026-07-14-stage0-lesion-diagnosis.md`](../training_anal/2026-07-14-stage0-lesion-diagnosis.md) ·
+[`training_anal/2026-07-14-stage-a-wiring.md`](../training_anal/2026-07-14-stage-a-wiring.md)
 
 ### 그래서
 

@@ -18,11 +18,25 @@ import os
 def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None):
     model.train()
     start_epoch = start_iter = time.perf_counter()
-    len_loader = len(data_loader)
     total_loss = 0.
     fg = getattr(args, "fg_loss", False)   # B5: 켜지면 tuple에 fg_mask가 하나 더 붙고 손실을 그 안에서만 계산
     lam = float(getattr(args, "bbox_loss_lambda", 0.0))   # C1: >0이면 tuple 맨 끝에 bbox가 붙고 λ항을 더함
     use_bbox = lam > 0
+    area_weight = bool(getattr(args, "area_weight", False))   # PromptMR+: masked SSIM × sqrt(면적비)
+    accum = max(1, int(getattr(args, "accum_steps", 1)))      # gradient accumulation
+    grad_clip = float(getattr(args, "grad_clip", 0.0))        # gradient clipping max_norm (0=off)
+
+    def _do_step():
+        if grad_clip > 0:
+            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+        optimizer.step()
+        optimizer.zero_grad()
+        if scheduler is not None:
+            scheduler.step()   # optimizer-step당 1회 (warmup→cosine)
+
+    optimizer.zero_grad()
+    pending = 0     # backward는 됐지만 아직 optimizer.step 안 한 마이크로배치 수
+    processed = 0
 
     for iter, data in enumerate(data_loader):
         if getattr(args, "max_iters", 0) and iter >= args.max_iters:
@@ -44,15 +58,21 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
 
         output = model(kspace, mask)
         loss = loss_type(output, target, maximum, mask=fg_mask) if fg else loss_type(output, target, maximum)
+        if area_weight and fg:
+            # masked SSIM × sqrt(foreground 면적비). foreground 작은 슬라이스 손실을 낮춰 가중(작년 팀 방식).
+            area_ratio = fg_mask.float().mean().clamp_min(1e-6)   # batch=1 → 스칼라
+            loss = loss * area_ratio.sqrt()
         if use_bbox:
             # L = (1-SSIM_full) + λ·(1-SSIM_bbox). 박스 없는 슬라이스는 λ항이 정확히 0 → 기존 손실과 동일.
             loss = loss + lam * bbox_ssim_loss(loss_type, output, target, maximum, bboxes)
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
-        if scheduler is not None:
-            scheduler.step()   # per-iter (warmup→cosine)
-        total_loss += loss.item()
+
+        (loss / accum).backward()   # accum 평균이 batch=accum 평균과 일치하도록 스케일
+        pending += 1
+        if pending == accum:
+            _do_step()
+            pending = 0
+        total_loss += loss.item()   # 로깅은 raw loss
+        processed += 1
 
         if iter % args.report_interval == 0:
             print(
@@ -62,7 +82,10 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
                 f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
             start_iter = time.perf_counter()
-    total_loss = total_loss / len_loader
+
+    if pending > 0:      # 꼬리: 남은 누적분 step (epoch 끝/max-iters 경계)
+        _do_step()
+    total_loss = total_loss / max(1, processed)
     return total_loss, time.perf_counter() - start_epoch
 
 
@@ -123,10 +146,12 @@ def steps_per_epoch(args, len_loader):
 
 
 def build_scheduler(optimizer, args, len_loader):
-    """SDUM & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR)."""
-    if getattr(args, "model", "varnet") != "sdum" or getattr(args, "warmup_iters", 0) <= 0:
+    """promptmr & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR).
+    warmup_iters·total_iters는 optimizer-step 단위(accum_steps로 나눔)로 해석한다."""
+    if getattr(args, "model", "varnet") != "promptmr" or getattr(args, "warmup_iters", 0) <= 0:
         return None
-    total_iters = args.num_epochs * len_loader
+    accum = max(1, int(getattr(args, "accum_steps", 1)))
+    total_iters = (args.num_epochs * len_loader) // accum   # optimizer-step 수
     warmup = args.warmup_iters
 
     def lr_lambda(step):
@@ -140,9 +165,9 @@ def build_scheduler(optimizer, args, len_loader):
 
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
-    for f in ("model", "num_cascades", "channels", "num_epochs", "warmup_iters", "lr", "uc"):
-        default = False if f == "uc" else None   # uc: 옛 체크포인트(필드 없음)=UC off로 간주(하위호환)
-        s, c = getattr(saved_args, f, default), getattr(args, f, default)
+    for f in ("model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
+              "num_epochs", "warmup_iters", "lr", "accum_steps"):
+        s, c = getattr(saved_args, f, None), getattr(args, f, None)
         if s != c:
             raise ValueError(
                 f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."
@@ -186,12 +211,9 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    if getattr(args, "model", "varnet") == "sdum":
-        from utils.model.sdum.config import tiny_8gb_args
-        from utils.model.sdum.adapter import build_sdum
-        sdum_args = tiny_8gb_args(num_cascades=args.num_cascades, channels=list(args.channels),
-                                  uc=getattr(args, "uc", False))
-        model = build_sdum(sdum_args)
+    if getattr(args, "model", "varnet") == "promptmr":
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(args)
     else:
         model = VarNet(num_cascades=args.cascade,
                        chans=args.chans,
@@ -204,7 +226,7 @@ def train(args):
         model.load_state_dict(resume_ckpt["model"])
 
     loss_type = SSIMLoss().to(device=device)
-    if getattr(args, "model", "varnet") == "sdum":
+    if getattr(args, "model", "varnet") == "promptmr":
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-3)
     else:
         optimizer = torch.optim.Adam(model.parameters(), args.lr)
@@ -230,7 +252,9 @@ def train(args):
     if resume_ckpt is not None:
         optimizer.load_state_dict(resume_ckpt["optimizer"])   # scheduler 생성 후에 로드(initial_lr=base 유지)
         if scheduler is not None:
-            for _ in range(start_epoch * steps_per_epoch(args, len(train_loader))):
+            accum = max(1, int(getattr(args, "accum_steps", 1)))
+            opt_steps_per_epoch = steps_per_epoch(args, len(train_loader)) // accum   # scheduler는 optimizer-step당 1회
+            for _ in range(start_epoch * opt_steps_per_epoch):
                 scheduler.step()
             print(f"[resume] scheduler fast-forward {start_epoch}ep, lr={optimizer.param_groups[0]['lr']:.3e}")
 

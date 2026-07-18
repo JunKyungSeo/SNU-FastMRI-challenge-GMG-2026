@@ -80,7 +80,7 @@ def bbox_ssim_loss(ssim, output, target, data_range, bboxes):
       · crop 한 뒤 그 위에서 SSIM 맵을 구하고 평균 (전체 이미지 맵을 잘라내는 게 아님)
     ssim(=SSIMLoss)이 `1 - S.mean()`을 돌려주므로 박스 하나의 반환값 = 1 - metrics.ssim_bbox 값.
 
-    집계는 **박스 평균이 아니라 슬라이스별 cap=2 합**이다(설계: docs/superpowers/specs/…-bbox-loss-design):
+    집계는 **박스 평균이 아니라 슬라이스별 cap=2 합**이다(설계: docs/archive/superpowers/specs/2026-07-12-bbox-interslice-saliency-design.md):
       한 슬라이스의 유효 박스 손실이 ℓ₁..ℓ_m 일 때
         slice_term = min(m, 2) · mean(ℓ₁..ℓ_m)     # m≤2면 합, m≥3면 2·평균(초과분 cap). 순서 무관.
       L_bbox = 박스가 있는 슬라이스들의 slice_term 평균 (batch=1이라 보통 그 슬라이스 하나).

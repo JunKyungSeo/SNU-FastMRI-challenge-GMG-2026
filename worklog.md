@@ -36,6 +36,18 @@
 
 ---
 
+## 2026-07-18 16:00 UTC / 2026-07-19 01:00 KST — @esel34
+
+한 줄 요약: 백본을 SDUM에서 PromptMR+로 교체하고 손실·옵티마이저·coil compression을 새로 배선했다. 이어서 문서와 파일 구조도 정리했다.
+
+무엇: 작년 대회 우승 코드(sMartify-fastmri/2025_final)의 PromptMR+를 utils/model/promptmr/로 벤더링하고, knee 단일 슬라이스 Cartesian 전용으로 슬림화했다(인접슬라이스 SME와 비-Cartesian 분기 제거, 원본과 수치 동일 검증). 손실은 masked SSIM에 foreground 면적비의 제곱근을 곱하는 방식(--area-weight), 옵티마이저는 AdamW 1e-6에 gradient clipping과 accumulation을 더했다. SVD coil compression을 학습·추론 양쪽에 배선하고, 압축 개수를 정하기 위한 ACS 에너지 리포트와 recon_eval 스코어카드 스크립트를 추가했다. SDUM 코드는 삭제하지 않고 보존하되 --model 배선에서만 뺐다. 배선 상세와 실행법은 strategy/promptmr_plus.md에 있다.
+
+왜: SDUM 계열 성능이 정체됐고, PromptMR+의 self-adaptive gradient와 momentum이 정적 knee에도 유효하다(논문 검증). coil compression은 8GB에서 cascade10 feature48 모델의 VRAM과 추론시간을 줄이는 레버인데, 너무 많이 압축하면 bbox(작은 병변)가 먼저 무너지므로 ACS 에너지 보존율로 하한을 잡고 3축으로 스윕해 정한다.
+
+상태: 커밋 19093fe(백본 교체) 8fd4e40(README). coil compression 배선과 파일 정리(HANDOFF·SDUM 전용 테스트 삭제, scripts/tests 분리, docs/archive 신설)는 아직 미커밋. GPU 실검증(OOM 확인, recon_eval 3축)은 아직 안 함 — 이 세션은 로컬 맥이라 CPU 스모크까지만 했다.
+
+핸드오프 → @bedso: 서버에서 먼저 미니 학습으로 OOM부터 확인해야 한다. cascade10 feature48은 8GB에 안 들어갈 수 있어, 안 되면 n_history를 줄이거나(3에서 1) readout-crop을 켜거나 coil compression을 쓴다. 실행 커맨드는 strategy/promptmr_plus.md와 README 5절.
+
 ## 2026-07-11 18:13 UTC / 2026-07-12 03:13 KST — @esel34
 
 한 줄 요약: B5 효과를 확인할 A/B 실험을 세팅했다. off-팔은 지금 도는 run10을 재활용하고, on-팔(run11)만 새로 짧게 돌린다.

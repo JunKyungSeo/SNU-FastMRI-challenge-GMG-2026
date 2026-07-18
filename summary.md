@@ -1,8 +1,12 @@
 # FastMRI SNU 2026 — 프로젝트 통합 현황
 
-> **최종 갱신**: 2026-07-13 09:00 UTC / 18:00 KST
-> **기준 커밋**: `c0ba1bc` (브랜치 `SDUM`, origin 대비 4커밋 미푸시)
-> **현재 학습 중**: run11 (에폭 1/10)
+> **최종 갱신**: 2026-07-19 01:00 KST / 2026-07-18 16:00 UTC
+> **기준 커밋**: `8fd4e40` (브랜치 `jkMRplus`)
+> **현재 학습 중**: 없음 — 백본 교체 직후, GPU 실검증 대기.
+>
+> 🔄 **2026-07-19 백본 교체: SDUM → PromptMR+.** 코드·배선·CPU 스모크 완료, **GPU 학습은 아직**.
+> 아래 run10/run11 성적과 §1·§4는 **SDUM 시기 기록**이며, 모델 무관 요소(입력·전처리·손실 틀)는 유효하다.
+> PromptMR+ 백본 SPEC·구조·손실·실행법 = **`strategy/promptmr_plus.md`**.
 >
 > 흩어진 기록을 한곳에 모은 **살아있는 현황판**. 새 run이 끝나거나 큰 결정이 내려질 때마다 갱신한다.
 > 중심은 **§1 적용한 방법**, **§4 적용하지 않은 방법**, **§5 아직 적용하지 않은 방법(후보)** 세 절이다.
@@ -164,16 +168,14 @@ VarNet 경로는 지우지 않고 그대로 남겨 뒀다(백본은 학습 시 �
 
 ---
 
-## 3. 지금 돌아가는 것 — run11 (전경 마스크 손실 A/B)
+## 3. 지금 돌아가는 것 — 없음 (백본 교체 직후)
 
-| | off 팔 | on 팔 |
-|---|---|---|
-| run | run10 (완료) | **run11 (진행 중)** |
-| 설정 | 전경 마스크 손실 **끄고** 10에폭 | 나머지 전부 동일 + **켜고** 10에폭 |
-
-- **진행**: 에폭 1/10, 완주 예정 **7/15 오후** (에폭당 ~5.2h, 총 ~52h)
-- **판정 게이트**: SSIM_full 상승 **AND SSIM_bbox 비하락** AND 추론시간 불변.
-  **bbox가 떨어지면 채택하지 않는다** — 점수의 절반이 거기 걸려 있다.
+- **SDUM 시기 최종**: run11(fg-loss)이 best, run12(bbox+UC)는 3축 퇴행으로 기각(→ `training_anal/`).
+- **현재**: 백본을 **PromptMR+로 교체**하고 CPU 스모크까지 통과. **GPU 학습은 아직** — 서버에서
+  미니 학습으로 **OOM부터** 확인해야 한다(cascade10·feature48은 8GB에 안 들어갈 수 있음).
+- **다음 A/B 후보**: coil compression 개수(Nvc) 스윕 — `scripts/coil_energy_report.py`로 하한 잡고
+  `scripts/recon_eval_report.py`로 3축 스코어카드 축적. **bbox 무회귀 + time 이득**의 elbow 채택.
+- **판정 게이트(불변)**: SSIM_full 상승 **AND SSIM_bbox 비하락** AND 추론시간 불변.
 
 ---
 
@@ -357,7 +359,8 @@ acc8이 acc4보다 0.05 이상 뒤처져 있으므로(§2.1) **개선 여지가 
 
 | 알고 싶은 것 | 볼 곳 |
 |---|---|
-| 확정된 모델 설계와 근거 | `strategy/confirmed_model.md` |
+| 현재 백본(PromptMR+) 설계·손실·실행법 | `strategy/promptmr_plus.md` |
+| 구 SDUM 모델 설계(superseded, 모델무관 요소는 유효) | `strategy/confirmed_model.md` |
 | 후보 아이디어 원본 (§5의 출처) | `strategy/candidates.md` |
 | 기각 목록 원본 (§4의 출처) | `strategy/rejected.md` |
 | 증강 관련 상세 판단 | `strategy/augmentation.md` |
@@ -366,4 +369,4 @@ acc8이 acc4보다 0.05 이상 뒤처져 있으므로(§2.1) **개선 여지가 
 | 팀 작업 타임라인과 "왜" | `worklog.md` |
 | 규칙·환경·협업 원본 | `CLAUDE.md` |
 | GPU 큐 사용법 | `shell_scripting/README.md` |
-| 인접슬라이스·saliency 로드맵 (§5.6) | `docs/superpowers/specs/2026-07-12-bbox-interslice-saliency-design.md` |
+| 인접슬라이스·saliency 로드맵 (§5.6) | `docs/archive/superpowers/specs/2026-07-12-bbox-interslice-saliency-design.md` |

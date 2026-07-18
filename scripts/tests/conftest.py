@@ -1,7 +1,8 @@
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# scripts/tests/conftest.py → repo root는 세 단계 위(tests → scripts → root).
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 _model = os.path.join(ROOT, "utils", "model")

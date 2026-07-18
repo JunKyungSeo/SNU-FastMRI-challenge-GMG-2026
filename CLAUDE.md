@@ -76,7 +76,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 - **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
 - **팀 2명** (§4).
 
-> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_anal/`, 수정 계획은 `docs/superpowers/plans/` 참조.
+> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_anal/`, 과거 수정 계획은 `docs/archive/superpowers/plans/` 참조.
 
 ---
 
@@ -148,6 +148,6 @@ GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`-
 
 - **현재 백본 SPEC: `strategy/promptmr_plus.md`** (PromptMR+, 2026-07-19~).
 - 전략 인덱스: `strategy/README.md` · 구 SDUM SPEC(superseded) `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
-- 학습 로그 분석·수정 계획(누적, 대부분 SDUM 시기 기록): `training_anal/` · `docs/superpowers/plans/`
+- 학습 로그 분석(누적): `training_anal/` · 과거 수정 계획(SDUM 시기, archive): `docs/archive/superpowers/plans/`
 - PromptMR+ 원본 벤더 출처: `sMartify-fastmri/2025_final`(작년 대회) · 논문 arXiv:2411.xxxx(Xin et al., ECCV'24)
 - 원본 SDUM 코드(보존, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137

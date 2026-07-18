@@ -36,6 +36,16 @@
 
 ---
 
+## 2026-07-19 01:42 UTC / 2026-07-19 10:42 KST — @esel34
+
+한 줄 요약: 증강 RNG의 프로세스 간 재현성 버그를 찾아 고쳤다(현재는 잠복 상태).
+
+무엇: MRIAugmentor의 샘플별 RNG가 builtin hash((seed, epoch, str(fname), slice))를 썼는데, Python3의 문자열 해시 salt(PYTHONHASHSEED 미설정) 때문에 프로세스마다 시드가 달라졌다. zlib.crc32(repr(...))로 교체해 재실행 간 동일 추출을 확인했다. 관련 기록 문서(gaps_and_blindspots, summary 6절, augmentation_and_preprocessing)도 갱신했다.
+
+왜: "샘플별 결정적 RNG" 주석 약속과 대회 재현성 규칙(seed 고정 시 재학습 같은 결과)이 증강 ON일 때 깨졌다. seed_fix로도 안 잡히는 구멍이라 별도 수정이 필요했다.
+
+상태: 커밋 6acad53. 증강은 아직 dead(aug_on 기본 False, set_epoch 미호출)라 현재 런타임 동작 변화는 없고, 배선하는 순간부터 재현성이 보장된다.
+
 ## 2026-07-18 16:00 UTC / 2026-07-19 01:00 KST — @esel34
 
 한 줄 요약: 백본을 SDUM에서 PromptMR+로 교체하고 손실·옵티마이저·coil compression을 새로 배선했다. 이어서 문서와 파일 구조도 정리했다.

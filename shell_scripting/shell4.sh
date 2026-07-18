@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: 스모크 테스트 — 새 코드(--readout-crop + cosine/warmup 스케줄러) 경로가 안 깨지나 몇 분 확인.
-#       체크: ① cropped 경로 loss 유한? ② "[scheduler] warmup=... → cosine" 프린트 뜨나?
-#             ③ 실제 s/iter로 readout-crop 속도이득 실측(run4 대비). 9h run(shell5) 전 게이트.
+# 목적: run13 = run11 + UC.  run11(--fg-loss) 설정에 --uc 하나만 얹음 (bbox 안 씀).
+#       = run11([16,32]×4·readout-crop·warmup200·LR 2.4e-4·--fg-loss) + --uc.
+#       → run11 대비 **clean single-lever UC A/B** (fg-loss 유지, UC 효과만 격리).
+#       run12(shell3)는 bbox+UC 묶음이라 UC 단독 효과를 못 봄 → 이 run13이 UC 순효과 측정.
+#       ⚠️ run13도 UC를 쓰므로 shell2 smoke(UC 경로) 통과 후에 돌릴 것. UC 전용이라 더는 "smoke 실패 시
+#          fallback"이 아니다(UC가 깨졌으면 이것도 깨짐). smoke 통과 시 run12와 별개로 돌리는 UC 격리 arm.
 #
-# 실행:  bash shellN.sh                          (단독)
-#        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
+# 실행:  bash shell4.sh                          (단독, shell2 smoke 통과 후)
 # ============================================================
 set -uo pipefail
 export PYTHONUNBUFFERED=1   # tee 파이프로 가도 python 출력을 실시간으로 (버퍼링 방지)
@@ -32,19 +34,17 @@ echo "[CWD  ] $(pwd)"
 echo "[LOG  ] $LOG"
 echo "=========================================================="
 
+# --- cv2 보장: fg-loss 경로가 metrics(cv2) 를 import. headless 서버. ---
+python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+
 # ==========================================================
-#  ↓↓↓  실제 GPU 명령을 여기에 작성 (이 아래만 고치면 됨)  ↓↓↓
-#  set -x 로 실행되는 명령을 로그에 그대로 남긴다
+#  ↓↓↓  실제 GPU 명령 = run11 + UC  (run11 config + --uc)  ↓↓↓
 # ==========================================================
 set -x
-
-# run6 = 스모크: run7(shell5)와 같은 config, 단 --max-iters 30 -e 1 로 몇 분만.
-# warmup 10 → 30 iters 안에 warmup(1~10)+cosine(11~) 둘 다 관찰 가능.
-# ※ 스모크는 -r 100 규칙의 예외 — --max-iters 30보다 작은 -r 5라야 capped iter가 로그에 찍힘.
 python train.py --model sdum --num-cascades 4 --channels 16 32 \
-    -b 1 -l 2.4e-4 -e 1 -r 5 --max-iters 30 --num-workers 4 \
-    --readout-crop --warmup-iters 10 \
-    -n sdum_run6 --run-tag run6 -t /root/Data/train/ -v /root/Data/val/
+    -b 1 -l 2.4e-4 -e 10 -r 100 --num-workers 4 \
+    --readout-crop --warmup-iters 200 --fg-loss --uc \
+    -n sdum_run13 --run-tag run13 -t /root/Data/train/ -v /root/Data/val/
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑

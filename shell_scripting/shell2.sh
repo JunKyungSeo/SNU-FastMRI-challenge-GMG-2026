@@ -1,10 +1,15 @@
 #!/usr/bin/env bash
 # ============================================================
 # GPU 작업 큐 슬롯  —  GPU를 쓰는 명령은 이 폴더 스크립트에서만 실행한다.
-# 목적: <이 스크립트가 무엇을 하는지 한 줄로 작성>
+# 목적: run12(shell3, bbox+UC) 본run 전 게이트 smoke. UC+bbox(+fg) 조합이 실데이터에서
+#       크래시 없이 3-iter 돌고 체크포인트에 uc=True 가 저장되는지만 확인(품질 X, crash-check).
+#       ⚠️ UC는 GPU 전용(train.py가 .cuda() 하드코딩) → CPU smoke 불가.
+#       ⚠️ disposable smoke라 결과(sdum_uc_bbox_smoke)는 확인 후 삭제. run 번호 안 씀
+#           (실제 run 번호 run13+ 는 다음 실험용으로 보존).
+#       통과 기준: 크래시 없이 종료 + 로그에 'SMOKE uc= True'.
+#         → 통과: shell3(run12) 진행.   실패: shell4(run13 fallback).
 #
-# 실행:  bash shellN.sh                          (단독)
-#        bash shell1.sh ; bash shell2.sh ; ...   (큐로 이어서)
+# 실행:  bash shell2.sh                          (단독, shell1 recon_eval 뒤. GPU 비었을 때)
 # ============================================================
 set -uo pipefail
 export PYTHONUNBUFFERED=1   # tee 파이프로 가도 python 출력을 실시간으로 (버퍼링 방지)
@@ -30,20 +35,22 @@ echo "[CWD  ] $(pwd)"
 echo "[LOG  ] $LOG"
 echo "=========================================================="
 
+# --- cv2 보장: bbox/fg 경로가 metrics(cv2) 를 import. headless 서버. ---
+python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+
 # ==========================================================
-#  ↓↓↓  실제 GPU 명령을 여기에 작성 (이 아래만 고치면 됨)  ↓↓↓
-#  set -x 로 실행되는 명령을 로그에 그대로 남긴다 (로그가 명령을 안 찍던 문제 해결)
+#  ↓↓↓  실제 GPU 명령 (run12 와 동일 config + --max-iters 3 로 축소)  ↓↓↓
+#  --fg-loss 포함 = run12 의 maximal 경로(BASELINE=run11 케이스)까지 검증. run10 케이스는 부분집합.
 # ==========================================================
 set -x
+python train.py --model sdum --uc \
+    --num-cascades 4 --channels 16 32 \
+    -b 1 -l 2.4e-4 -e 1 --max-iters 3 -r 1 --num-workers 4 \
+    --readout-crop --warmup-iters 200 --fg-loss --bbox-loss-lambda 0.5 \
+    -n sdum_uc_bbox_smoke -t /root/Data/train/ -v /root/Data/val/
 
-# 예시 — 지우고 실제 명령으로 교체:
-# python train.py --model sdum --num-cascades 4 --channels 16 32 \
-#     -b 1 -l 2e-4 -e 1 --max-iters 200 -r 10 --num-workers 4 \
-#     -n sdum_q_${SLOT} -t /root/Data/train/ -v /root/Data/val/
-
-# ↓ 빈 슬롯 표시: 명령을 채우면 이 echo 와 false 두 줄을 지우세요
-echo "[TODO] $SLOT: 실제 명령이 비어 있습니다. 이 두 줄을 지우고 명령을 채우세요."
-false
+# 체크포인트에 uc/bbox 가 저장됐는지 확인 (기대: uc= True)
+python -c "import torch; a=torch.load('../result/sdum_uc_bbox_smoke/checkpoints/best_model.pt', weights_only=False)['args']; print('SMOKE uc=', getattr(a,'uc',None), 'bbox_lambda=', getattr(a,'bbox_loss_lambda',None))"
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑
@@ -52,5 +59,7 @@ false
 
 echo "=========================================================="
 echo "[DONE ] $SLOT   $(date '+%F %T')   exit=$STATUS"
+echo "[정리] 통과하면 결과 삭제:  rm -rf ../result/sdum_uc_bbox_smoke"
+echo "[다음] 통과 → shell3 BASELINE 확인 후 bash shell_scripting/shell3.sh (run12).  실패 → shell4 (run13)."
 echo "=========================================================="
 exit "$STATUS"

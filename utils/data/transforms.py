@@ -1,4 +1,5 @@
 import json
+import zlib
 import numpy as np
 import torch
 
@@ -224,9 +225,11 @@ class MRIAugmentor:
         return float(c.max_prob * (1.0 - np.exp(-3.0 * t)))  # 지수형 점증(t=1에서 ≈95%)
 
     def _rng(self, fname, sl):
-        """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨."""
-        h = hash((self.cfg.seed, self.epoch, str(fname), int(sl))) & 0xFFFFFFFF
-        return np.random.default_rng(h)
+        """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨.
+        ⚠️ builtin hash()는 문자열 salt(PYTHONHASHSEED 미설정)로 프로세스마다 달라져 재현성이 깨진다
+        (seed_fix로도 안 고쳐짐). 프로세스 안정 해시 zlib.crc32를 쓴다."""
+        key = repr((self.cfg.seed, self.epoch, str(fname), int(sl))).encode()
+        return np.random.default_rng(zlib.crc32(key))
 
     # ---- 개별 augmentation ----
     def _aug_mask(self, rng, mask):

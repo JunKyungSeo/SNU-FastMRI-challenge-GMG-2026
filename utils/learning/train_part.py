@@ -166,7 +166,8 @@ def build_scheduler(optimizer, args, len_loader):
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
     for f in ("model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
-              "num_epochs", "warmup_iters", "lr", "accum_steps"):
+              "num_epochs", "warmup_iters", "lr", "accum_steps",
+              "coil_compress", "n_virtual_coils"):
         s, c = getattr(saved_args, f, None), getattr(args, f, None)
         if s != c:
             raise ValueError(

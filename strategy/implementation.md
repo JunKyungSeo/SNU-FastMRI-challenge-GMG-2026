@@ -1,6 +1,9 @@
 # 구현 배선 체크리스트 (Implementation)
 
-> [`confirmed_model.md`](confirmed_model.md) 확정 구조를 코드에 배선하는 순서. 의존성 기준 정렬.
+> ⚠️ **일부 SUPERSEDED (2026-07-19): 백본이 SDUM→PromptMR+로 교체됨.** network·학습 측 배선(빌드 분기·손실·
+> 옵티마이저·grad clip/accum·resume·coil compression)은 이미 PromptMR+ 기준으로 재배선됨 → 현행은
+> [`promptmr_plus.md`](promptmr_plus.md). 아래 ⬜ 미구현 중 **GRAPPA prior→`varnet.py`** 항목은 옛 VarNet 백본 기준
+> 이라 그대로 따르지 말 것(현재 백본은 promptmr). 데이터 측(readout crop·정규화·coil compression 등)은 백본 무관·유효.
 > 상태 범례: ✅ 구현됨 · ⏳ 보류(외부조건) · ⬜ 미구현.
 > **데이터 측(utils/data/)은 2026-07-04 구현·검증 완료**(플래그 전부 기본 off라 기존과 비트 동일). network·학습 측은 동료 담당.
 

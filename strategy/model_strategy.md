@@ -1,5 +1,9 @@
 # 모델·메모리·구조 전략 (non-augmentation) — FastMRI 2026
 
+> ⚠️ **일부 SUPERSEDED (2026-07-19): 백본이 SDUM→PromptMR+로 교체됨. 현재 백본 SPEC = [`promptmr_plus.md`](promptmr_plus.md).**
+> 이 문서의 VarNet·SDUM 백본 서술은 **당시 설계 근거 기록**으로 보존한다. 8GB·FP32·채점축(SSIM_full+bbox+시간)
+> 같은 **모델 무관 제약·전략은 유효**하나, 백본 구조·손실·레버는 promptmr_plus.md가 우선한다.
+
 > 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
 > 확정 항목은 여기서 재정의하지 않고 confirmed_model을 따른다. 이 문서는 그 배경·근거.
 > augmentation이 아닌, 논문 재검토에서 나온 **아키텍처·입력 설계·메모리·효율 전략**을 모으는 문서.

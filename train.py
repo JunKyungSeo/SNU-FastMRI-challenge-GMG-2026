@@ -68,6 +68,10 @@ if __name__ == '__main__':
     # C1: bbox 가중 손실을 켜면 train 로더가 bbox를 실어와야 한다(λ=0이면 off → 기존 6-튜플 그대로).
     args.return_bbox = args.bbox_loss_lambda > 0
 
+    # --area-weight는 fg_mask가 필요 → --fg-loss 없이 주면 조용히 무시되므로 명시 경고.
+    if getattr(args, "area_weight", False) and not getattr(args, "fg_loss", False):
+        print("[warn] --area-weight는 --fg-loss와 함께 켜야 동작합니다(fg_mask 필요). 지금은 무시됩니다.")
+
     args.exp_dir = '../result' / args.net_name / 'checkpoints'
     args.val_dir = '../result' / args.net_name / 'reconstructions_val'
     args.main_dir = '../result' / args.net_name / __file__

@@ -28,7 +28,9 @@ def promptmr_kwargs(num_cascades=10, n_feat0=48, sens_n_feat0=24, n_history=3):
 
 
 def build_promptmr_net(args):
-    """train.py args → PromptMR 백본. CLI 레버: num_cascades / n_feat0 / sens_n_feat0 / n_history."""
+    """train.py args → PromptMR 백본. CLI 레버: num_cascades / n_feat0 / sens_n_feat0 / n_history.
+    ⚠️ feature_dim/prompt_dim 리스트는 **고정**이라 --n-feat0/--sens-n-feat0만 바꾸면 stem/skip/out 폭만
+    바뀌고 encoder-decoder 피라미드는 48/24 기준 그대로다(비례 스케일 아님). 폭 스윕 시 리스트도 함께 조정 필요."""
     return PromptMR(**promptmr_kwargs(
         num_cascades=int(args.num_cascades),
         n_feat0=int(getattr(args, "n_feat0", 48)),

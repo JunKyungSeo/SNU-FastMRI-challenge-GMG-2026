@@ -151,7 +151,8 @@ def build_scheduler(optimizer, args, len_loader):
     if getattr(args, "model", "varnet") != "promptmr" or getattr(args, "warmup_iters", 0) <= 0:
         return None
     accum = max(1, int(getattr(args, "accum_steps", 1)))
-    total_iters = (args.num_epochs * len_loader) // accum   # optimizer-step 수
+    # epoch당 optimizer step = ceil(len/accum) (train_epoch 꼬리 step 포함). floor면 스케줄이 어긋남.
+    total_iters = args.num_epochs * math.ceil(len_loader / accum)   # optimizer-step 수
     warmup = args.warmup_iters
 
     def lr_lambda(step):
@@ -165,10 +166,14 @@ def build_scheduler(optimizer, args, len_loader):
 
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
+    # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
+    # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
+    ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8}
     for f in ("model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
               "num_epochs", "warmup_iters", "lr", "accum_steps",
               "coil_compress", "n_virtual_coils"):
-        s, c = getattr(saved_args, f, None), getattr(args, f, None)
+        fallback = ABSENT_DEFAULT.get(f, None)
+        s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)
         if s != c:
             raise ValueError(
                 f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."
@@ -254,7 +259,7 @@ def train(args):
         optimizer.load_state_dict(resume_ckpt["optimizer"])   # scheduler 생성 후에 로드(initial_lr=base 유지)
         if scheduler is not None:
             accum = max(1, int(getattr(args, "accum_steps", 1)))
-            opt_steps_per_epoch = steps_per_epoch(args, len(train_loader)) // accum   # scheduler는 optimizer-step당 1회
+            opt_steps_per_epoch = math.ceil(steps_per_epoch(args, len(train_loader)) / accum)   # ceil = 꼬리 step 포함(build_scheduler와 일치)
             for _ in range(start_epoch * opt_steps_per_epoch):
                 scheduler.step()
             print(f"[resume] scheduler fast-forward {start_epoch}ep, lr={optimizer.param_groups[0]['lr']:.3e}")

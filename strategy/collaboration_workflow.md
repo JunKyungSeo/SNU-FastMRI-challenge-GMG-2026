@@ -1,6 +1,6 @@
 # 협업 워크플로우 — train → 분석 → 코멘트 → 반영 → 반복
 
-이 repo에서 **SDUM 학습을 굴리는 전체 사이클.** 사람(팀원)과 Claude가 번갈아 도는 루프다.
+이 repo에서 **학습(현재 백본 = PromptMR+)을 굴리는 전체 사이클.** 사람(팀원)과 Claude가 번갈아 도는 루프다.
 
 ```
  ① 큐에 훈련 등록  →  ② 실행(로그 남김)  →  ③ Claude에 분석 요청
@@ -21,9 +21,9 @@ GPU 쓰는 명령(train/recon)은 **`shell_scripting/shellN.sh` 슬롯**에만 �
 
 **슬롯 채우기** — 슬롯 파일을 열어 (a) 맨 위 `# 목적:` 한 줄, (b) 실제 명령 작성:
 ```bash
-python train.py --model sdum --num-cascades 4 --channels 16 32 \
-  -b 1 -l 2.4e-4 -e 2 -r 500 --warmup-iters 200 --readout-crop \
-  -n sdum_run5 --run-tag run5 -t /root/Data/train/ -v /root/Data/val/
+python train.py --model promptmr --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --use-checkpoint \
+  -b 1 -l 1e-6 -e 10 -r 500 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 \
+  -n promptmr_run1 --run-tag run1 -t /root/Data/train/ -v /root/Data/val/
 ```
 - `-n <name>` : 결과 폴더 `../result/<name>/`. **run마다 다르게.**
 - `--run-tag runN` : `val_loss_log`을 run별로 분리 저장(덮어쓰기 방지).

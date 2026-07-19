@@ -1,5 +1,10 @@
 # 모델 결정 사안 (Model Decision Points) — SDUM 백본 이식
 
+> ⚠️ **SUPERSEDED (2026-07-19): 백본이 SDUM에서 PromptMR+로 교체됨. 현재 SPEC = [`promptmr_plus.md`](promptmr_plus.md).**
+> 이 문서는 **SDUM 이식 시기의 결정 노브 기록**으로 보존한다. 아래 SDUM 5원리(Restormer·per-cascade CSME·
+> SWDC·UC·progressive expansion) 논의는 더 이상 현행 아님. 다만 **모델 무관 결정**(A11 SVD coil compression,
+> B9 손실 방향, 8GB·FP32·batch1 제약)은 PromptMR+에도 유효하다. 현재 백본의 확정 구조·레버는 `promptmr_plus.md`.
+
 > 상태: **초안 (2026-07-06)** · 검토 대기. 아직 SPEC 아님(확정은 [`confirmed_model.md`](confirmed_model.md)).
 > 배경: 기존 **E2E-VarNet 백본을 완전히 제거하고 SDUM으로 교체**하기로 결정. 이 문서는 SDUM을 우리 대회 환경(knee 전용·8GB·FP32)에 이식할 때 **우리가 직접 정해야 하는 결정 노브**를 정리한다.
 > 논문: SDUM — *A Scalable Deep Unrolled Model for Universal MRI Reconstruction* (arXiv:2512.17137, JHU+NVIDIA).

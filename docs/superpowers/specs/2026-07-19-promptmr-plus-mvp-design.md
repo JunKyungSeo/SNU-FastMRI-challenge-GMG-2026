@@ -45,11 +45,12 @@ PromptMR+ 는 **Deep Unrolled Model(DUM)**: T개 cascade(논문 기본 T=12, 가
 정확성은 **공식 v2**에서, 실전성(SNU 어댑팅·8GB 튜닝)은 **2025 clone**에서 가져온다.
 
 - `utils/model/promptmr/`에 vendoring:
-  - `promptmr_v2.py`(백본: `PromptMR`, `PromptMRBlock`, `NormPromptUnet`, `PromptUnet`, `SensitivityModel`)
-  - `blocks.py`(= 공식 `models/utils.py`: `CAB`, `PromptBlock`, `DownBlock`, `UpBlock`, `SkipBlock`, `KspaceACSExtractor`)
-  - `__init__.py`
-  - **`batched_mask_center`는 inline** 하여 공식 코드의 `from data import transforms` 결합을 끊는다(→ 백본이 torch+einops만으로 도는 상태).
-- **FFT/coil 라이브러리는 repo에 이미 vendoring된 `utils/model/fastmri/` 재사용**(`ifft2c`, `rss`, `complex_*`, `sens_expand/reduce`). mri_utils를 두 번째로 vendoring하지 않는다 — FFT/coil 구현은 repo에 하나만.
+  - `promptmr.py`(백본 단일 파일: `PromptMR`·`PromptMRBlock`·`NormPromptUnet`·`PromptUnet`·`SensitivityModel` + 블록류 `CAB`/`PromptBlock`/`Down`/`Up`/`SkipBlock`/`KspaceACSExtractor`). clone `promptmr_plus.py`가 이미 self-contained(블록·모델 한 파일)라 분할하지 않는다 — surgical.
+  - `config.py`(tiny config dict factory), `adapter.py`(`build_promptmr`), `__init__.py`.
+  - clone은 이미 **`batched_mask_center`를 inline**했고 `from data import transforms` 대신 repo-local `import fastmri`를 쓰며 384-crop image를 반환한다 → 공식 v2 vendoring에서 해야 할 변형이 이미 돼 있는 상태.
+- **FFT/coil 라이브러리는 repo `utils/model/fastmri/` 재사용.** 단 유일한 격차 = `sens_expand`/`sens_reduce`(num_adj_slices 인자)가 repo fastmri엔 없음 → clone 정의(정본 PromptMR ops)를 `coil_combine.py`에 **2함수 추가**. `ifft2c`/`rss`/`complex_*`는 이미 존재.
+- gradient checkpointing `reentrant_wrapper.py`를 `utils/model/`에 vendoring.
+- **정합 수정(clone→공식 v2)**: PromptUnet `reduction` 2→4(v2), `ReLU(inplace=False)` 유지(reentrant checkpointing 안전), `out_chans … else in_chans`는 v2와 동일이라 유지, `forward()`의 SNU mask 재정렬 블록은 우리 `(B,1,1,W,1)` mask에 맞게 재작성(`.cuda()`·reshape 제거, `num_low_frequencies=None`로 ACS 자동 도출).
 - gradient checkpointing용 `reentrant_wrapper.py`는 clone에서 가져온다.
 - **clone의 의심 수정 2곳은 공식 v2와 대조 검증**: `reduction=2` 로컬 변경, `out_chans` fallback 분기(`adaptive_input=False`일 때 `in_chans`로 떨어지는 부분). 충돌 시 **공식 v2 우선**.
 - ⚠️ **Rutgers non-commercial 저작권 고지**를 vendoring 파일에 유지(대회 제출물 라이선스 이슈). 대회=비상업 연구이므로 사용 허용, 단 고지 유지 의무.

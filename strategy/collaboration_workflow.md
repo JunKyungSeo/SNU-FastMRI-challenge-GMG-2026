@@ -87,7 +87,7 @@ python 파일을 수정해도 현재 수행중인 학습에 영향을 끼치지 
 
 1. **중단**: 큐 스킵(다음 슬롯으로) 또는 `pkill -f train.py`. epoch 경계 저장이라 **직전 완료 epoch**의 `model.pt`가 남는다(진행 중이던 epoch은 버려짐).
 2. **채점**: `python recon_eval.py -n <net_name> -p /root/Data/leaderboard` → SSIM_full/bbox/시간 3축.
-3. **재개**: 같은 명령에 `--resume`만 추가해 다시 큐로. `-n`·config(`--num-cascades`/`--channels`/`--num-epochs`/`--warmup-iters`)는 **원래와 동일해야** 함(다르면 거부됨). cosine은 원래 horizon 이어서 감쇠.
+3. **재개**: 같은 명령에 `--resume`만 추가해 다시 큐로. `-n`·config(`--num-cascades`/`--n-feat0`/`--sens-n-feat0`/`--n-history`/`--num-epochs`/`--warmup-iters`/`--lr`/`--accum-steps`)는 **원래와 동일해야** 함(다르면 거부됨). cosine은 원래 horizon 이어서 감쇠.
 
 > resume는 "원래 계획 epoch까지" 이어감. 더 길게 하려면 fresh run으로 새로.
 

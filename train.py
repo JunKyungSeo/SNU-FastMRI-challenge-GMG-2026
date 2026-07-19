@@ -28,6 +28,10 @@ def parse():
     parser.add_argument('--cascade', type=int, default=1, help='Number of cascades | Should be less than 12') ## important hyperparameter
     parser.add_argument('--chans', type=int, default=9, help='Number of channels for cascade U-Net | 18 in original varnet') ## important hyperparameter
     parser.add_argument('--sens_chans', type=int, default=4, help='Number of channels for sensitivity map U-Net | 8 in original varnet') ## important hyperparameter
+    parser.add_argument('--model', type=str, default='varnet', choices=['varnet', 'promptmr'], help='Backbone: varnet(기본) 또는 promptmr')
+    parser.add_argument('--num-cascades', type=int, default=6, help='PromptMR cascade 수 T')
+    parser.add_argument('--channels', type=int, nargs='+', default=[24, 32, 40], help='PromptMR PromptUnet feature_dim (3 level)')
+    parser.add_argument('--n-feat0', type=int, default=16, help='PromptMR PromptUnet n_feat0 (stem 폭)')
     parser.add_argument('--input-key', type=str, default='kspace', help='Name of input key')
     parser.add_argument('--target-key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max-key', type=str, default='max', help='Name of max key in attributes')

@@ -19,6 +19,10 @@ def parse():
     parser.add_argument('--cascade', type=int, default=1, help='Number of cascades | Should be less than 12')
     parser.add_argument('--chans', type=int, default=9, help='Number of channels for cascade U-Net')
     parser.add_argument('--sens_chans', type=int, default=4, help='Number of channels for sensitivity map U-Net')
+    parser.add_argument('--model', type=str, default='varnet', choices=['varnet', 'promptmr'], help='Backbone: varnet 또는 promptmr')
+    parser.add_argument('--num-cascades', type=int, default=6, help='PromptMR cascade 수 T')
+    parser.add_argument('--channels', type=int, nargs='+', default=[24, 32, 40], help='PromptMR feature_dim')
+    parser.add_argument('--n-feat0', type=int, default=16, help='PromptMR n_feat0')
     parser.add_argument("--input_key", type=str, default='kspace', help='Name of input key')
 
     args = parser.parse_args()

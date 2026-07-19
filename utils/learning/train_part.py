@@ -185,9 +185,13 @@ def train(args):
     torch.cuda.set_device(device)
     print('Current cuda device: ', torch.cuda.current_device())
 
-    model = VarNet(num_cascades=args.cascade,
-                   chans=args.chans,
-                   sens_chans=args.sens_chans)
+    if getattr(args, "model", "varnet") == "promptmr":
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(args)
+    else:
+        model = VarNet(num_cascades=args.cascade,
+                       chans=args.chans,
+                       sens_chans=args.sens_chans)
     model.to(device=device)
 
     resume_ckpt = None
@@ -196,7 +200,10 @@ def train(args):
         model.load_state_dict(resume_ckpt["model"])
 
     loss_type = SSIMLoss().to(device=device)
-    optimizer = torch.optim.Adam(model.parameters(), args.lr)
+    if getattr(args, "model", "varnet") == "promptmr":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
+    else:
+        optimizer = torch.optim.Adam(model.parameters(), args.lr)
 
     best_val_loss = 1.
     start_epoch = 0

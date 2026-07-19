@@ -20,10 +20,14 @@ INPUT_KIND = "kspace"
 def load_model(args, device):
     ckpt = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
     saved = ckpt.get('args', args)  # 학습 때 저장된 args(아키텍처 인자 포함)
-    model = VarNet(
-        num_cascades=getattr(saved, 'cascade', args.cascade),
-        chans=getattr(saved, 'chans', args.chans),
-        sens_chans=getattr(saved, 'sens_chans', args.sens_chans))
+    if getattr(saved, 'model', 'varnet') == 'promptmr':
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(saved)
+    else:
+        model = VarNet(
+            num_cascades=getattr(saved, 'cascade', args.cascade),
+            chans=getattr(saved, 'chans', args.chans),
+            sens_chans=getattr(saved, 'sens_chans', args.sens_chans))
     model.load_state_dict(ckpt['model'])
     model.eval()
     return model.to(device=device)
@@ -74,11 +78,15 @@ def forward(args):
     torch.cuda.set_device(device)
     print ('Current cuda device ', torch.cuda.current_device())
 
-    model = VarNet(num_cascades=args.cascade,
-                   chans=args.chans,
-                   sens_chans=args.sens_chans)
+    if getattr(args, "model", "varnet") == "promptmr":
+        from utils.model.promptmr.adapter import build_promptmr
+        model = build_promptmr(args)
+    else:
+        model = VarNet(num_cascades=args.cascade,
+                       chans=args.chans,
+                       sens_chans=args.sens_chans)
     model.to(device=device)
-    
+
     checkpoint = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
     print(checkpoint['epoch'], checkpoint['best_val_loss'].item())
     model.load_state_dict(checkpoint['model'])

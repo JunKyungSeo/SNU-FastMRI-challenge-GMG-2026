@@ -30,11 +30,13 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
         if grad_clip > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)   # 0으로 채우지 말고 버퍼째 해제(그만큼 VRAM 반환)
         if scheduler is not None:
             scheduler.step()   # optimizer-step당 1회 (warmup→cosine)
 
-    optimizer.zero_grad()
+    optimizer.zero_grad(set_to_none=True)
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()   # epoch 단위 peak 측정(아래 로그에서 출력)
     pending = 0     # backward는 됐지만 아직 optimizer.step 안 한 마이크로배치 수
     processed = 0
 
@@ -86,6 +88,11 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     if pending > 0:      # 꼬리: 남은 누적분 step (epoch 끝/max-iters 경계)
         _do_step()
     total_loss = total_loss / max(1, processed)
+    if torch.cuda.is_available():
+        # 코일 압축을 뺀 뒤로는 peak 이 8GB에 얼마나 붙어 있는지가 상시 관심사 → epoch마다 남긴다.
+        print(f'[mem] epoch {epoch} peak allocated = '
+              f'{torch.cuda.max_memory_allocated() / 1024**3:.2f}GB / '
+              f'reserved = {torch.cuda.max_memory_reserved() / 1024**3:.2f}GB')
     return total_loss, time.perf_counter() - start_epoch
 
 
@@ -173,9 +180,13 @@ def check_resume_compat(saved_args, args):
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
-              "warmup_iters", "lr", "accum_steps", "coil_compress", "n_virtual_coils"]
+              "warmup_iters", "lr", "accum_steps", "coil_compress"]
     if int(getattr(args, "warmup_iters", 0)) > 0:   # cosine horizon 있을 때만 num_epochs 고정
         fields.append("num_epochs")
+    # n_virtual_coils는 압축이 켜져 있을 때만 입력에 영향을 준다. 압축 off끼리 재개하는데
+    # 죽은 값이 다르다고 막으면 헛돈다(코일 전부 사용이 기본이 된 뒤로는 이 경우가 정상 경로다).
+    if getattr(saved_args, "coil_compress", False) or getattr(args, "coil_compress", False):
+        fields.append("n_virtual_coils")
     for f in fields:
         fallback = ABSENT_DEFAULT.get(f, None)
         s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)

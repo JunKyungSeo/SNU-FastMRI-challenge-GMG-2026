@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import einops
+from torch.utils.checkpoint import checkpoint
 
 import fastmri
 from utils.common.utils import center_crop
@@ -351,11 +352,18 @@ class PromptUnet(nn.Module):
 
         # 4. last conv
         if self.n_history > 0:
+            # ⚠️ 원본과 다른 점: 원본은 인자로 받은 history_feat 리스트를 제자리(in-place)로 갱신한다.
+            #    그러면 cascade 를 gradient checkpointing 으로 감쌀 때 조용히 틀린 gradient 가 나온다 —
+            #    역전파 재계산이 "이미 갱신된" 리스트를 입력으로 다시 읽어서 순전파와 다른 값을 만든다.
+            #    (checkpoint 없이는 호출자가 반환값으로 바로 재바인딩해서 차이가 안 보인다.)
+            #    새 리스트를 만들어 반환하면 결과는 그대로면서 재계산이 항상 같은 입력을 본다.
+            new_history_feat = []
             for i, history_feat_i in enumerate(history_feat):
                 if history_feat_i is None:  # for the first cascade, repeat the current feature
-                    history_feat[i] = torch.cat([torch.tile(current_feat[i], (1, self.n_history, 1, 1))], dim=1)
+                    new_history_feat.append(torch.cat([torch.tile(current_feat[i], (1, self.n_history, 1, 1))], dim=1))
                 else:  # for the rest cascades: pop the oldest feature and append the current feature
-                    history_feat[i] = torch.cat([current_feat[i], history_feat[i][:, :-self.feature_dim[2-i]]], dim=1)
+                    new_history_feat.append(torch.cat([current_feat[i], history_feat_i[:, :-self.feature_dim[2-i]]], dim=1))
+            history_feat = new_history_feat
         return self.conv_last(x), history_feat
 
 class NormPromptUnet(nn.Module):
@@ -601,19 +609,35 @@ class PromptMR(nn.Module):
                 
             mask = torch.stack([mask.squeeze(2).clone() for _ in range(masked_kspace.shape[2])], dim=2)
 
-        self.sens_net_ckp.use_checkpoint = use_checkpoint
-        sens_maps = self.sens_net_ckp(masked_kspace, mask, num_low_frequencies, mask_type, compute_sens_per_coil)
-        
+        if compute_sens_per_coil:
+            # 코일 단위 checkpoint 를 compute_sens 안에서 직접 걸므로 바깥 통짜 wrapper 는 쓰지 않는다.
+            # (겹쳐 걸면 바깥 재계산이 코일 루프를 통째로 되살려 코일 단위 절감이 무의미해진다.)
+            sens_maps = self.sens_net(masked_kspace, mask, num_low_frequencies, mask_type,
+                                      compute_sens_per_coil, use_checkpoint)
+        else:
+            self.sens_net_ckp.use_checkpoint = use_checkpoint
+            sens_maps = self.sens_net_ckp(masked_kspace, mask, num_low_frequencies, mask_type, compute_sens_per_coil)
+
         img_zf = fastmri.sens_reduce(masked_kspace, sens_maps)
         img_pred = img_zf.clone()
         latent = img_zf.clone()
         history_feat = None
 
         for cascade in self.cascades:
-            img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
+            if use_checkpoint and self.training:
+                # cascade 당 (B,C,H,W,2) 중간 텐서가 ~5개 살아남는다(sens_expand·fft2c·where·ifft2c
+                # ·complex_mul). 코일 압축을 없애면 C=15 라 이게 cascade 수만큼 그대로 쌓인다.
+                # cascade 단위로 끊으면 역전파 때 한 cascade 분만 재현되므로 nc 를 늘려도 평평해진다.
+                img_pred, latent, history_feat = checkpoint(
+                    cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat,
+                    use_reentrant=False,
+                )
+            else:
+                img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
 
         # slim: 단일 슬라이스라 중앙 슬라이스 추출(chunk) 불필요 → RSS로 바로 coil-combine.
-        img_pred = fastmri.rss(fastmri.complex_abs(fastmri.complex_mul(img_pred.clone(), sens_maps.clone())), dim=1)
+        # complex_mul 은 torch.stack 으로 새 텐서를 만들어 입력을 건드리지 않는다 → clone 불필요.
+        img_pred = fastmri.rss(fastmri.complex_abs(fastmri.complex_mul(img_pred, sens_maps)), dim=1)
         img_pred = center_crop(img_pred, 384, 384)
 
         return img_pred
@@ -666,12 +690,22 @@ class SensitivityModel(nn.Module):
         # per-pixel coil normalization: sum_c |S_c|^2 = 1
         return x / fastmri.rss_complex(x, dim=1).unsqueeze(-1).unsqueeze(1)
 
-    def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool) -> torch.Tensor:
+    def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool,
+                     use_checkpoint: bool = False) -> torch.Tensor:
         bc = images.shape[0]  # batch_size * n_coils
         if compute_per_coil:
             output = []
             for i in range(bc):
-                output.append(model(images[i].unsqueeze(0))[0])
+                image_i = images[i].unsqueeze(0)
+                if use_checkpoint and self.training:
+                    # ⚠️ 코일 "하나씩" checkpoint 하는 게 핵심이다. sens_net 전체를 한 덩어리로
+                    # checkpoint 하면 순전파 peak 만 줄고, 역전파 재계산 때 이 루프가 통째로 다시
+                    # 돌면서 B*C 코일분 activation 이 동시에 살아난다(= 절감 효과가 사라짐).
+                    # 코일 단위로 끊으면 재계산 중에도 한 코일분만 살아 있다.
+                    out_i = checkpoint(lambda t: model(t)[0], image_i, use_reentrant=False)
+                else:
+                    out_i = model(image_i)[0]
+                output.append(out_i)
             output = torch.cat(output, dim=0)
         else:
             output = model(images)[0]
@@ -684,6 +718,7 @@ class SensitivityModel(nn.Module):
         num_low_frequencies: Optional[Union[int, torch.Tensor]] = None,
         mask_type: Tuple[str] = ("cartesian",),
         compute_per_coil: bool = False,
+        use_checkpoint: bool = False,
     ) -> torch.Tensor:
 
         masked_kspace_acs = self.kspace_acs_extractor(masked_kspace, mask, num_low_frequencies, mask_type)
@@ -691,5 +726,7 @@ class SensitivityModel(nn.Module):
         images, batches = self.chans_to_batch_dim(fastmri.ifft2c(masked_kspace_acs))
 
         return self.divide_root_sum_of_squares(
-            self.batch_chans_to_chan_dim(self.compute_sens(self.norm_unet, images, compute_per_coil), batches)
+            self.batch_chans_to_chan_dim(
+                self.compute_sens(self.norm_unet, images, compute_per_coil, use_checkpoint), batches
+            )
         )

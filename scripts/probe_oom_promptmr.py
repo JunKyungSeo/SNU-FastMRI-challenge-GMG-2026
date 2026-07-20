@@ -23,7 +23,7 @@ def probe(nc, nf, snf, nh, ckpt, H=640, W=368, C=15):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     args = SimpleNamespace(num_cascades=nc, n_feat0=nf, sens_n_feat0=snf,
                            n_history=nh, use_checkpoint=ckpt)
-    tag = f"cascades={nc} n_feat0={nf} sens={snf} n_hist={nh} ckpt={ckpt}"
+    tag = f"cascades={nc} n_feat0={nf} sens={snf} n_hist={nh} ckpt={ckpt} coils={C} HxW={H}x{W}"
     model = build_promptmr(args).to(dev).train()
     ksp = torch.randn(1, C, H, W, 2, device=dev)
     mask = torch.zeros(1, 1, 1, W, 1, dtype=torch.uint8, device=dev)
@@ -53,6 +53,12 @@ if __name__ == "__main__":
     ap.add_argument("--sens-n-feat0", type=int, default=24)
     ap.add_argument("--n-history", type=int, default=3)
     ap.add_argument("--no-use-checkpoint", dest="use_checkpoint", action="store_false")
+    # 코일 압축을 안 쓰기로 했으므로 최악 shape(readout-crop 384 × 최대폭 480 × 물리코일 15)를
+    # 그대로 재볼 수 있어야 한다. 기본값은 기존 동작(H=640, W=368) 유지.
+    ap.add_argument("--crop-h", type=int, default=640, help="readout(높이). --readout-crop 학습이면 384")
+    ap.add_argument("--width", type=int, default=368, help="PE 폭. 학습셋 최대는 480(파일 1개)")
+    ap.add_argument("--coils", type=int, default=15, help="코일 수. 압축 없이 전부 쓰면 15")
     ap.set_defaults(use_checkpoint=True)
     a = ap.parse_args()
-    probe(a.num_cascades, a.n_feat0, a.sens_n_feat0, a.n_history, a.use_checkpoint)
+    probe(a.num_cascades, a.n_feat0, a.sens_n_feat0, a.n_history, a.use_checkpoint,
+          H=a.crop_h, W=a.width, C=a.coils)

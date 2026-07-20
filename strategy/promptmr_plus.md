@@ -109,3 +109,54 @@ python train.py --model promptmr --readout-crop --coil-compress --n-virtual-coil
 - 여유 1.94GB로 폭 가변(W≤480)에 robust. 그래도 다른 GPU 작업과 동시 실행은 피할 것.
 - 슬롯: `shell11.sh`(스모크, --max-iters 120으로 넓은폭 관통) · `shell12.sh`(실학습 5ep+채점) · `shell12_resume.sh`(재개).
 - 메모리 탐침: `scripts/probe_oom_promptmr.py`.
+
+---
+
+## 재검토: coil compression 을 빼고 구조적으로 절감 (2026-07-20)
+
+> **위 「해법 = coil compression (필수)」의 근거가 무너졌다.** 결론을 폐기하는 게 아니라,
+> **측정 전제가 틀렸으니 다시 재야 한다**는 뜻이다. 아래 탐침(`shell13.sh`) 결과가 나오기 전까지
+> 위 표와 이 절 중 어느 쪽도 확정이 아니다.
+
+**무엇이 틀렸나 — 위 실측은 checkpointing 이 실제로 안 걸린 상태에서 잰 값이다.**
+
+1. **cascade 는 checkpointing 된 적이 없다.** 위 문서는 "checkpointing이 cascade를 감싸도 무효였다"고
+   적었지만, `promptmr_plus.py` 의 cascade 루프는 `checkpoint` 없이 생으로 돌고 있었다.
+   `ReentrantWrapper` 는 `sens_net` 과 `UpBlock.up` 에만 걸려 있었다. 감싼 적이 없으니 무효였는지
+   알 수 없었다.
+2. **코일별 sens 분할이 무력화돼 있었다.** `compute_sens_per_coil=True` 로 코일을 하나씩 돌면서도,
+   그 바깥에서 `sens_net` 전체를 `use_reentrant=True` 로 한 번에 감쌌다. reentrant 는 역전파 때
+   구간 전체를 다시 실행하므로, 재계산 도중 15코일분 activation 이 동시에 살아난다.
+   순전파 peak 만 줄고 역전파 peak 은 그대로 — 코일별 분할의 목적이 사라진 상태였다.
+
+**고친 것** (`promptmr_plus.py`):
+
+- 코일 **하나씩** checkpoint (`compute_sens` 내부, `use_reentrant=False`). 바깥 통짜 wrapper 는
+  per-coil 경로에서 사용하지 않는다(겹쳐 걸면 다시 통째로 되살아난다).
+- cascade **하나씩** checkpoint (`PromptMR.forward` 루프).
+- ⚠️ 위 두 개를 켜려면 선결 버그 하나를 먼저 고쳐야 했다: `NormPromptUnet.forward` 가 인자로 받은
+  `history_feat` **리스트를 제자리 수정**하고 있었다. checkpoint 는 역전파 때 순전파를 다시 돌리는데,
+  그때 이미 갱신된 리스트를 입력으로 읽어 **조용히 틀린 gradient** 가 나온다. checkpoint 없이는
+  호출자가 반환값으로 즉시 재바인딩해서 증상이 안 보인다 — cascade checkpointing 을 켜는 순간
+  발현되는 잠복 버그였다. 새 리스트를 반환하도록 바꿨다(결과는 동일).
+  회귀 방지: `scripts/tests/test_checkpoint_equivalence.py` 가 checkpoint on/off 의 출력·전 파라미터
+  gradient 일치를 float64 로 강제한다.
+
+**측정된 것 (CPU, 역전파용으로 붙들고 있는 activation 총량, C=15 고정):**
+
+| cascades | ckpt 끔 | ckpt 켬 | 절감 |
+|---|---|---|---|
+| 2 | 132.5 MB | 6.4 MB | 95.2% |
+| 4 | 161.8 MB | 7.9 MB | 95.1% |
+| 8 | 221.5 MB | 10.1 MB | 95.4% |
+
+cascade 당 증가분이 **14.8MB → 0.6MB (약 25배)** 로 떨어진다. `nc` 를 10 으로 되돌릴 근거가 여기 있다.
+
+> ⚠️ **이 95% 를 CUDA peak 절감으로 읽지 말 것.** activation 만 잰 값이다. 파라미터·AdamW 상태·
+> cascade 루프 내내 붙들려 있는 `sens_maps (B,C,H,W,2)`·transient 워크스페이스는 그대로다.
+> 위 표의 "C=15 에서 nc=1 조차 OOM(7.57GB)" 이 말해주는 **코일 의존 바닥**이 얼마나 깎이는지는
+> **아직 실측 안 됨** — GPU 를 다른 작업이 점유 중이라 재지 못했다.
+
+**다음:** `bash shell_scripting/shell13.sh` (GPU 빈 상태) → 코일 15 로 들어가는 최대 `nc` 확인
+→ 그 값으로 `shell14.sh` 실학습. 탐침에서 여전히 전부 OOM 이면 위 「coil compression 필수」가
+(이번엔 제대로 된 근거로) 재확인되는 것이고, 그때는 `--coil-compress` 를 되살린다.

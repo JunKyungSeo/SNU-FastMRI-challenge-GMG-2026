@@ -15,7 +15,13 @@ from utils.model.varnet import VarNet
 
 import os
 
-def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None):
+def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None,
+                skip_iters=0, best_val_loss=1.):
+    """skip_iters: epoch 중간 재개 시 건너뛸 마이크로배치 수(latest.pt의 'iter').
+
+    건너뛰기는 data_loader를 그냥 돌리는 방식이라 h5 읽기·SVD 비용은 그대로 든다. 대신 GPU
+    forward/backward를 안 하므로 정상 학습보다는 빠르다. 순열 재현은 train()이 epoch마다
+    generator를 seed+epoch로 다시 심어서 보장한다."""
     model.train()
     start_epoch = start_iter = time.perf_counter()
     total_loss = 0.
@@ -39,10 +45,25 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
         torch.cuda.reset_peak_memory_stats()   # epoch 단위 peak 측정(아래 로그에서 출력)
     pending = 0     # backward는 됐지만 아직 optimizer.step 안 한 마이크로배치 수
     processed = 0
+    last_saved = skip_iters     # 마지막으로 latest.pt에 남긴 iter 위치
+    if skip_iters > 0:
+        print(f'[resume] epoch {epoch}: iter 0~{skip_iters - 1} 건너뛰는 중 '
+              f'(가중치는 iter {skip_iters} 시점 것) ...')
+        skip_start = time.perf_counter()
 
     for iter, data in enumerate(data_loader):
         if getattr(args, "max_iters", 0) and iter >= args.max_iters:
             break
+        if iter < skip_iters:
+            # 저장 지점까지 데이터만 흘려보낸다(모델·optimizer는 이미 그 시점 상태로 복원됨).
+            if (iter + 1) % args.report_interval == 0:
+                print(f'[resume] skip {iter + 1}/{skip_iters} '
+                      f'({time.perf_counter() - skip_start:.0f}s)')
+            continue
+        if iter == skip_iters and skip_iters > 0:
+            print(f'[resume] 건너뛰기 완료 ({time.perf_counter() - skip_start:.0f}s) '
+                  f'→ iter {skip_iters}부터 학습 재개')
+            start_iter = time.perf_counter()
         # bbox는 규약상 항상 맨 끝(DataTransform docstring) → 먼저 떼어내면 나머지는 기존 언패킹 그대로.
         bboxes = None
         if use_bbox:
@@ -75,6 +96,13 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
             pending = 0
         total_loss += loss.item()   # 로깅은 raw loss
         processed += 1
+
+        # optimizer step 경계(pending==0)에서만 저장한다. 누적 도중에 저장하면 아직 step 안 된
+        # 마이크로배치들의 gradient가 재개 시 사라진다. '>= ckpt_every'라서 accum과 ckpt_every가
+        # 서로 안 나누어떨어져도 첫 step 경계에서 정확히 한 번 걸린다.
+        if CKPT_EVERY_ITERS > 0 and pending == 0 and (iter + 1) - last_saved >= CKPT_EVERY_ITERS:
+            save_latest(args, args.exp_dir, epoch, iter + 1, model, optimizer, best_val_loss)
+            last_saved = iter + 1
 
         if iter % args.report_interval == 0:
             print(
@@ -196,13 +224,35 @@ def check_resume_compat(saved_args, args):
             )
 
 
+def _ckpt_pos(path):
+    """체크포인트의 진행 위치 (epoch, iter)만 확인하고 즉시 해제.
+
+    두 후보를 동시에 들고 비교하면 345MB×2가 한꺼번에 떠서, 이 기능이 막으려는 바로 그 OOM을
+    유발한다(노드 여유가 수백 MB뿐). 그래서 위치만 훑고 버린 뒤 이긴 쪽만 다시 로드한다 —
+    로드 한 번(~2초)을 더 내고 동시 점유를 피하는 거래."""
+    if not path.exists():
+        return None
+    ck = torch.load(path, map_location="cpu", weights_only=False)
+    # model.pt의 'epoch'는 완료한 epoch 수 = 다음 epoch의 iter 0 지점. latest.pt는 진행 중 epoch + iter.
+    pos = (int(ck["epoch"]), int(ck.get("iter", 0)))
+    del ck
+    return pos
+
+
 def load_resume_checkpoint(exp_dir, args):
-    """model.pt(마지막 epoch) 로드 + config 일치 확인. 없으면 FileNotFoundError."""
-    ckpt_path = Path(exp_dir) / "model.pt"
-    if not ckpt_path.exists():
-        raise FileNotFoundError(f"--resume인데 checkpoint 없음: {ckpt_path}")
-    ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=False)
+    """model.pt(epoch 경계) / latest.pt(epoch 중간) 중 **더 진행된** 쪽 로드 + config 일치 확인.
+
+    (epoch, iter) 튜플 비교라 epoch가 정상 완료돼 model.pt가 (E+1, 0)이 되면 그게 자동으로
+    같은 epoch의 latest.pt (E, 4500)를 이긴다 → 낡은 중간 체크포인트를 지울 필요가 없다."""
+    exp_dir = Path(exp_dir)
+    cands = {n: _ckpt_pos(exp_dir / n) for n in ("model.pt", "latest.pt")}
+    cands = {n: p for n, p in cands.items() if p is not None}
+    if not cands:
+        raise FileNotFoundError(f"--resume인데 checkpoint 없음: {exp_dir}/(model.pt|latest.pt)")
+    name = max(cands, key=cands.get)
+    ckpt = torch.load(exp_dir / name, map_location="cpu", weights_only=False)
     check_resume_compat(ckpt["args"], args)
+    print(f"[resume] 후보 {dict(cands)} → {name} 선택")
     return ckpt
 
 
@@ -226,6 +276,38 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
     )
     if is_new_best:
         shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
+
+
+# epoch 단위 저장(model.pt)만으로는 컨테이너가 죽을 때 그 epoch 진행분을 통째로 잃는다
+# (2026-07-20 OOM 2건에서 실측 1시간 28분 유실). 그래서 epoch 중간에도 latest.pt를 남긴다.
+CKPT_EVERY_ITERS = 500     # 0이면 iter 단위 저장 off
+
+
+def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss):
+    """epoch 중간 체크포인트를 latest.pt에 원자적으로 저장.
+
+    model.pt와 별도 파일이다 — 저장 도중 죽어도 epoch 단위 체크포인트는 멀쩡해야 한다.
+    tmp에 쓴 뒤 os.replace로 갈아끼운다(같은 파일시스템 내 rename은 원자적) → 저장 중 SIGKILL을
+    맞아도 latest.pt는 항상 '직전에 완결된 저장분'이지 반쪽짜리가 아니다.
+
+    Args:
+        iter_done: 이 epoch에서 **완료한** 마이크로배치 수. 재개는 여기서부터 시작한다.
+                   optimizer step 경계(pending==0)에서만 호출해야 누적분 유실이 없다.
+    """
+    tmp = exp_dir / 'latest.pt.tmp'
+    torch.save(
+        {
+            'epoch': epoch,          # 진행 중인 epoch(완료 아님). model.pt의 epoch는 '완료+1'이라 의미가 다름.
+            'iter': iter_done,
+            'args': args,
+            'model': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'best_val_loss': best_val_loss,
+            'exp_dir': exp_dir,
+        },
+        f=tmp,
+    )
+    os.replace(tmp, exp_dir / 'latest.pt')
 
         
 def train(args):
@@ -255,12 +337,14 @@ def train(args):
 
     best_val_loss = 1.
     start_epoch = 0
+    start_iter = 0     # epoch 중간 재개 지점(latest.pt에서만 0이 아님)
     if resume_ckpt is not None:
         start_epoch = resume_ckpt["epoch"]
+        start_iter = int(resume_ckpt.get("iter", 0))
         best_val_loss = resume_ckpt["best_val_loss"]
         if torch.is_tensor(best_val_loss):
             best_val_loss = best_val_loss.item()   # best_val_loss를 python float로 정규화(fresh run의 1.0과 타입 일치; is_new_best 비교 안전)
-        print(f"[resume] {args.exp_dir/'model.pt'} → start_epoch={start_epoch} best_val={best_val_loss:.4f}")
+        print(f"[resume] start_epoch={start_epoch} start_iter={start_iter} best_val={best_val_loss:.4f}")
 
 
     train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
@@ -276,9 +360,12 @@ def train(args):
         if scheduler is not None:
             accum = max(1, int(getattr(args, "accum_steps", 1)))
             opt_steps_per_epoch = math.ceil(steps_per_epoch(args, len(train_loader)) / accum)   # ceil = 꼬리 step 포함(build_scheduler와 일치)
-            for _ in range(start_epoch * opt_steps_per_epoch):
+            # epoch 중간 재개면 그 epoch에서 이미 밟은 step(start_iter // accum)도 더해야 LR이 맞는다.
+            # save_latest는 step 경계에서만 호출하므로 start_iter는 항상 accum의 배수라 나머지가 없다.
+            for _ in range(start_epoch * opt_steps_per_epoch + start_iter // accum):
                 scheduler.step()
-            print(f"[resume] scheduler fast-forward {start_epoch}ep, lr={optimizer.param_groups[0]['lr']:.3e}")
+            print(f"[resume] scheduler fast-forward {start_epoch}ep+{start_iter}it, "
+                  f"lr={optimizer.param_groups[0]['lr']:.3e}")
 
     run_tag = getattr(args, "run_tag", "")
     fname = f"val_loss_log_{run_tag}" if run_tag else "val_loss_log"
@@ -286,8 +373,16 @@ def train(args):
     val_loss_log = load_val_log(val_log_path) if resume_ckpt is not None else np.empty((0, 2))
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
-        
-        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler)
+
+        # epoch 순열을 (seed, epoch)만의 함수로 고정 — 재개 시 같은 순서를 재현해야 저장된
+        # iter까지 건너뛴 지점이 실제로 그때 그 지점이 된다. generator가 없으면(=val 로더 등)
+        # 아무것도 안 한다.
+        if getattr(train_loader, "generator", None) is not None:
+            train_loader.generator.manual_seed(int(args.seed) + epoch)
+
+        skip = start_iter if epoch == start_epoch else 0   # 중간 재개는 첫 epoch에만 적용
+        train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler,
+                                             skip_iters=skip, best_val_loss=best_val_loss)
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
         
         val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음

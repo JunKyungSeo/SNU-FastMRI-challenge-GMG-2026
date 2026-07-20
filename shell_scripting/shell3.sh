@@ -66,7 +66,7 @@ esac
 echo "[config] BASELINE=$BASELINE → FG_FLAG='$FG_FLAG' + C1(--bbox-loss-lambda 0.5) + UC(--uc)"
 
 # --- cv2 보장: fg-loss/bbox 경로가 transforms → metrics(cv2) 를 import. headless 서버. ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # λ=0.5 (사용자 확정). 손실 형태 = cap=2 합·스케일 X (loss_function.py::bbox_ssim_loss).
 #   병변 슬라이스 gradient(비병변=1.00): b=1 1.55 / b=2 2.11 / b≥3 2.11(cap). 평균병변 1.73.

@@ -52,7 +52,7 @@ echo "=========================================================="
 
 # --- cv2 보장: --fg-loss는 transforms → metrics(cv2)를 import하므로 학습에도 cv2 필요.
 #     libGL 없는 서버라 headless. 이미 되면 no-op. ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # ==========================================================
 #  ↓↓↓  실제 GPU 명령 (run11 = run10 + --fg-loss)  ↓↓↓

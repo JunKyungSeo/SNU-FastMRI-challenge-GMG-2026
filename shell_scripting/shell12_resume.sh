@@ -43,7 +43,7 @@ if [ ! -f ../result/promptmr_run1/checkpoints/model.pt ]; then
     exit 2
 fi
 
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # ==========================================================
 #  ↓↓↓  1) 이어학습 (shell12 와 동일 config + --resume, -e 10)  ↓↓↓

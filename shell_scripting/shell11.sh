@@ -45,7 +45,7 @@ if [ -n "$USED" ] && [ "$USED" -ge 500 ]; then
 fi
 
 # --- cv2 보장 (fg-loss가 metrics(cv2) import, headless 서버) ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # --- 검증 축소용 tiny val (1 볼륨만 심볼릭 링크) ---
 TINY_VAL="../result/promptmr_smoke/tiny_val"

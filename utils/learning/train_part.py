@@ -165,18 +165,23 @@ def build_scheduler(optimizer, args, len_loader):
 
 
 def check_resume_compat(saved_args, args):
-    """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon)."""
+    """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon).
+    num_epochs는 cosine 스케줄 horizon(total_iters=num_epochs*len)에만 영향 → cosine 활성
+    (warmup_iters>0)일 때만 일치를 요구한다. 상수 LR에선 num_epochs 증가(=학습 연장)를 허용:
+    루프 range(start_epoch, num_epochs)만 늘어날 뿐 LR 곡선이 바뀌지 않아 안전."""
     # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8}
-    for f in ("model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
-              "num_epochs", "warmup_iters", "lr", "accum_steps",
-              "coil_compress", "n_virtual_coils"):
+    fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
+              "warmup_iters", "lr", "accum_steps", "coil_compress", "n_virtual_coils"]
+    if int(getattr(args, "warmup_iters", 0)) > 0:   # cosine horizon 있을 때만 num_epochs 고정
+        fields.append("num_epochs")
+    for f in fields:
         fallback = ABSENT_DEFAULT.get(f, None)
         s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)
         if s != c:
             raise ValueError(
-                f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함(원래 계획까지만)."
+                f"--resume 불일치: '{f}' 저장={s} 현재={c}. 같은 config로 재개해야 함."
             )
 
 

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import torch
 import numpy as np
 from pathlib import Path
-from utils.learning.train_part import build_scheduler, steps_per_epoch, check_resume_compat, load_resume_checkpoint, load_val_log
+from utils.learning.train_part import build_scheduler, steps_per_epoch, check_resume_compat, load_resume_checkpoint, load_val_log, save_latest
 
 
 def _dummy_opt(lr):
@@ -102,6 +102,55 @@ def test_load_resume_checkpoint_compat_fail(tmp_path):
                tmp_path / "model.pt")
     with pytest.raises(ValueError):
         load_resume_checkpoint(tmp_path, _args(num_cascades=6))
+
+
+def _save_ckpt(path, epoch, iter_=None, **kw):
+    d = {"epoch": epoch, "args": _args(**kw), "model": {}, "optimizer": {},
+         "best_val_loss": 0.11, "exp_dir": str(path.parent)}
+    if iter_ is not None:
+        d["iter"] = iter_
+    torch.save(d, path)
+
+
+def test_latest_wins_when_mid_epoch(tmp_path):
+    """epoch 5를 완료(model.pt=(5,0))하고 epoch 5 중간까지 진행(latest.pt=(5,2500))이면 latest."""
+    _save_ckpt(tmp_path / "model.pt", 5)
+    _save_ckpt(tmp_path / "latest.pt", 5, 2500)
+    ckpt = load_resume_checkpoint(tmp_path, _args())
+    assert ckpt["epoch"] == 5 and ckpt["iter"] == 2500
+
+
+def test_model_wins_when_epoch_completed(tmp_path):
+    """epoch가 정상 완료되면 model.pt=(6,0)이 같은 epoch의 latest.pt=(5,4500)를 이긴다.
+    → 낡은 중간 체크포인트를 지우지 않아도 재개가 뒤로 가지 않는다."""
+    _save_ckpt(tmp_path / "model.pt", 6)
+    _save_ckpt(tmp_path / "latest.pt", 5, 4500)
+    ckpt = load_resume_checkpoint(tmp_path, _args())
+    assert ckpt["epoch"] == 6 and ckpt.get("iter", 0) == 0
+
+
+def test_latest_only(tmp_path):
+    """첫 epoch도 못 끝내고 죽으면 model.pt가 아예 없다 — latest.pt만으로 재개돼야 한다."""
+    _save_ckpt(tmp_path / "latest.pt", 0, 1500)
+    ckpt = load_resume_checkpoint(tmp_path, _args())
+    assert ckpt["epoch"] == 0 and ckpt["iter"] == 1500
+
+
+def test_latest_compat_checked(tmp_path):
+    """latest.pt로 재개할 때도 config 일치 검사가 걸려야 한다."""
+    _save_ckpt(tmp_path / "latest.pt", 3, 500, num_cascades=4)
+    with pytest.raises(ValueError):
+        load_resume_checkpoint(tmp_path, _args(num_cascades=6))
+
+
+def test_save_latest_is_atomic(tmp_path):
+    """save_latest는 tmp에 쓰고 rename — 끝나면 tmp가 남지 않고 latest.pt만 있어야 한다."""
+    save_latest(_args(), tmp_path, epoch=2, iter_done=1000,
+                model=torch.nn.Linear(2, 2), optimizer=_dummy_opt(1e-3), best_val_loss=0.2)
+    assert (tmp_path / "latest.pt").exists()
+    assert not (tmp_path / "latest.pt.tmp").exists()
+    ck = torch.load(tmp_path / "latest.pt", map_location="cpu", weights_only=False)
+    assert ck["epoch"] == 2 and ck["iter"] == 1000
 
 
 def test_load_val_log(tmp_path):

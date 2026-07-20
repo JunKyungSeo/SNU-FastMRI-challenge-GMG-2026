@@ -208,9 +208,13 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         forward=isforward,
     )
 
-    # 재현성: 증강/결정적 로더를 쓸 때만 generator·worker seed 부착(그 외엔 기존과 동일 동작).
+    # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
+    # shuffle=True(train)에도 항상 부착한다 — iter 단위 재개가 "epoch E의 순열"을 재현할 수 있어야
+    # 저장된 iter까지 정확히 건너뛸 수 있다. generator가 None이면 RandomSampler가 매 epoch 전역
+    # RNG에서 seed를 새로 뽑아 순열이 재현 불가가 된다. train_part.train()이 epoch마다
+    # manual_seed(seed + epoch)로 다시 심는다.
     num_workers = getattr(args, "num_workers", 0)
-    use_det = aug_on or getattr(args, "deterministic_loader", False)
+    use_det = aug_on or getattr(args, "deterministic_loader", False) or shuffle
     seed = getattr(args, "seed", None)
     generator = None
     if use_det and (seed is not None):

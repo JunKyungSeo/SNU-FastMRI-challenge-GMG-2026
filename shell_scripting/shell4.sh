@@ -35,7 +35,7 @@ echo "[LOG  ] $LOG"
 echo "=========================================================="
 
 # --- cv2 보장: fg-loss 경로가 metrics(cv2) 를 import. headless 서버. ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # ==========================================================
 #  ↓↓↓  실제 GPU 명령 = run11 + UC  (run11 config + --uc)  ↓↓↓

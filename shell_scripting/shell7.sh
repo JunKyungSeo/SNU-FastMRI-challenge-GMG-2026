@@ -33,7 +33,7 @@ echo "[LOG  ] $LOG"
 echo "=========================================================="
 
 # --- cv2 보장 (metrics.py import용, libGL 없는 서버 → headless). 이미 되면 no-op ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # ==========================================================
 #  ↓↓↓  실제 GPU 명령 (recon_eval)  ↓↓↓

@@ -45,7 +45,7 @@ if [ -n "$USED" ] && [ "$USED" -ge 500 ]; then
 fi
 
 # --- cv2 보장 (fg-loss·recon_eval metrics가 cv2 import) ---
-python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # ==========================================================
 #  ↓↓↓  1) PromptMR+ 실학습 (scratch, 5 epoch)  ↓↓↓

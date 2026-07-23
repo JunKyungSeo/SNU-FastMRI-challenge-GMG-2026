@@ -37,8 +37,8 @@
 #      보고는 있으나 수치가 없다. → 반드시 SMOKE=1 을 먼저 돌려 넓은폭 슬라이스를 관통시킬 것.
 #      학습 로그의 '[mem] epoch N peak allocated' 줄을 이번엔 꼭 training_anal/ 에 남긴다.
 #
-# 실행:  SMOKE=1 bash shell17.sh    (120 iter, 넓은폭 관통 OOM 확인 — 먼저 이걸)
-#        bash shell17.sh            (본 학습 10 epoch + 복원·채점)
+# 실행:  SMOKE=1 bash shell_scripting/shell18.sh    (120 iter, 넓은폭 관통 OOM 확인 — 먼저 이걸)
+#        bash shell_scripting/shell18.sh            (본 학습 10 epoch + 복원·채점)
 # ============================================================
 set -uo pipefail
 export PYTHONUNBUFFERED=1
@@ -57,7 +57,7 @@ exec > >(tee -a "$LOG") 2>&1
 
 SMOKE="${SMOKE:-0}"
 if [ "$SMOKE" = "1" ]; then
-    NET="promptmr_run4_smoke"; TAG="pmr_run4_smoke"; EXTRA="--max-iters 120"; EPOCHS=1
+    NET="promptmr_run5_smoke"; TAG="pmr_run5_smoke"; EXTRA="--max-iters 120"; EPOCHS=1
 else
     NET="promptmr_run5";       TAG="pmr_run5";       EXTRA="";                EPOCHS=10
 fi
@@ -80,20 +80,12 @@ fi
 # --- cv2 보장 (fg-loss·recon_eval metrics가 cv2 import) ---
 python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
-# --- 가드: 본 학습인데 스모크 산출물이 없으면 경고(강제는 안 함) ---
-#if [ "$SMOKE" != "1" ] && [ ! -d "../result/promptmr_run4_smoke" ]; then
-#    echo "[WARN] SMOKE 산출물(../result/promptmr_run4_smoke)이 없다."
-#    echo "       full coil·nc10 의 최악폭 VRAM peak는 아직 실측된 적이 없다."
-#    echo "       중단하려면 지금 Ctrl-C. 10초 후 그대로 진행한다."
-#    sleep 10
-#fi
-
 # ==========================================================
 #  ↓↓↓  1) PromptMR+ 학습 (full coil, scratch)  ↓↓↓
 # ==========================================================
 set -x
 python train.py --model promptmr --readout-crop \
-    --num-cascades 18 --n-feat0 48 --sens-n-feat0 24 --n-history 3 \
+    --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 \
     -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 4 --use-checkpoint  \
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 $EXTRA \
     -n "$NET" --run-tag "$TAG" \
@@ -108,7 +100,7 @@ if [ "$SMOKE" = "1" ]; then
     echo "[SMOKE] 채점 생략. 확인할 것 두 가지:"
     echo "        (1) OOM 없이 exit 0 인가 — 120 iter 안에 넓은폭(W=480) 슬라이스를 지난다."
     echo "        (2) iter 0 대비 Loss 가 내려가는가."
-    echo "        둘 다 OK면  bash shell_scripting/shell17.sh  로 본 학습(10 epoch)."
+    echo "        둘 다 OK면  bash shell_scripting/shell18.sh  로 본 학습(10 epoch)."
     echo "=========================================================="
     exit "$TRAIN_STATUS"
 fi
@@ -122,7 +114,7 @@ if [ "$TRAIN_STATUS" -eq 0 ]; then
     echo "[RECON] $NET 복원·채점 (SSIM_full + SSIM_bbox + 추론시간)..."
     set -x
     python recon_eval.py -n "$NET" -p /root/Data/leaderboard 2>&1 \
-        | tee "../result/$NET/recon_eval_run4.txt"
+        | tee "../result/$NET/recon_eval_run5.txt"
     { STATUS=$?; set +x; } 2>/dev/null
 else
     echo "[RECON] 학습이 exit=$TRAIN_STATUS 로 끝나 복원·채점 건너뜀."

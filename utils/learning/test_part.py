@@ -17,27 +17,52 @@ from utils.model.varnet import VarNet
 INPUT_KIND = "kspace"
 
 
-def load_model(args, device):
-    ckpt = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
-    saved = ckpt.get('args', args)  # 학습 때 저장된 args(model/num_cascades/n_feat0 등 포함)
+def _set_preproc(model, saved):
+    """전처리 정합: 학습과 동일 설정(readout crop·coil compression)을 ckpt args에서 읽어 recon_slice가 재적용.
+    ⚠️ 필수: 학습이 --readout-crop(H 640→384)·--coil-compress를 쓰면 추론도 같은 입력이어야 한다
+       (PromptMR는 비선형 → 입력 높이·코일수가 다르면 학습분포와 어긋나 성능 저하)."""
+    model.readout_crop = bool(getattr(saved, 'readout_crop', False))
+    model.crop_h = int(getattr(saved, 'crop_h', 384))
+    model.coil_compress = bool(getattr(saved, 'coil_compress', False))
+    model.n_virtual_coils = int(getattr(saved, 'n_virtual_coils', 8))
+    return model
+
+
+def _build_expert(saved, state_dict, default_args):
+    """저장된 args로 아키텍처를 재구성하고 가중치를 로드(CPU, eval). 단일 모델·MoE 전문가 공용."""
     if getattr(saved, 'model', 'varnet') == 'promptmr':
         from utils.model.promptmr.adapter import build_promptmr
         model = build_promptmr(saved)
         model.use_checkpoint = False   # 추론: gradient checkpointing 불필요
     else:
         model = VarNet(
-            num_cascades=getattr(saved, 'cascade', args.cascade),
-            chans=getattr(saved, 'chans', args.chans),
-            sens_chans=getattr(saved, 'sens_chans', args.sens_chans))
-    # 전처리 정합: 학습과 동일 설정(readout crop·coil compression)을 ckpt에서 읽어 recon_slice가 재적용.
-    # ⚠️ 필수: 학습이 --readout-crop(H 640→384)·--coil-compress를 쓰면 추론도 같은 입력이어야 한다
-    #    (PromptMR는 비선형 → 입력 높이·코일수가 다르면 학습분포와 어긋나 성능 저하).
-    model.readout_crop = bool(getattr(saved, 'readout_crop', False))
-    model.crop_h = int(getattr(saved, 'crop_h', 384))
-    model.coil_compress = bool(getattr(saved, 'coil_compress', False))
-    model.n_virtual_coils = int(getattr(saved, 'n_virtual_coils', 8))
-    model.load_state_dict(ckpt['model'])
+            num_cascades=getattr(saved, 'cascade', default_args.cascade),
+            chans=getattr(saved, 'chans', default_args.chans),
+            sens_chans=getattr(saved, 'sens_chans', default_args.sens_chans))
+    _set_preproc(model, saved)
+    model.load_state_dict(state_dict)
     model.eval()
+    return model
+
+
+def load_model(args, device):
+    ckpt = torch.load(args.exp_dir / 'best_model.pt', map_location='cpu', weights_only=False)
+
+    # MoE 결합 체크포인트: acc4/acc8 전문가를 마스크로 라우팅. recon_eval는 그대로(net_name 1개).
+    if ckpt.get('moe', False):
+        from utils.model.moe import MoEWrapper, DEFAULT_ACC_THRESHOLD
+        experts = ckpt['experts']
+        e4 = _build_expert(experts['acc4']['args'], experts['acc4']['model'], args)
+        e8 = _build_expert(experts['acc8']['args'], experts['acc8']['model'], args)
+        threshold = ckpt.get('router', {}).get('threshold', DEFAULT_ACC_THRESHOLD)
+        model = MoEWrapper(e4, e8, threshold=threshold)
+        # recon_slice가 읽는 전처리 속성을 래퍼에 심는다(두 전문가 동일 config 전제 — 병합 스크립트가 검증).
+        _set_preproc(model, experts['acc4']['args'])
+        model.eval()
+        return model.to(device=device)
+
+    saved = ckpt.get('args', args)  # 학습 때 저장된 args(model/num_cascades/n_feat0 등 포함)
+    model = _build_expert(saved, ckpt['model'], args)
     return model.to(device=device)
 
 

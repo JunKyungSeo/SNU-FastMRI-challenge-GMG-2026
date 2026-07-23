@@ -42,8 +42,21 @@ def _vol_id(root, name):
     return f"{Path(root)}|{name}"
 
 
+def _file_acc(name):
+    """파일명에서 가속률 숫자('4'/'8' 등)를 뽑는다(MoE acc 필터용). 없으면 None."""
+    m = re.search(r'acc(\d+)', name)
+    return m.group(1) if m else None
+
+
+def _norm_acc(acc):
+    """요청 acc(args.acc: 'all'|'4'|'8'|4|8) → None(전체) 또는 '4'/'8'."""
+    if acc in (None, 'all', ''):
+        return None
+    return str(acc)
+
+
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, file_ids=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, file_ids=None, acc=None):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
@@ -54,6 +67,15 @@ class SliceData(Dataset):
         roots = root if isinstance(root, (list, tuple)) else [root]
         # file_ids: K-Fold split이 고른 volume 식별자 집합(_vol_id, = "root|파일명"). None이면 전체 사용.
         id_set = set(file_ids) if file_ids is not None else None
+        # acc: MoE expert 학습용 가속률 필터('4'/'8'). None이면 전체.
+        acc_want = _norm_acc(acc)
+
+        def _skip(root_dir, fname):
+            if acc_want is not None and _file_acc(fname.name) != acc_want:
+                return True
+            if id_set is not None and _vol_id(root_dir, fname.name) not in id_set:
+                return True
+            return False
 
         for r in roots:
             r = Path(r)
@@ -61,7 +83,7 @@ class SliceData(Dataset):
                 image_dir = r / "image"
                 if image_dir.exists():
                     for fname in sorted(list(image_dir.iterdir())):
-                        if id_set is not None and _vol_id(r, fname.name) not in id_set:
+                        if _skip(r, fname):
                             continue
                         num_slices = self._get_metadata(fname)
                         self.image_examples += [
@@ -71,7 +93,7 @@ class SliceData(Dataset):
             kspace_dir = r / "kspace"
             if kspace_dir.exists():
                 for fname in sorted(list(kspace_dir.iterdir())):
-                    if id_set is not None and _vol_id(r, fname.name) not in id_set:
+                    if _skip(r, fname):
                         continue
                     num_slices = self._get_metadata(fname)
                     self.kspace_examples += [
@@ -220,6 +242,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         target_key=target_key_,
         forward=isforward,
         file_ids=file_ids,
+        acc=getattr(args, "acc", "all"),
     )
 
     # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
@@ -263,16 +286,21 @@ def create_kfold_data_loaders(args):
 
     # 모든 volume 식별자 (kspace 기준, _vol_id="root|파일명") 수집.
     # root를 포함하므로 train/val에 같은 파일명이 있어도 서로 다른 volume으로 구분된다.
+    # acc 필터가 있으면 그 가속률 볼륨만 모아 → K-Fold가 acc-층화 CV가 된다(MoE expert 진단용).
+    acc_want = _norm_acc(getattr(args, "acc", "all"))
     all_ids = set()
     for r in roots:
         kspace_dir = r / "kspace"
         if kspace_dir.exists():
             for f in kspace_dir.glob("*.h5"):
+                if acc_want is not None and _file_acc(f.name) != acc_want:
+                    continue
                 all_ids.add(_vol_id(r, f.name))
 
     sorted_ids = np.array(sorted(all_ids))
     if len(sorted_ids) == 0:
-        raise ValueError(f"K-Fold: 데이터 경로({train_path}, {val_path})에서 h5 파일을 찾지 못했습니다.")
+        raise ValueError(f"K-Fold: 데이터 경로({train_path}, {val_path})에서 h5 파일을 찾지 못했습니다"
+                         f"{'' if acc_want is None else f' (acc={acc_want} 필터 적용)'}.")
 
     # Volume 단위 Deterministic Split
     rng = np.random.RandomState(seed)

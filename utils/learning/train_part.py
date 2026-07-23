@@ -347,8 +347,12 @@ def train(args):
         print(f"[resume] start_epoch={start_epoch} start_iter={start_iter} best_val={best_val_loss:.4f}")
 
 
-    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
-    val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
+    if getattr(args, "k_fold", 0) > 0:
+        from utils.data.load_data import create_kfold_data_loaders
+        train_loader, val_loader = create_kfold_data_loaders(args)
+    else:
+        train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
+        val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
 
     scheduler = build_scheduler(optimizer, args, len(train_loader))
     if scheduler is not None:

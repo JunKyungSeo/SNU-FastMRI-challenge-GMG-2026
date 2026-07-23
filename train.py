@@ -54,6 +54,9 @@ def parse():
     parser.add_argument('--warmup-iters', type=int, default=0, help='linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR). promptmr에서만 활성')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
     parser.add_argument('--resume', action='store_true', help='<net_name>/checkpoints/의 model.pt(epoch 경계) 또는 latest.pt(epoch 중간, 500 iter마다 저장) 중 더 진행된 쪽에서 이어학습. 같은 config로만.')
+    parser.add_argument('--k-fold', type=int, default=0, help='K-Fold Cross Validation 분할 수 (0=off, 기존 train/val 구분 모드)')
+    parser.add_argument('--val-fold', type=int, default=0, help='Validation으로 사용할 fold 인덱스 (0 <= val-fold < k-fold)')
+    parser.add_argument('--kfold-seed', type=int, default=430, help='K-Fold Volume Split용 Random Seed (재현성)')
 
     args = parser.parse_args()
     return args

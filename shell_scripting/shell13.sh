@@ -41,9 +41,9 @@ python -c "import cv2" 2>/dev/null || pip install -q opencv-python-headless
 # ==========================================================
 set -x
 if [ -f "../result/promptmr_run1/checkpoints/best_model.pt" ]; then
-    python recon_eval.py -n promptmr_run1 -p /root/Data/leaderboard
+    python recon_eval.py -n hspromptmr_run1 -p /root/Data/leaderboard
 else
-    echo "[skip] promptmr_run1 checkpoint(../result/promptmr_run1/checkpoints/best_model.pt) 없음 — shell12 먼저."
+    echo "[skip] hspromptmr_run1 checkpoint(../result/promptmr_run1/checkpoints/best_model.pt) 없음 — shell12 먼저."
 fi
 
 # ==========================================================

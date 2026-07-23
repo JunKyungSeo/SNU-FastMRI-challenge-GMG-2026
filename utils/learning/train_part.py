@@ -328,6 +328,12 @@ def train(args):
     if getattr(args, "resume", False):
         resume_ckpt = load_resume_checkpoint(args.exp_dir, args)
         model.load_state_dict(resume_ckpt["model"])
+    elif getattr(args, "init_from", ""):
+        # Option C 미세조정: 공유 사전학습 가중치만 초기값으로 로드(optimizer/epoch/best_val은 새로 시작).
+        # resume과 배타적 — resume이면 이 분기는 건너뛴다(위 if).
+        init_ckpt = torch.load(args.init_from, map_location='cpu', weights_only=False)
+        model.load_state_dict(init_ckpt["model"])
+        print(f"[init-from] '{args.init_from}' 의 model 가중치로 초기화 (미세조정 시작)")
 
     loss_type = SSIMLoss().to(device=device)
     if getattr(args, "model", "varnet") == "promptmr":

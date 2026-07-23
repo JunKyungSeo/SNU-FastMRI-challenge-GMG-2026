@@ -34,8 +34,16 @@ def _acc_key(name):
     return m.group(1) if m else name
 
 
+def _vol_id(root, name):
+    """volume 식별자 = (root, 파일명). K-Fold에서 train/val 두 폴더를 합쳐 분할할 때
+    양쪽에 같은 파일명(예: knee_acc4_1.h5)이 있어도 서로 다른 volume으로 구분되도록 root를 포함한다.
+    (파일명만 키로 쓰면 set으로 합쳐지며 충돌 → 분할이 조용히 오염됨.)
+    SliceData와 create_kfold_data_loaders가 같은 함수를 써야 식별자가 정확히 일치한다."""
+    return f"{Path(root)}|{name}"
+
+
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, file_names=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, file_ids=None):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
@@ -44,7 +52,8 @@ class SliceData(Dataset):
         self.kspace_examples = []
 
         roots = root if isinstance(root, (list, tuple)) else [root]
-        file_set = set(file_names) if file_names is not None else None
+        # file_ids: K-Fold split이 고른 volume 식별자 집합(_vol_id, = "root|파일명"). None이면 전체 사용.
+        id_set = set(file_ids) if file_ids is not None else None
 
         for r in roots:
             r = Path(r)
@@ -52,7 +61,7 @@ class SliceData(Dataset):
                 image_dir = r / "image"
                 if image_dir.exists():
                     for fname in sorted(list(image_dir.iterdir())):
-                        if file_set is not None and fname.name not in file_set:
+                        if id_set is not None and _vol_id(r, fname.name) not in id_set:
                             continue
                         num_slices = self._get_metadata(fname)
                         self.image_examples += [
@@ -62,7 +71,7 @@ class SliceData(Dataset):
             kspace_dir = r / "kspace"
             if kspace_dir.exists():
                 for fname in sorted(list(kspace_dir.iterdir())):
-                    if file_set is not None and fname.name not in file_set:
+                    if id_set is not None and _vol_id(r, fname.name) not in id_set:
                         continue
                     num_slices = self._get_metadata(fname)
                     self.kspace_examples += [
@@ -142,7 +151,7 @@ class SliceData(Dataset):
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice, grappa)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, file_names=None):
+def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, file_ids=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -210,7 +219,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         input_key=args.input_key,
         target_key=target_key_,
         forward=isforward,
-        file_names=file_names,
+        file_ids=file_ids,
     )
 
     # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
@@ -252,34 +261,35 @@ def create_kfold_data_loaders(args):
     val_path = Path(args.data_path_val)
     roots = [train_path, val_path]
 
-    # 모든 volume 파일명 (kspace 파일명 기준) 수집
-    all_fnames = set()
+    # 모든 volume 식별자 (kspace 기준, _vol_id="root|파일명") 수집.
+    # root를 포함하므로 train/val에 같은 파일명이 있어도 서로 다른 volume으로 구분된다.
+    all_ids = set()
     for r in roots:
         kspace_dir = r / "kspace"
         if kspace_dir.exists():
             for f in kspace_dir.glob("*.h5"):
-                all_fnames.add(f.name)
+                all_ids.add(_vol_id(r, f.name))
 
-    sorted_fnames = np.array(sorted(list(all_fnames)))
-    if len(sorted_fnames) == 0:
+    sorted_ids = np.array(sorted(all_ids))
+    if len(sorted_ids) == 0:
         raise ValueError(f"K-Fold: 데이터 경로({train_path}, {val_path})에서 h5 파일을 찾지 못했습니다.")
 
     # Volume 단위 Deterministic Split
     rng = np.random.RandomState(seed)
-    perm = rng.permutation(len(sorted_fnames))
-    shuffled_fnames = sorted_fnames[perm]
+    perm = rng.permutation(len(sorted_ids))
+    shuffled_ids = sorted_ids[perm]
 
-    folds = np.array_split(shuffled_fnames, k)
+    folds = np.array_split(shuffled_ids, k)
     if val_fold < 0 or val_fold >= k:
         raise ValueError(f"val_fold ({val_fold})는 0 이상 {k} 미만이어야 합니다.")
 
-    val_files = set(folds[val_fold])
-    train_files = set(shuffled_fnames) - val_files
+    val_ids = set(map(str, folds[val_fold]))
+    train_ids = set(map(str, shuffled_ids)) - val_ids
 
-    print(f"[K-Fold] 총 Volume 파일 수: {len(sorted_fnames)}개 | K={k}, Val Fold={val_fold}")
-    print(f"[K-Fold] Train Volume 수: {len(train_files)}개 | Val Volume 수: {len(val_files)}개")
+    print(f"[K-Fold] 총 Volume 수: {len(sorted_ids)}개 | K={k}, Val Fold={val_fold}")
+    print(f"[K-Fold] Train Volume 수: {len(train_ids)}개 | Val Volume 수: {len(val_ids)}개")
 
-    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, file_names=train_files)
-    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, file_names=val_files)
+    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, file_ids=train_ids)
+    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, file_ids=val_ids)
 
     return train_loader, val_loader

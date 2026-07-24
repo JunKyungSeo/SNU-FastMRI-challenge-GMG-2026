@@ -215,8 +215,19 @@ def train(args):
         print(f"[resume] {args.exp_dir/'model.pt'} → start_epoch={start_epoch} best_val={best_val_loss:.4f}")
 
 
-    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
-    val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
+    kfold = int(getattr(args, "kfold", 0) or 0)
+    if kfold > 0:
+        # K-fold: -t·-v 를 병합한 풀을 볼륨 단위로 K등분, --fold 를 held-out val 로.
+        from utils.data.load_data import kfold_split
+        pool = [args.data_path_train, args.data_path_val]
+        train_keys, val_keys = kfold_split(pool, kfold, args.fold, args.seed)
+        print(f"[kfold] K={kfold} fold={args.fold} seed={args.seed} "
+              f"train_vols={len(train_keys)} val_vols={len(val_keys)} (train+val 병합·볼륨 단위)")
+        train_loader = create_data_loaders(data_path=pool, args=args, shuffle=True, volume_filter=train_keys)
+        val_loader = create_data_loaders(data_path=pool, args=args, volume_filter=val_keys)
+    else:
+        train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
+        val_loader = create_data_loaders(data_path = args.data_path_val, args = args)
 
     scheduler = build_scheduler(optimizer, args, len(train_loader))
     if scheduler is not None:

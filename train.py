@@ -45,6 +45,8 @@ def parse():
     parser.add_argument('--warmup-iters', type=int, default=0, help='linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR)')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
     parser.add_argument('--resume', action='store_true', help='<net_name>/checkpoints/model.pt(마지막 epoch)에서 이어학습. 같은 config로만.')
+    parser.add_argument('--kfold', type=int, default=0, help='K-fold 교차검증 fold 수 (0=off). >0이면 -t·-v 를 병합해 볼륨(파일) 단위로 K등분하고 --fold 번째를 held-out val 로 쓴다(나머지가 train). seed 고정 분할.')
+    parser.add_argument('--fold', type=int, default=0, help='--kfold>0 일 때 held-out val fold 인덱스 [0,K). 드라이버가 fold 0..K-1 을 돌며 넘긴다.')
 
     args = parser.parse_args()
     return args

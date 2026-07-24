@@ -51,8 +51,21 @@ def volume_id(root, name):
     return f"{Path(root).name}{KFOLD_ROOT_SEP}{name}"
 
 
+def _file_acc(name):
+    """파일명에서 가속률 숫자('4'/'8' 등)를 뽑는다(MoE acc 필터용). 없으면 None."""
+    m = re.search(r'acc(\d+)', name)
+    return m.group(1) if m else None
+
+
+def _norm_acc(acc):
+    """요청 acc(args.acc: 'all'|'4'|'8'|4|8) → None(전체) 또는 '4'/'8'."""
+    if acc in (None, 'all', ''):
+        return None
+    return str(acc)
+
+
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None, acc=None):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
@@ -66,10 +79,13 @@ class SliceData(Dataset):
         roots = root if isinstance(root, (list, tuple)) else [root]
         keep = set(volumes) if volumes is not None else None
         multi = len(roots) > 1
+        acc_want = _norm_acc(acc)   # MoE expert 학습용 가속률 필터('4'/'8'). None이면 전체.
 
         for r in roots:
             r = Path(r)
             for kspace_fname in sorted((r / "kspace").glob("*.h5")):
+                if acc_want is not None and _file_acc(kspace_fname.name) != acc_want:
+                    continue
                 vol_id = volume_id(r, kspace_fname.name) if multi else kspace_fname.name
                 if keep is not None and vol_id not in keep:
                     continue
@@ -225,6 +241,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         target_key=target_key_,
         forward=isforward,
         volumes=volumes,
+        acc=getattr(args, "acc", "all"),
     )
 
     # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
@@ -260,11 +277,15 @@ def kfold_roots(args):
 def kfold_split(args):
     """K-Fold 분할 → (train_ids, val_ids). 원소는 volume_id(고유 볼륨 식별자).
 
-    **분할 단위는 파일 이름**이다. train/과 val/에 이름이 같은 다른 볼륨이 30쌍 있는데, 그 둘은
-    항상 같은 fold로 간다(그래서 fold별 실제 volume 수가 39~43으로 조금씩 다르다).
-    이름 단위를 유지하는 이유는 이미 10 epoch 학습을 마친 promptmr_kfold_f1과 **같은 파티션**을
-    써야 fold끼리 비교가 되기 때문이다. 볼륨 단위로 다시 나누면 f1을 재학습해야 한다.
-    train/val 분리 자체는 정상이다 — 같은 이름의 두 볼륨이 항상 같은 쪽으로 가므로 leakage는 없다.
+    **분할 단위는 volume**이다. train/과 val/에 이름이 같은 볼륨이 30쌍 있지만 서로 남남이라
+    (예: train/…/knee_acc4_1.h5 = 23슬라이스, val/…/knee_acc4_1.h5 = 31슬라이스) 각각 독립
+    단위로 다룬다 → fold마다 정확히 200/k개가 떨어진다.
+
+    ⚠️ --acc 4/8 을 함께 주면 그 가속률 볼륨만 모아서 분할한다. 즉 **--acc 값이 바뀌면 fold
+    경계도 같이 바뀐다.** --acc 하나만 쓰는 단독 실험에선 정상이지만, 한 파이프라인 안에서
+    --acc를 바꿔가며(MoE의 pretrain --acc all → 미세조정 --acc 4/8) 같은 hold-out으로 채점하려
+    하면 단계마다 빼두는 볼륨이 달라져 채점셋이 오염된다(실측: 40개 중 30개). 그 조합을 쓸
+    거면 acc4·acc8을 각각 k등분해 합치는 층화 분할로 먼저 바꿔야 한다.
 
     난수는 seed만의 함수(RandomState(kfold_seed))라 같은 seed면 언제 돌려도 같은 분할이 나온다.
     """
@@ -273,21 +294,23 @@ def kfold_split(args):
     seed = int(getattr(args, "kfold_seed", 430))
     if not 0 <= val_fold < k:
         raise ValueError(f"--val-fold({val_fold})는 0 이상 --k-fold({k}) 미만이어야 합니다.")
+    acc_want = _norm_acc(getattr(args, "acc", "all"))
 
     roots = kfold_roots(args)
-    groups = {}   # 파일 이름 -> [volume_id, ...]  (이름이 겹치면 root 수만큼 들어간다)
+    ids = []
     for r in roots:
         for f in sorted((r / "kspace").glob("*.h5")):
-            groups.setdefault(f.name, []).append(volume_id(r, f.name))
-    if not groups:
-        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다.")
+            if acc_want is not None and _file_acc(f.name) != acc_want:
+                continue
+            ids.append(volume_id(r, f.name))
+    if not ids:
+        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다"
+                         f"{'' if acc_want is None else f' (acc={acc_want} 필터 적용)'}.")
 
-    names = np.array(sorted(groups))
-    shuffled = names[np.random.RandomState(seed).permutation(len(names))]
-    val_names = set(np.array_split(shuffled, k)[val_fold])
-
-    val_ids = {v for n in val_names for v in groups[n]}
-    train_ids = {v for n in set(shuffled) - val_names for v in groups[n]}
+    ids = np.array(sorted(ids))
+    shuffled = ids[np.random.RandomState(seed).permutation(len(ids))]
+    val_ids = set(map(str, np.array_split(shuffled, k)[val_fold]))
+    train_ids = set(map(str, shuffled)) - val_ids
     return train_ids, val_ids
 
 
@@ -302,8 +325,9 @@ def create_kfold_data_loaders(args):
     def _n(ids, tok):
         return sum(1 for v in ids if tok in v)
 
+    acc = getattr(args, "acc", "all")
     print(f"[K-Fold] K={args.k_fold} · val-fold={args.val_fold} · seed={getattr(args, 'kfold_seed', 430)} "
-          f"· 분할 단위=파일이름 (전체 {len(train_ids) + len(val_ids)} volume)")
+          f"· 분할 단위=volume · acc={acc} (전체 {len(train_ids) + len(val_ids)} volume)")
     print(f"[K-Fold] train {len(train_ids):3d} vol (acc4 {_n(train_ids, 'acc4')} · acc8 {_n(train_ids, 'acc8')}) "
           f"· {len(train_loader.dataset)} slice")
     print(f"[K-Fold] val   {len(val_ids):3d} vol (acc4 {_n(val_ids, 'acc4')} · acc8 {_n(val_ids, 'acc8')}) "

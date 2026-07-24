@@ -57,6 +57,9 @@ def parse():
     parser.add_argument('--k-fold', type=int, default=0, help='K-Fold Cross Validation 분할 수 (0=off, 기존 train/val 구분 모드)')
     parser.add_argument('--val-fold', type=int, default=0, help='Validation으로 사용할 fold 인덱스 (0 <= val-fold < k-fold)')
     parser.add_argument('--kfold-seed', type=int, default=430, help='K-Fold Volume Split용 Random Seed (재현성)')
+    # MoE(acc4/acc8 분리) — 학습 땐 파일명 accN 토큰으로 acc를 골라 학습, 추론 땐 마스크로 라우팅(test_part).
+    parser.add_argument('--acc', type=str, default='all', choices=['all', '4', '8'], help='학습 데이터를 가속률로 필터(파일명 accN 기준). all=전체. MoE expert 학습 시 4 또는 8.')
+    parser.add_argument('--init-from', type=str, default='', help='Option C 미세조정: 지정한 체크포인트의 model 가중치만 로드해 초기화(optimizer/epoch은 새로 시작). --resume과 배타적(resume 우선).')
 
     args = parser.parse_args()
     return args

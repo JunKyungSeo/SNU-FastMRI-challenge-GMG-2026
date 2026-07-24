@@ -34,8 +34,44 @@ def _acc_key(name):
     return m.group(1) if m else name
 
 
+def _vol_key(path):
+    """K-fold 배정·필터에 쓰는 볼륨 고유 키 = kspace 파일의 절대경로 문자열.
+    train/ 와 val/ 에 같은 파일명이 있어도 부모 폴더가 달라 키가 구분된다."""
+    return str(Path(path).resolve())
+
+
+def _list_kspace_files(roots):
+    roots_list = roots if isinstance(roots, (list, tuple)) else [roots]
+    files = []
+    for r in roots_list:
+        files += sorted((Path(r) / "kspace").iterdir())
+    return files
+
+
+def kfold_split(roots, k, fold, seed):
+    """train+val 병합 풀을 **볼륨(파일) 단위**로 K등분. val=fold번째, train=나머지.
+
+    슬라이스가 아닌 볼륨 단위 분할이라 같은 피험자 인접 슬라이스가 train/val에 새는
+    leakage가 없다. seed 고정이면 항상 같은 분할(재현성) — 모든 fold가 같은 seed로
+    같은 5-way 분할을 만들고 fold 인덱스만 held-out을 고른다.
+
+    반환: (train_keys:set, val_keys:set) — 각 원소는 _vol_key(kspace 절대경로)."""
+    if not (0 <= fold < k):
+        raise ValueError(f"--fold {fold} 는 [0,{k}) 범위여야 함 (K={k}).")
+    keys = sorted(_vol_key(f) for f in _list_kspace_files(roots))
+    rng = random.Random(seed)
+    rng.shuffle(keys)
+    n = len(keys)
+    bounds = [round(j * n / k) for j in range(k + 1)]   # 크기 차 ≤1로 K등분
+    folds = [keys[bounds[j]:bounds[j + 1]] for j in range(k)]
+    val_keys = set(folds[fold])
+    train_keys = set(keys) - val_keys
+    return train_keys, val_keys
+
+
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False):
+    def __init__(self, root, transform, input_key, target_key, forward=False,
+                 volume_filter=None):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
@@ -48,22 +84,30 @@ class SliceData(Dataset):
         # 원본 데이터셋(train/val)에 연결할 때 사용. root = create_data_loaders의 data_path.
         # 이미지·k-space 파일이 같은 이름(knee_acc4_1.h5 …)으로 두 폴더에 페어 존재.
         # ------------------------------------------------------------------
+        # root 는 단일 경로 또는 경로 리스트(K-fold train+val 병합 풀). 리스트면 순서대로 스캔.
+        roots_list = root if isinstance(root, (list, tuple)) else [root]
         if not forward:
-            image_files = list(Path(root / "image").iterdir())
-            for fname in sorted(image_files):
-                num_slices = self._get_metadata(fname)
-
-                self.image_examples += [
-                    (fname, slice_ind) for slice_ind in range(num_slices)
-                ]
-
-        kspace_files = list(Path(root / "kspace").iterdir())
-        for fname in sorted(kspace_files):
-            num_slices = self._get_metadata(fname)
-
-            self.kspace_examples += [
-                (fname, slice_ind) for slice_ind in range(num_slices)
-            ]
+            # train/val: image·kspace 쌍을 한 볼륨씩 스캔. volume_filter(={_vol_key} 집합)이면
+            # 그 볼륨만 포함 → fold 별 train/val 분할. image·kspace 를 한 루프에서 lockstep으로
+            # 쌓아 인덱스 정합을 보장(둘을 따로 정렬하던 기존 방식의 오정렬 여지 제거).
+            for r in roots_list:
+                image_dir = Path(r) / "image"
+                kspace_dir = Path(r) / "kspace"
+                for img_path in sorted(image_dir.iterdir()):
+                    ks_path = kspace_dir / img_path.name
+                    if volume_filter is not None and _vol_key(ks_path) not in volume_filter:
+                        continue
+                    num_slices = self._get_metadata(ks_path)
+                    self.image_examples += [(img_path, s) for s in range(num_slices)]
+                    self.kspace_examples += [(ks_path, s) for s in range(num_slices)]
+        else:
+            # forward(추론/leaderboard): kspace 폴더만. K-fold는 train/val 전용이라 filter 미적용.
+            for r in roots_list:
+                for fname in sorted((Path(r) / "kspace").iterdir()):
+                    num_slices = self._get_metadata(fname)
+                    self.kspace_examples += [
+                        (fname, slice_ind) for slice_ind in range(num_slices)
+                    ]
 
         # ------------------------------------------------------------------
         # [임시·주석] utils/data 폴더에 평평하게 놓인 단일 샘플 파일 직접 로딩.
@@ -138,7 +182,8 @@ class SliceData(Dataset):
         return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice, grappa)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None):
+def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None,
+                        volume_filter=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -206,6 +251,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         input_key=args.input_key,
         target_key=target_key_,
         forward=isforward,
+        volume_filter=volume_filter,   # K-fold: 이 fold에 속한 볼륨만(None=전체, 기존과 동일)
     )
 
     # 재현성: 증강/결정적 로더를 쓸 때만 generator·worker seed 부착(그 외엔 기존과 동일 동작).

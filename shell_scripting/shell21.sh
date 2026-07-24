@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # ============================================================
-# GPU 작업 큐 슬롯 — PromptMR+ K-Fold fold 2 (promptmr_kfold_f2)          [shell20.sh]
+# GPU 작업 큐 슬롯 — PromptMR+ K-Fold fold 2 (promptmr_kfold_f2)          [shell21.sh]
 #
-# shell19(fold 1)의 후속. 분할·학습 config는 f1과 **동일**하게 두고(= f1↔f2를 같은 5-fold CV의
-# 두 fold로 비교), 코드 쪽 버그 두 개를 고쳤다.
+#   ⚠️ 슬롯 번호 주의: shell20.sh 는 팀원의 MoE 파이프라인이다. 이 슬롯(단일 모델 K-Fold)과는
+#      별개 실험이니 헷갈리지 말 것. 두 슬롯은 서로 독립이고 같이 돌리면 안 된다(GPU 1장).
+#
+# shell19(fold 1)의 후속. 학습 config는 f1과 동일하되, 코드 쪽 버그 두 개를 고쳤고
+# **분할 방식이 f1과 달라졌다**(아래 ③).
 #
 #   ① volume 식별자 충돌  (utils/data/load_data.py)
 #      train/ 과 val/ 에는 이름이 같은 **서로 다른** 볼륨이 30쌍 있다
@@ -15,25 +18,34 @@
 #      (--fg-loss가 켜져 있어 val loss 값 자체는 무사했지만, NewRecord마다 저장되는
 #       reconstructions_val/ 은 train·val 슬라이스가 섞인 볼륨이었다).
 #      → volume_id("train__knee_acc4_1.h5")로 root를 붙여 분리. 이제 로그가 실제 volume·slice
-#        수를 찍는다. 파티션 자체는 f1과 비트 단위로 같다(5개 fold 전부 대조 확인).
+#        수를 찍고, 채점 디렉터리 심볼릭 링크에도 그대로 쓸 수 있다.
 #
 #   ② 채점이 항상 죽던 문제
 #      이 서버엔 /root/Data/leaderboard 가 없다. f1은 21시간 학습을 마치고 recon_eval.py:120의
 #      AssertionError로 끝나 점수를 한 줄도 못 남겼다(promptmr_run4도 같은 이유로 실패).
 #      → hold-out fold를 leaderboard 형식으로 링크해서 recon_eval.py(고정·수정 금지)를 그대로
-#        돌린다. fold2 hold-out = 40 volume · 1101 slice · 병변 566박스, 전부 학습에 안 쓴
-#        데이터라 정직한 SSIM_full·SSIM_bbox·추론시간이 나온다.
+#        돌린다. 전부 학습에 안 쓴 데이터라 정직한 SSIM_full·SSIM_bbox·추론시간이 나온다.
 #      ⚠️ leaderboard 점수와 같은 수는 아니다(분포·박스 수가 다름). fold끼리·run끼리 비교용.
 #
-#   [fold2 구성]  train 160 vol (4341 slice)  /  val 40 vol (acc4 19 · acc8 21, 1101 slice)
+#   ③ 분할 단위 = volume  (jkMRplus 병합 시 팀원 방식 채택)
+#      이름이 같은 두 볼륨은 서로 남남인데 옛 방식은 둘을 묶어 같은 fold로 보냈다. 이제 각각
+#      독립 단위라 fold마다 정확히 40개씩 떨어진다.
+#      ⚠️ **f1(promptmr_kfold_f1)과는 다른 파티션이다.** f1의 val 43개 중 이 fold2와 겹치는
+#         건 일부뿐이라, f1·f2를 "한 5-fold CV의 두 fold"로 묶어 평균 내면 안 된다.
+#         각각 독립적인 hold-out 성적으로 읽을 것.
+#
+#   [fold2 구성]  train 160 vol (4343 slice)  /  val 40 vol (acc4 22 · acc8 18, 1099 slice)
 #   [config]      f1과 동일: full coil · nc10 · nf48 · sens24 · n-history3 · lr 2e-4 상수 ·
 #                 fg-loss + area-weight · grad-clip 0.1 · accum 2 · checkpointing on · 10 epoch
-#                 → 바꾸지 말 것. 바꾸면 f1과 비교가 안 된다(그 실험은 별도 슬롯에서).
+#
+#   ⚠️ --acc 4/8 을 여기에 추가하지 말 것. --acc 를 주면 그 가속률만 모아 다시 5등분하므로
+#      fold 경계가 달라진다(단독 실험이면 정상, 다단계로 섞으면 채점셋 오염).
+#      MoE를 k-fold로 검증하려면 층화 분할을 먼저 구현해야 한다 — load_data.kfold_split 주석 참고.
 #
 # 실행:
-#   SMOKE=1 bash shell_scripting/shell20.sh   # 120 iter — OOM 없이 exit 0 · 손실 하강 확인 (먼저 이것)
-#   bash shell_scripting/shell20.sh           # 본 학습 10 epoch + hold-out fold 채점 (f1 기준 ~21시간)
-#   FOLD=3 bash shell_scripting/shell20.sh    # 다른 fold를 돌릴 때
+#   SMOKE=1 bash shell_scripting/shell21.sh   # 120 iter — OOM 없이 exit 0 · 손실 하강 확인 (먼저 이것)
+#   bash shell_scripting/shell21.sh           # 본 학습 10 epoch + hold-out fold 채점 (f1 기준 ~21시간)
+#   FOLD=3 bash shell_scripting/shell21.sh    # 다른 fold를 돌릴 때
 #   FORCE=1 ...                               # 기존 결과 폴더를 덮어쓸 때만 (기본은 거부)
 # ============================================================
 set -uo pipefail
@@ -119,9 +131,9 @@ if [ "$SMOKE" = "1" ]; then
     echo "[SMOKE] 채점 생략 (fold $FOLD). 확인할 것 세 가지:"
     echo "        (1) OOM 없이 exit 0 인가"
     echo "        (2) iter 0 대비 Loss 가 내려가는가"
-    echo "        (3) '[K-Fold] train 160 vol (4341 slice) / val 40 vol (1101 slice)' 로 찍혔는가"
+    echo "        (3) fold2면 '[K-Fold] train 160 vol · 4343 slice / val 40 vol · 1099 slice' 로 찍혔는가"
     echo "            — 예전처럼 '136개/34개'(이름 수)가 나오면 코드가 옛 버전이다."
-    echo "        전부 OK면  bash shell_scripting/shell20.sh  로 본 학습."
+    echo "        전부 OK면  bash shell_scripting/shell21.sh  로 본 학습."
     echo "=========================================================="
     exit "$TRAIN_STATUS"
 fi

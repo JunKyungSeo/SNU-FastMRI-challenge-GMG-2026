@@ -40,7 +40,7 @@ echo "=========================================================="
 set -x
 python train.py --model promptmr --num-cascades 2 --n-feat0 16 --channels 24 32 40 \
     --readout-crop -b 1 -l 2e-4 -e 1 --max-iters 2 -r 1 --num-workers 4 \
-    -n promptmr_probe -t /root/Data/train/ -v /root/Data/val/
+    -n hspromptmr_probe -t /root/Data/train/ -v /root/Data/val/
 
 # ==========================================================
 #  ↑↑↑  실제 GPU 명령 끝 (STATUS 는 마지막 명령의 종료코드)  ↑↑↑

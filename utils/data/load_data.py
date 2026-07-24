@@ -34,40 +34,57 @@ def _acc_key(name):
     return m.group(1) if m else name
 
 
+KFOLD_ROOT_SEP = "__"
+
+
+def volume_id(root, name):
+    """여러 root를 한 데이터셋으로 합칠 때 쓰는 **고유** volume 식별자.
+
+    train/과 val/에는 이름이 같은 **서로 다른** 볼륨이 30쌍 있다
+    (예: train/…/knee_acc4_1.h5 = 23슬라이스, val/…/knee_acc4_1.h5 = 31슬라이스).
+    그래서 파일명만으로 볼륨을 식별하면 (a) fold 분할이 두 볼륨을 하나로 세고
+    (b) validate()의 reconstructions[fname] 딕셔너리에서 두 볼륨의 슬라이스가 섞인다.
+    root 이름을 앞에 붙여 그 충돌을 없앤다. 파일명으로도 쓰이므로(save_reconstructions,
+    fold 채점 디렉터리) 경로 구분자가 아닌 '__'로 잇는다.
+    root가 하나뿐이면 파일명을 그대로 쓴다 → 기존(비-K-Fold) 경로는 100% 동일하게 동작.
+    """
+    return f"{Path(root).name}{KFOLD_ROOT_SEP}{name}"
+
+
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, file_names=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
         self.forward = forward
-        self.image_examples = []
-        self.kspace_examples = []
+        # (image_path|None, kspace_path, slice_idx, vol_id) 튜플. image와 kspace를 **같은 root 안에서**
+        # 짝지어 한 항목에 담는다. 예전엔 두 리스트에 따로 쌓고 같은 인덱스로 꺼낸 뒤 .name이 같은지로
+        # 검증했는데, root가 둘이 되면 그 검증이 무력해진다(train/…/x.h5 와 val/…/x.h5 는 .name이 같다).
+        # 페어를 만들 때 묶어두면 어긋날 여지 자체가 없다.
+        self.examples = []
 
         roots = root if isinstance(root, (list, tuple)) else [root]
-        file_set = set(file_names) if file_names is not None else None
+        keep = set(volumes) if volumes is not None else None
+        multi = len(roots) > 1
 
         for r in roots:
             r = Path(r)
-            if not forward:
-                image_dir = r / "image"
-                if image_dir.exists():
-                    for fname in sorted(list(image_dir.iterdir())):
-                        if file_set is not None and fname.name not in file_set:
-                            continue
-                        num_slices = self._get_metadata(fname)
-                        self.image_examples += [
-                            (fname, slice_ind) for slice_ind in range(num_slices)
-                        ]
-
-            kspace_dir = r / "kspace"
-            if kspace_dir.exists():
-                for fname in sorted(list(kspace_dir.iterdir())):
-                    if file_set is not None and fname.name not in file_set:
-                        continue
-                    num_slices = self._get_metadata(fname)
-                    self.kspace_examples += [
-                        (fname, slice_ind) for slice_ind in range(num_slices)
-                    ]
+            for kspace_fname in sorted((r / "kspace").glob("*.h5")):
+                vol_id = volume_id(r, kspace_fname.name) if multi else kspace_fname.name
+                if keep is not None and vol_id not in keep:
+                    continue
+                image_fname = None
+                if not forward:
+                    image_fname = r / "image" / kspace_fname.name
+                    if not image_fname.exists():
+                        raise ValueError(
+                            f"k-space 파일 {kspace_fname} 에 대응하는 이미지 파일이 없습니다: {image_fname}"
+                        )
+                num_slices = self._get_metadata(kspace_fname)
+                self.examples += [
+                    (image_fname, kspace_fname, slice_ind, vol_id)
+                    for slice_ind in range(num_slices)
+                ]
 
         # ------------------------------------------------------------------
         # [임시·주석] utils/data 폴더에 평평하게 놓인 단일 샘플 파일 직접 로딩.
@@ -76,7 +93,8 @@ class SliceData(Dataset):
         #   k-space(입력): kspace_knee_acc4_1.h5, kspace_knee_acc8_1.h5
         # acc 토큰(acc4_1 / acc8_1)으로 이미지·k-space를 짝짓는다(파일명이 달라도 페어링).
         # 인자로 받은 root(data_path) 대신 이 파일이 있는 utils/data 폴더를 사용한다.
-        # ⚠️ 이 경로를 되살릴 땐 아래 __getitem__의 이름 비교도 _acc_key 버전으로 함께 교체할 것.
+        # ⚠️ 이 경로를 되살릴 땐 _acc_key로 페어를 만들어 self.examples에
+        #    (image_path, kspace_path, slice_idx, vol_id) 형태로 넣도록 함께 고쳐야 한다.
         # ------------------------------------------------------------------
         # root = Path(__file__).resolve().parent
         # kspace_files = sorted(root.glob("kspace*.h5"))
@@ -113,14 +131,10 @@ class SliceData(Dataset):
         return num_slices
 
     def __len__(self):
-        return len(self.kspace_examples)
+        return len(self.examples)
 
     def __getitem__(self, i):
-        if not self.forward:
-            image_fname, _ = self.image_examples[i]
-        kspace_fname, dataslice = self.kspace_examples[i]
-        if not self.forward and image_fname.name != kspace_fname.name:
-            raise ValueError(f"Image file {image_fname.name} does not match kspace file {kspace_fname.name}")
+        image_fname, kspace_fname, dataslice, vol_id = self.examples[i]
 
         with h5py.File(kspace_fname, "r") as hf:
             input = hf[self.input_key][dataslice]
@@ -139,10 +153,10 @@ class SliceData(Dataset):
                 if getattr(self.transform, "return_grappa", False) and DataTransform.GRAPPA_KEY in hf:
                     grappa = hf[DataTransform.GRAPPA_KEY][dataslice]
 
-        return self.transform(mask, input, target, attrs, kspace_fname.name, dataslice, grappa)
+        return self.transform(mask, input, target, attrs, vol_id, dataslice, grappa)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, file_names=None):
+def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, volumes=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -210,7 +224,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         input_key=args.input_key,
         target_key=target_key_,
         forward=isforward,
-        file_names=file_names,
+        volumes=volumes,
     )
 
     # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
@@ -238,48 +252,61 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     return data_loader
 
 
-def create_kfold_data_loaders(args):
-    """
-    args.data_path_train 및 args.data_path_val 경로 하위의 모든 h5 Volume 파일들을 수집 후,
-    args.k_fold 개수로 Volume 단위 K-Fold 분할을 수행합니다.
-    args.val_fold 인덱스에 해당하는 Fold를 val_loader로, 나머지 Fold들을 train_loader로 생성합니다.
-    """
-    k = getattr(args, "k_fold", 5)
-    val_fold = getattr(args, "val_fold", 0)
-    seed = getattr(args, "kfold_seed", 430)
+def kfold_roots(args):
+    """K-Fold가 합쳐 쓰는 데이터 root 목록 (원본 train/ + val/ 전부 = 200 volume)."""
+    return [Path(args.data_path_train), Path(args.data_path_val)]
 
-    train_path = Path(args.data_path_train)
-    val_path = Path(args.data_path_val)
-    roots = [train_path, val_path]
 
-    # 모든 volume 파일명 (kspace 파일명 기준) 수집
-    all_fnames = set()
+def kfold_split(args):
+    """K-Fold 분할 → (train_ids, val_ids). 원소는 volume_id(고유 볼륨 식별자).
+
+    **분할 단위는 파일 이름**이다. train/과 val/에 이름이 같은 다른 볼륨이 30쌍 있는데, 그 둘은
+    항상 같은 fold로 간다(그래서 fold별 실제 volume 수가 39~43으로 조금씩 다르다).
+    이름 단위를 유지하는 이유는 이미 10 epoch 학습을 마친 promptmr_kfold_f1과 **같은 파티션**을
+    써야 fold끼리 비교가 되기 때문이다. 볼륨 단위로 다시 나누면 f1을 재학습해야 한다.
+    train/val 분리 자체는 정상이다 — 같은 이름의 두 볼륨이 항상 같은 쪽으로 가므로 leakage는 없다.
+
+    난수는 seed만의 함수(RandomState(kfold_seed))라 같은 seed면 언제 돌려도 같은 분할이 나온다.
+    """
+    k = int(getattr(args, "k_fold", 5))
+    val_fold = int(getattr(args, "val_fold", 0))
+    seed = int(getattr(args, "kfold_seed", 430))
+    if not 0 <= val_fold < k:
+        raise ValueError(f"--val-fold({val_fold})는 0 이상 --k-fold({k}) 미만이어야 합니다.")
+
+    roots = kfold_roots(args)
+    groups = {}   # 파일 이름 -> [volume_id, ...]  (이름이 겹치면 root 수만큼 들어간다)
     for r in roots:
-        kspace_dir = r / "kspace"
-        if kspace_dir.exists():
-            for f in kspace_dir.glob("*.h5"):
-                all_fnames.add(f.name)
+        for f in sorted((r / "kspace").glob("*.h5")):
+            groups.setdefault(f.name, []).append(volume_id(r, f.name))
+    if not groups:
+        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다.")
 
-    sorted_fnames = np.array(sorted(list(all_fnames)))
-    if len(sorted_fnames) == 0:
-        raise ValueError(f"K-Fold: 데이터 경로({train_path}, {val_path})에서 h5 파일을 찾지 못했습니다.")
+    names = np.array(sorted(groups))
+    shuffled = names[np.random.RandomState(seed).permutation(len(names))]
+    val_names = set(np.array_split(shuffled, k)[val_fold])
 
-    # Volume 단위 Deterministic Split
-    rng = np.random.RandomState(seed)
-    perm = rng.permutation(len(sorted_fnames))
-    shuffled_fnames = sorted_fnames[perm]
+    val_ids = {v for n in val_names for v in groups[n]}
+    train_ids = {v for n in set(shuffled) - val_names for v in groups[n]}
+    return train_ids, val_ids
 
-    folds = np.array_split(shuffled_fnames, k)
-    if val_fold < 0 or val_fold >= k:
-        raise ValueError(f"val_fold ({val_fold})는 0 이상 {k} 미만이어야 합니다.")
 
-    val_files = set(folds[val_fold])
-    train_files = set(shuffled_fnames) - val_files
+def create_kfold_data_loaders(args):
+    """kfold_split의 분할로 (train_loader, val_loader) 생성. 두 로더 모두 train/·val/ 양쪽을 본다."""
+    train_ids, val_ids = kfold_split(args)
+    roots = kfold_roots(args)
 
-    print(f"[K-Fold] 총 Volume 파일 수: {len(sorted_fnames)}개 | K={k}, Val Fold={val_fold}")
-    print(f"[K-Fold] Train Volume 수: {len(train_files)}개 | Val Volume 수: {len(val_files)}개")
+    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, volumes=train_ids)
+    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, volumes=val_ids)
 
-    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, file_names=train_files)
-    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, file_names=val_files)
+    def _n(ids, tok):
+        return sum(1 for v in ids if tok in v)
+
+    print(f"[K-Fold] K={args.k_fold} · val-fold={args.val_fold} · seed={getattr(args, 'kfold_seed', 430)} "
+          f"· 분할 단위=파일이름 (전체 {len(train_ids) + len(val_ids)} volume)")
+    print(f"[K-Fold] train {len(train_ids):3d} vol (acc4 {_n(train_ids, 'acc4')} · acc8 {_n(train_ids, 'acc8')}) "
+          f"· {len(train_loader.dataset)} slice")
+    print(f"[K-Fold] val   {len(val_ids):3d} vol (acc4 {_n(val_ids, 'acc4')} · acc8 {_n(val_ids, 'acc8')}) "
+          f"· {len(val_loader.dataset)} slice")
 
     return train_loader, val_loader

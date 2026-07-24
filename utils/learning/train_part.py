@@ -206,9 +206,14 @@ def check_resume_compat(saved_args, args):
     루프 range(start_epoch, num_epochs)만 늘어날 뿐 LR 곡선이 바뀌지 않아 안전."""
     # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
-    ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8}
+    ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8,
+                      "k_fold": 0, "val_fold": 0, "kfold_seed": 430}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
-              "warmup_iters", "lr", "accum_steps", "coil_compress"]
+              "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold"]
+    # K-Fold에서 분할이 달라지면 train/val 경계가 바뀐다 → 재개하는 순간 이전 val 볼륨으로 학습하게 된다
+    # (조용히 새는 leakage라 로그만 봐선 못 잡는다). 분할에 영향을 주는 값은 k-fold일 때만 확인한다.
+    if int(getattr(saved_args, "k_fold", 0)) > 0 or int(getattr(args, "k_fold", 0)) > 0:
+        fields += ["val_fold", "kfold_seed"]
     if int(getattr(args, "warmup_iters", 0)) > 0:   # cosine horizon 있을 때만 num_epochs 고정
         fields.append("num_epochs")
     # n_virtual_coils는 압축이 켜져 있을 때만 입력에 영향을 준다. 압축 off끼리 재개하는데

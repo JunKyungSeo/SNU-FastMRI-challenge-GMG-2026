@@ -1,0 +1,9 @@
+==========================================================
+[START] shell12   2026-07-23 15:02:54
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell12_20260723_150254.log
+==========================================================
++ python train.py --model promptmr --num-cascades 6 --n-feat0 16 --channels 24 32 40 --readout-crop -b 1 -l 2e-4 -e 10 -r 100 --num-workers 4 --run-tag hspromptmr_run1 -n hspromptmr_run1 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... hspromptmr_run1 ...............
+Epoch = [  0/ 10] Iter = [   0/4651] Loss = 0.4038 Time = 2.5040s

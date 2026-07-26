@@ -240,3 +240,22 @@ def test_datatransform_mask_and_kspace_stay_consistent():
     zero_cols = np.where(mask_np == 0)[0]
     assert np.all(kspace_np[:, :, zero_cols, :] == 0), (
         "mask==0인 PE 컬럼에 0이 아닌 k-space가 남아있다 — mask_t와 kspace가 어긋났다")
+
+
+def test_probs_are_gated_by_on_off_switch():
+    """probs()가 반환하는 p_flip·p_mask는 '실효 확률'이어야 한다 — cfg.flip/cfg.mask가
+    꺼져 있으면 실제로 그 증강은 절대 걸리지 않으므로(__call__의 if cfg.flip/if cfg.mask 가드),
+    로그에도 0으로 찍혀야 한다. 그렇지 않으면 [aug] 로그가 '꺼진 증강이 0.5 확률로 걸린다'는
+    거짓말을 하게 된다(서버 검증 스크립트 verify_aug.sh가 잡아낸 결함)."""
+    flip_off = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5,
+                                          flip=False, mask=True, orig_mask_prob=0.0))
+    p, p_flip, p_mask = flip_off.probs()
+    assert p > 0.0
+    assert p_flip == 0.0
+    assert p_mask > 0.0
+
+    mask_off = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5,
+                                          flip=True, mask=False, orig_mask_prob=0.0))
+    _, p_flip2, p_mask2 = mask_off.probs()
+    assert p_flip2 > 0.0
+    assert p_mask2 == 0.0

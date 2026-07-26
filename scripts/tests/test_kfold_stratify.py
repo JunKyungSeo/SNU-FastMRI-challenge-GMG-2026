@@ -22,11 +22,19 @@ def _ids(acc, n, root="train"):
 
 
 def test_group_assignment_independent_of_other_groups():
-    """한 그룹의 fold 배정은 다른 그룹의 존재와 무관 — 층화의 존재 이유."""
+    """한 그룹의 fold 배정은 다른 그룹의 존재와 무관 — 층화의 존재 이유.
+
+    sorted(ids_by_group) 순회라 "4"는 항상 첫 그룹, "8"은 항상 그다음 그룹이다.
+    RandomState(seed)를 매 반복 새로 만들기 때문에 성립하는 성질이라, 첫 그룹("4")만
+    확인하면 이걸 루프 밖으로 빼는 회귀(그룹끼리 RNG를 공유)를 놓친다 — 항상 첫 번째라
+    상태 오염의 영향을 안 받기 때문. 비-첫 그룹인 "8"도 함께 확인해야 그 회귀를 잡는다.
+    """
     both = _stratified_folds({"4": _ids(4, 30), "8": _ids(8, 30)}, k=5, seed=430)
     only4 = _stratified_folds({"4": _ids(4, 30)}, k=5, seed=430)
+    only8 = _stratified_folds({"8": _ids(8, 30)}, k=5, seed=430)
     for i in range(5):
         assert {v for v in both[i] if "acc4" in v} == only4[i]
+        assert {v for v in both[i] if "acc8" in v} == only8[i]
 
 
 def test_folds_balanced_per_group():

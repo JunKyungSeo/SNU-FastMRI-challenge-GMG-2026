@@ -217,11 +217,16 @@ class MRIAugmentor:
         self.epoch = int(epoch)
 
     def probs(self):
-        """(p, p_flip, p_mask). 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산."""
+        """(p, p_flip, p_mask). 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
+        p_flip·p_mask는 **실효 확률** — on/off 스위치(cfg.flip·cfg.mask)가 꺼져 있으면 0이다.
+        (로그에 찍히는 숫자가 '실제로 이 증강이 걸릴 확률'과 일치해야 오해가 없다.)"""
         c = self.cfg
         p = self._prob()
-        p_flip = min(1.0, max(0.0, p * float(c.weight_flip)))
-        p_mask = min(1.0, max(0.0, p * float(c.weight_mask) * (1.0 - float(c.orig_mask_prob))))
+        p_flip = min(1.0, max(0.0, p * float(c.weight_flip))) if c.flip else 0.0
+        p_mask = (
+            min(1.0, max(0.0, p * float(c.weight_mask) * (1.0 - float(c.orig_mask_prob))))
+            if c.mask else 0.0
+        )
         return p, p_flip, p_mask
 
     # ---- 스케줄 ----

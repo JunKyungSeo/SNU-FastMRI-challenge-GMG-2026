@@ -1,4 +1,4 @@
-# CLAUDE.md — 이 repo에서 작업하는 Claude에게
+# CLAUDE.md — To claude who works at this repo
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
@@ -60,23 +60,22 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## 파괴적 행동은 허락받고
+---
+
+## 0. 파괴적 행동은 허락받고
 
 돌이킬 수 없는 행동 — 프로세스 `kill`, 학습 중단, 사용자가 열어둔 셸/터미널 종료, 체크포인트·결과 덮어쓰기·삭제, 큐 구조 변경 — 은 실행 전 **무엇을·왜 할지 알리고 허락을 받는다.** "작업에 필요해 보여서"는 사유가 안 된다. 내가 시작하지 않은 프로세스·터미널은 건드리지 않는다. 확인 못 한 것은 단정하지 말고 물어본다.
 
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-미래 세션(GPU 서버 포함)의 Claude가 먼저 읽는 핸드오프 노트. **구조 + 현재 상태**만 담는다.
+## 1. 말을 많이 했으면, 사용자가 이해했는지 확인하기. 그리고 쉽게.
 
----
+기업 보고서 어투 지양. 조사 등을 생략하고 단어만 나열하지말고, 이것이 무엇인지 문맥으로 추론할 기회를 인간에게 주어라.
 
-## 5. 지금 상황
+## 2. 지금 상황
 
 - **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
 - **팀 2명** (§4).
-
-> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_anal/`, 과거 수정 계획은 `docs/archive/superpowers/plans/` 참조.
 
 ---
 

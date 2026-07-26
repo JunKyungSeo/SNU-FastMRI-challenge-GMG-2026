@@ -188,11 +188,18 @@ def test_probs_are_clipped_to_one():
 
 
 def test_weight_zero_disables_one_transform_only():
-    """weight_flip=0이면 flip은 안 걸리고 mask만 걸린다(분리 A/B의 근거)."""
+    """weight_flip=0이면 flip은 안 걸리고 mask만 걸린다(분리 A/B의 근거).
+    슬라이스별 RNG가 달라 _aug_mask 내부 thin이 1로 뽑히는 슬라이스는(그대로 반환, 의도된 동작)
+    라인 수가 안 줄어들 수 있다 → 여러 슬라이스를 돌며 '적어도 하나는 줄었다'로 확인한다."""
     aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=1.0,
                                      flip=True, mask=True, weight_flip=0.0,
                                      weight_mask=1.0, orig_mask_prob=0.0))
     M, T = make_mask(), make_target()
-    _, M2, T2, _, _ = aug(make_kspace(), M, T, None, None, "knee_acc4_1.h5", 0)
-    assert np.array_equal(T2, T), "weight_flip=0인데 flip이 걸렸다"
-    assert M2.sum() < M.sum(), "mask 증강이 걸리지 않았다"
+    shrunk = []
+    for sl in range(20):
+        _, M2, T2, _, _ = aug(make_kspace(), M, T, None, None, "knee_acc4_1.h5", sl)
+        assert np.array_equal(T2, T), f"slice {sl}: weight_flip=0인데 flip이 걸렸다"
+        assert M2.sum() <= M.sum(), f"slice {sl}: 원본보다 라인이 늘었다"
+        shrunk.append(M2.sum() < M.sum())
+    # thin==1인 슬라이스는 마스크가 그대로라 전체가 아니라 '적어도 하나'로 확인한다
+    assert any(shrunk), "20개 슬라이스 전부에서 mask 증강이 걸리지 않았다"

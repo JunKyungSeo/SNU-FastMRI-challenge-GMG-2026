@@ -6,6 +6,9 @@
 #     - OFF arm = 이미 완료된 shell21.sh 런(net_name=promptmr_kfold_f${FOLD}). 여기서 다시
 #       돌리지 않는다 — 21시간짜리 런을 또 태울 이유가 없다.
 #       ⚠️ 이 런의 완주·과적합 여부는 repo에 기록 없음 — 재사용 전 config 대조 필수.
+#       ⚠️ (2026-07-26) kfold_split이 acc 층화로 교체되어 지금 코드로 ON arm을 돌리면
+#          OFF arm(교체 전 파티션의 f2)과 hold-out이 달라진다 — 이대로 비교하면 A/B 무효.
+#          이 A/B를 살리려면 OFF arm(baseline)을 층화 파티션에서 재학습한 뒤 진행할 것.
 #     - ON  arm = 이 슬롯(shell22.sh). train.py 호출은 shell21.sh와 **증강 인자 7개와
 #       -n/--run-tag(NET/TAG) 이름만 다르다.** FOLD·K_FOLD·KFOLD_SEED·num-cascades·n-feat0·
 #       sens-n-feat0·n-history·lr·fg-loss·area-weight·grad-clip·accum-steps·데이터 경로는

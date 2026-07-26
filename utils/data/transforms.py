@@ -180,11 +180,13 @@ class AugmentConfig:
 
     def __init__(self, **kw):
         self.on = kw.get("on", False)
-        # 스케줄
-        self.schedule = kw.get("schedule", "exp")          # 'exp' | 'constant'
-        self.warmup_epochs = kw.get("warmup_epochs", 10)
-        self.ramp_epochs = kw.get("ramp_epochs", 15)
-        self.max_prob = kw.get("max_prob", 0.5)
+        # 스케줄 — MRAugment 공식 repo(mraugment/data_augment.py: schedule_p)와 동일 형태.
+        #   p(t<D)=0, p(T)=p_max. T로 정규화하므로 런 길이가 바뀌어도 증강량이 스케일된다.
+        self.schedule = kw.get("schedule", "exp")          # 'exp' | 'ramp' | 'constant'
+        self.delay = kw.get("delay", 0)                    # D: 증강 없이 보내는 앞쪽 epoch 수
+        self.total_epochs = kw.get("total_epochs", 1)      # T: args.num_epochs (load_data가 채움)
+        self.exp_decay = kw.get("exp_decay", 5.0)          # 논문/공식 repo 기본 c=5.0
+        self.max_prob = kw.get("max_prob", 0.55)           # 논문 기본 p_max=0.55
         # 개별 aug on/off
         self.flip = kw.get("flip", True)                   # 좌-우(width)만
         self.mask = kw.get("mask", True)
@@ -213,16 +215,23 @@ class MRIAugmentor:
 
     # ---- 스케줄 ----
     def _prob(self):
+        """MRAugment 공식 schedule_p와 동일: D=delay, T=total_epochs, c=exp_decay/(T-D).
+        p(t<D)=0이고 p(T)=p_max로 정규화되므로 런 길이가 달라도 증강량이 일관된다.
+        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)"""
         c = self.cfg
         if not c.on:
             return 0.0
-        if c.schedule == "constant":
-            return c.max_prob
-        e = self.epoch
-        if e < c.warmup_epochs:                # warmup 동안 증강 off (기본기 학습)
+        D, T, t, p_max = int(c.delay), int(c.total_epochs), self.epoch, float(c.max_prob)
+        if t < D:
             return 0.0
-        t = (e - c.warmup_epochs) / max(1, c.ramp_epochs)
-        return float(c.max_prob * (1.0 - np.exp(-3.0 * t)))  # 지수형 점증(t=1에서 ≈95%)
+        if c.schedule == "constant":
+            return p_max
+        if T - D <= 0:                       # 가드: 1 epoch 스모크 런 등
+            return p_max
+        if c.schedule == "ramp":
+            return p_max * (t - D) / (T - D)
+        k = c.exp_decay / (T - D)
+        return float(p_max / (1.0 - np.exp(-(T - D) * k)) * (1.0 - np.exp(-(t - D) * k)))
 
     def _rng(self, fname, sl):
         """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨.

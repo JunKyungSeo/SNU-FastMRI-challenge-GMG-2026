@@ -115,3 +115,57 @@ def test_forward_path_never_augments():
     aug = MRIAugmentor(flip_only_cfg())
     dt = DataTransform(isforward=True, max_key=-1, augmentor=aug, is_train=True)
     assert dt.is_train is False
+
+
+def test_schedule_covers_a_ten_epoch_run():
+    """10ep 런에서 p가 실제로 올라간다 — 기존 기본값(전 구간 0) 재발 방지."""
+    cfg = AugmentConfig(on=True, schedule="exp", delay=2, total_epochs=10,
+                        exp_decay=5.0, max_prob=0.55)
+    aug = MRIAugmentor(cfg)
+    ps = []
+    for e in range(10):
+        aug.set_epoch(e)
+        ps.append(aug._prob())
+
+    assert ps[0] == 0.0 and ps[1] == 0.0        # delay 구간
+    assert ps[2] == 0.0                          # t == D 는 지수식이 정확히 0
+    assert all(p > 0.0 for p in ps[3:]), f"delay 이후에도 0이 있다: {ps}"
+    assert all(b > a for a, b in zip(ps[3:-1], ps[4:])), f"단조 증가가 아니다: {ps}"
+    assert ps[3] == pytest.approx(0.2573, abs=1e-4)
+    assert ps[9] == pytest.approx(0.5468, abs=1e-4)
+
+
+def test_schedule_scales_with_run_length():
+    """같은 플래그로 런 길이만 바꿔도 '마지막 epoch에서 p_max 근처'가 유지된다."""
+    last = []
+    for T in (10, 25):
+        aug = MRIAugmentor(AugmentConfig(on=True, schedule="exp", delay=2,
+                                         total_epochs=T, exp_decay=5.0, max_prob=0.55))
+        aug.set_epoch(T - 1)
+        last.append(aug._prob())
+    assert all(0.5 < p < 0.55 for p in last), f"런 길이에 따라 증강량이 달라진다: {last}"
+
+
+def test_schedule_modes_and_guards():
+    common = dict(on=True, delay=2, total_epochs=10, max_prob=0.55)
+    c = MRIAugmentor(AugmentConfig(schedule="constant", **common))
+    c.set_epoch(0); assert c._prob() == 0.0      # delay는 constant에도 적용
+    c.set_epoch(5); assert c._prob() == 0.55
+
+    r = MRIAugmentor(AugmentConfig(schedule="ramp", **common))
+    r.set_epoch(6); assert r._prob() == pytest.approx(0.275)
+
+    # T <= D 가드(1ep 스모크 런 등)에서 ZeroDivisionError가 나지 않는다
+    g = MRIAugmentor(AugmentConfig(on=True, schedule="exp", delay=2,
+                                   total_epochs=1, exp_decay=5.0, max_prob=0.55))
+    g.set_epoch(0); assert g._prob() == 0.0
+    g.set_epoch(3); assert g._prob() == 0.55
+
+    off = MRIAugmentor(AugmentConfig(on=False, schedule="constant", max_prob=1.0))
+    off.set_epoch(9); assert off._prob() == 0.0
+
+
+def test_default_delay_is_zero_so_aug_starts_immediately():
+    aug = MRIAugmentor(AugmentConfig(on=True, total_epochs=10, max_prob=0.55))
+    aug.set_epoch(0); assert aug._prob() == 0.0
+    aug.set_epoch(1); assert aug._prob() > 0.0

@@ -5,7 +5,7 @@
 > # ✅ 구현 완료 (2026-07-03)
 > 이 문서의 채택 증강은 **`utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`) · `utils/data/load_data.py`에 구현·검증 완료**.
 > 실측 결과 요약은 아래 **[§ 증강 결과 (실측 요약)](#증강-결과-실측-요약)**. (시각 확인용 노트북은 검증 후 삭제 — 전략 검증용 임시 코드.)
-> 기본값 전부 off라 켜기 전엔 기존 학습과 100% 동일(스위치 배선은 [`todo.md`](todo.md) 3·4번).
+> 스위치 배선(epoch 스케줄 on/off)도 **2026-07-26 완료** — `train.py`의 `--aug-*` 플래그와 `train_part.py`의 `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 여전히 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일.
 
 > **제1원칙 (이 문서의 조직 기준): hallucination-free lesion fidelity.**
 > 대회의 신설 novelty는 "병변 bbox 위치를 위조(hallucination) 없이 정확히 복원"이며 **SSIM_bbox가 순위 결정축**이다.
@@ -45,8 +45,8 @@
 
 **실험 우선순위(먼저 켤 것)**: ① mask-aug + 좌우 flip(**최대 이득으로 예상 — 검증 전 가설**) → ② 원본마스크 혼합비 튜닝 → ③ GRAPPA FFT prior 입력 → ④ acc4/acc8 커리큘럼 → ⑤ k-space 위상 → ⑥ translation/지터 → ⑦ consistency(후순위, **학습 2× 비용**). 상세 순서·측정법은 §4.1/§4.2.
 
-> ✅ **구현 상태(2026-07-03)**: 위 증강은 `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)와 `utils/data/load_data.py`에 **구현 완료**.
-> **기본값 전부 off라 기존 학습과 100% 동일** — 켜려면 train.py `--aug-*` 인자 + train_part.py `set_epoch` 배선 필요([`todo.md`](todo.md) 3·4번).
+> ✅ **구현 상태(2026-07-03; 스위치 배선 2026-07-26 완료)**: 위 증강은 `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)와 `utils/data/load_data.py`에 **구현 완료**.
+> **스위치 배선도 완료** — `train.py`의 `--aug-*` 플래그(`--aug-on` 등 11개)와 `train_part.py`의 매 epoch `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일. 확률 스케줄은 MRAugment 원 논문의 `schedule_p` 형태(delay D·총 epoch T로 정규화한 exp/ramp/constant)로 재구현됐다 — 참고로 배선 전 기본값이던 `warmup_epochs=10`은 10-epoch 런에서 매 epoch `p=0`을 내는 값이라, 증강이 조용히 한 번도 발동하지 않는 문제가 있었다.
 > bbox는 `return_bbox=True`일 때 `DataTransform`이 `annotations`를 파싱해 flip과 동기 반환(가변 길이용 `_bbox_collate` 포함). bbox를 **손실에 쓰려면** train_part 소비부는 아직 배선 필요.
 
 ---

@@ -5,7 +5,7 @@
 #   [실험 목적] 데이터 증강(MRAugment)이 val loss 과적합 구간을 늦추는지 보는 A/B 실험이다.
 #     - OFF arm = 이미 완료된 shell21.sh 런(net_name=promptmr_kfold_f${FOLD}). 여기서 다시
 #       돌리지 않는다 — 21시간짜리 런을 또 태울 이유가 없다.
-#     - ON  arm = 이 슬롯(shell22.sh). train.py 호출은 shell21.sh와 **증강 인자 6개와
+#     - ON  arm = 이 슬롯(shell22.sh). train.py 호출은 shell21.sh와 **증강 인자 7개와
 #       -n/--run-tag(NET/TAG) 이름만 다르다.** FOLD·K_FOLD·KFOLD_SEED·num-cascades·n-feat0·
 #       sens-n-feat0·n-history·lr·fg-loss·area-weight·grad-clip·accum-steps·데이터 경로는
 #       baseline과 완전히 동일하게 유지한다 — 변경점을 1개(증강 유무)로 좁혀야 A/B가

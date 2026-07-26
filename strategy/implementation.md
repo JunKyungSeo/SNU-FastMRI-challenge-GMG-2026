@@ -58,12 +58,14 @@
 - 반환 순서 규약은 `DataTransform` docstring: `(mask,kspace,target,maximum,fname,slice,[scale],[grappa],[bbox])`.
 - network 확정 후 진행(동료 담당).
 
-### 6. 증강 스케줄 배선 (mask/flip 로직은 이미 구현됨)
-> 증강 몸통은 `transforms.py`(`MRIAugmentor`)에 있음. epoch 스케줄만 배선 필요.
+### 6. ✅ 증강 스케줄 배선 (mask/flip 로직은 이미 구현됨)
+> 증강 몸통은 `transforms.py`(`MRIAugmentor`)에 있음. epoch 스케줄도 배선 완료.
 
-- **6a. [`train.py`](../train.py) `parse()`**: `--aug-*` 인자 신설(`--aug-on`, `--aug-warmup-epochs`, `--aug-max-prob`, `--aug-schedule`, `--aug-flip`, `--aug-mask` 등). 기본 전부 off(기존 동작 보존). `args`로 `create_data_loaders`→`DataTransform` 전달.
-- **6b. [`train_part.py`](../utils/learning/train_part.py) `train()`**: 매 epoch `train_loader.dataset.transform.set_epoch(epoch)` 호출. **val_loader는 증강 off 보장**(검증=진짜 실력).
+- **6a. ✅ [`train.py`](../train.py) `parse()`**: `--aug-*` 인자 신설(`--aug-on`, `--aug-schedule`, `--aug-max-prob`, `--aug-delay`, `--aug-exp-decay`, `--aug-flip`/`--no-aug-flip`, `--aug-mask`/`--no-aug-mask`, `--aug-weight-flip`, `--aug-weight-mask`, `--aug-mask-thin-max`, `--aug-orig-mask-prob`). 기본 전부 off/no-op(기존 동작 보존). `args`로 `create_data_loaders`→`DataTransform` 전달.
+- **6b. ✅ [`train_part.py`](../utils/learning/train_part.py) `train()`**: 매 epoch `train_loader.dataset.transform.set_epoch(epoch)` 호출. **val_loader는 증강 off 보장**(검증=진짜 실력).
 - 근거: 상세 맥락은 이 파일 하단 "증강 스케줄 배선 상세" 참조.
+
+> ✅ **구현 완료 (2026-07-26)**: `train.py` `parse()`(`--aug-*` 11개 플래그) · `utils/data/load_data.py`의 `AugmentConfig(...)` 전달 · `utils/data/transforms.py`의 `_prob`/`probs`(MRAugment `schedule_p` 형태로 재구현) · `utils/learning/train_part.py`의 epoch 루프(매 epoch `set_epoch` 호출 + `[aug]` 로그 + `--aug-on`인데 미배선이면 `RuntimeError`) 모두 배선 완료. 테스트: `scripts/tests/test_augment.py`(16개). 서버 검증: `scripts/verify_aug.sh`(전항목 통과).
 
 ### 7. bbox 손실 소비부 (손실 확정 후 — candidates)
 - `DataTransform`은 `return_bbox=True`로 bbox 파싱·flip 동기까지 됨(`_bbox_collate` 포함). **손실에서 소비하는 부분만 미배선** → [`candidates.md`](candidates.md) 손실 확정 후.

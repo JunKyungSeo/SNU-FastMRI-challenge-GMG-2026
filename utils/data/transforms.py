@@ -292,7 +292,9 @@ class MRIAugmentor:
         ramp = np.exp(2j * np.pi * (j - W // 2) / W).astype(K.dtype, copy=False)
         K2 = np.roll(np.flip(K, axis=-1), 1, axis=-1) * ramp
         M2 = np.roll(np.flip(mask), 1).astype(np.float32)
-        K2 = K2 * M2                                       # FFT 수치 누설 제거
+        # closed form은 순수 인덱스 치환이라 K2의 support가 이미 정확히 M2다(수치 누설 없음).
+        # 이 곱은 방어용 — 호출부가 마스크 안 씌운 K를 넘기더라도 계약(K2 ⊆ M2)을 지킨다.
+        K2 = K2 * M2
         tgt = np.ascontiguousarray(target[:, ::-1])
         if bbox is not None:
             W = tgt.shape[1]

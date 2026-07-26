@@ -203,3 +203,17 @@ def test_weight_zero_disables_one_transform_only():
         shrunk.append(M2.sum() < M.sum())
     # thin==1인 슬라이스는 마스크가 그대로라 전체가 아니라 '적어도 하나'로 확인한다
     assert any(shrunk), "20개 슬라이스 전부에서 mask 증강이 걸리지 않았다"
+
+
+def test_set_epoch_reaches_augmentor_through_transform():
+    """train_part가 잡는 경로(dataset.transform → augmentor)로 epoch이 전달된다."""
+    aug = MRIAugmentor(AugmentConfig(on=True, schedule="exp", delay=2, total_epochs=10,
+                                     exp_decay=5.0, max_prob=0.55))
+    dt = DataTransform(isforward=False, max_key="max", augmentor=aug, is_train=True)
+    dt.set_epoch(0)
+    assert aug.probs()[0] == 0.0
+    dt.set_epoch(9)
+    assert aug.probs()[0] > 0.5
+
+    # augmentor가 없는 val transform에서도 set_epoch은 안전한 no-op
+    DataTransform(isforward=False, max_key="max").set_epoch(5)

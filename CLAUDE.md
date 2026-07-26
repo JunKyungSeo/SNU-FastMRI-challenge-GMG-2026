@@ -87,6 +87,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
   - README는 Python 3.12.9를 타깃으로 적지만 **서버 실제는 3.10.12에서 정상 동작**.
 - **GPU 작업은 큐 스크립트로만 실행** (`shell_scripting/`): GPU를 쓰는 명령(학습·recon 등)은 `shell_scripting/shellN.sh` **슬롯**(= 작업 1개 = 파일 1개)에 써서 돌린다. 각 슬롯은 맨 위 목적 주석 + 시작 echo + `logs/<슬롯>_<timestamp>.log` 자동 기록. 실행은 `bash shell1.sh ; bash shell2.sh ; ...`로 이어서(큐), 다음 작업은 빈 슬롯에 미리 채워둔다. 규칙·상세: `shell_scripting/README.md`.
   - ⚠️ **비-GPU 명령은 큐에 넣지 말고 그냥 바로 실행한다.** `h5_viewer.py`·`pytest`·`git` 등 가벼운 건 옆 분할 터미널에서 즉시 실행. 큐는 **GPU 독점 작업 전용**이다.
+- 🚫 **GPU를 쓰는 명령은 절대 Claude가 직접 실행하지 않는다** (2026-07-26 사용자 지시). 학습·recon·reconstruct 등 GPU에 모델을 올려 연산하는 명령은 Claude가 **슬롯 스크립트(`shellN.sh`) 작성까지만** 하고, 실제 실행(`bash shellN.sh`)은 **사람이 한다.** 'GPU가 비어 있어서'도, '작업에 필요해 보여서'도 실행 사유가 안 된다. Claude는 명령어를 알려주거나 스크립트를 만들어 줄 뿐, `python train.py`·`recon_eval.py` 같은 GPU 연산을 스스로 돌리지 않는다.
 
 ---
 

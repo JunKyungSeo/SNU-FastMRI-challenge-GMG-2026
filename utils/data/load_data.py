@@ -194,11 +194,14 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     cfg = AugmentConfig(
         on=aug_on,
         schedule=getattr(args, "aug_schedule", "exp"),
-        warmup_epochs=getattr(args, "aug_warmup_epochs", 10),
-        ramp_epochs=getattr(args, "aug_ramp_epochs", 15),
-        max_prob=getattr(args, "aug_max_prob", 0.5),
+        delay=getattr(args, "aug_delay", 0),
+        total_epochs=int(getattr(args, "num_epochs", 1)),   # T = 런 길이 → 스케줄이 자동 스케일
+        exp_decay=getattr(args, "aug_exp_decay", 5.0),
+        max_prob=getattr(args, "aug_max_prob", 0.55),
         flip=getattr(args, "aug_flip", True),
         mask=getattr(args, "aug_mask", True),
+        weight_flip=getattr(args, "aug_weight_flip", 1.0),
+        weight_mask=getattr(args, "aug_weight_mask", 1.0),
         phase=getattr(args, "aug_phase", False),
         noise=getattr(args, "aug_noise", False),
         mask_thin_max=getattr(args, "aug_mask_thin_max", 4),

@@ -1,5 +1,7 @@
 # run10 분석 — 장기학습(epoch 10) + recon_eval 확정 (2026-07-13)
 
+> ⚠️ **정정 (2026-07-26)**: 아래 "학습량이 지배 레버 / 오래 = 좋음" 결론은 **작은 VarNet `[16,32]×4`**에서 측정한 것이며, 현재 백본인 **PromptMR+**(`--num-cascades 10 --n-feat0 48 --sens-n-feat0 24`)로는 **그대로 이어지지 않는다** — PromptMR+는 10 epoch 이내에서 **과적합**하는 것이 관측됐다. 이 백본 차이가 바로 증강 A/B([`shell_scripting/shell22.sh`](../shell_scripting/shell22.sh))를 도입한 이유다. 아래 run10 수치·분석 자체는 원문 그대로 보존.
+
 **한 줄 결론:** run7과 동일한 작은 모델([16,32]×4)을 **epoch 2→10**으로 늘렸더니 recon_eval에서 **SSIM_full 0.9118 / SSIM_bbox 0.9021 / 1523 ms·slice**. **run10(작은·10ep)이 run8(큰·2ep, full 0.9062/bbox 0.8979/2820ms)을 세 축 전부에서 이긴다** — SSIM 더 높고 추론 ~1.85× 빠름. "작은 모델 오래"가 "큰 모델"을 리더보드로 확증. run7 대비 순수 epoch 효과 = **+0.011 full/bbox(시간 동일)**. 학습량이 지배 레버.
 
 > ℹ️ **이 run에 반영된 개선**: 없음(run7과 동일 코드·config, **epoch만 2→10**). fg-loss(B5)는 **꺼짐**(run10 = B5 off-arm). fg-loss가 켜진 건 다음 run11.

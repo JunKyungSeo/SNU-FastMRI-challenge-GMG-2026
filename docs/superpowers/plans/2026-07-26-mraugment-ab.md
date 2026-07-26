@@ -485,14 +485,21 @@ def test_probs_are_clipped_to_one():
 
 
 def test_weight_zero_disables_one_transform_only():
-    """weight_flip=0이면 flip은 안 걸리고 mask만 걸린다(분리 A/B의 근거)."""
+    """weight_flip=0이면 flip은 안 걸리고 mask만 걸린다(분리 A/B의 근거).
+    슬라이스별 RNG가 달라 _aug_mask 내부 thin이 1로 뽑히는 슬라이스는(그대로 반환, 의도된 동작)
+    라인 수가 안 줄어들 수 있다 → 여러 슬라이스를 돌며 '적어도 하나는 줄었다'로 확인한다."""
     aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=1.0,
                                      flip=True, mask=True, weight_flip=0.0,
                                      weight_mask=1.0, orig_mask_prob=0.0))
     M, T = make_mask(), make_target()
-    _, M2, T2, _, _ = aug(make_kspace(), M, T, None, None, "knee_acc4_1.h5", 0)
-    assert np.array_equal(T2, T), "weight_flip=0인데 flip이 걸렸다"
-    assert M2.sum() < M.sum(), "mask 증강이 걸리지 않았다"
+    shrunk = []
+    for sl in range(20):
+        _, M2, T2, _, _ = aug(make_kspace(), M, T, None, None, "knee_acc4_1.h5", sl)
+        assert np.array_equal(T2, T), f"slice {sl}: weight_flip=0인데 flip이 걸렸다"
+        assert M2.sum() <= M.sum(), f"slice {sl}: 원본보다 라인이 늘었다"
+        shrunk.append(M2.sum() < M.sum())
+    # thin==1인 슬라이스는 마스크가 그대로라 전체가 아니라 '적어도 하나'로 확인한다
+    assert any(shrunk), "20개 슬라이스 전부에서 mask 증강이 걸리지 않았다"
 ```
 
 - [ ] **Step 5: 문법 검사**
@@ -703,17 +710,31 @@ print('best epoch =', best, '→ --aug-delay =', max(0, best - 1))
 
 [`shell21.sh`](../../../shell_scripting/shell21.sh)를 복제해 헤더 주석을 이 실험 목적으로 바꾸고, **train.py 호출에 증강 인자만 추가**한다. `FOLD`·`K_FOLD`·`KFOLD_SEED`·나머지 config는 baseline과 **완전 동일**하게 유지한다(변경점 1개 원칙).
 
+⚠️ **SMOKE 경로는 스케줄을 다르게 줘야 한다.** 이 저장소의 모든 SMOKE 슬롯은 `EPOCHS=1`(shell21.sh)로 도는데, `exp`/`ramp` 스케줄은 `p(epoch=0) = 0`이 정확히 나온다(`delay` 이내이거나 `t<D`). 그러면 스모크 런은 `[aug] epoch=0 p=0.0000`을 찍고 `p <= 0.0` 조기 리턴으로 **증강을 0회** 수행한 채 끝나버려서, Step 6의 스모크 게이트 기준("로그에 `p > 0`")을 원천적으로 만족할 수 없다. 그래서 `shell21.sh`와 같은 `SMOKE` 분기 안에서 스케줄 인자 자체를 다르게 준다:
+
+```bash
+if [ "$SMOKE" = "1" ]; then
+    # ⚠️ epoch=0(1-epoch 스모크)에서 exp/ramp는 p=0 그대로라 증강이 0회 실행된다.
+    #    constant + delay=0 → p=p_max로 강제해야 스모크가 실제로 증강 경로를 태운다.
+    AUG_SCHEDULE="constant"; AUG_DELAY=0
+else
+    AUG_SCHEDULE="exp"; AUG_DELAY=<Step 2에서 결정한 값>
+fi
+```
+
 ```bash
   --aug-on \
-  --aug-schedule exp \
+  --aug-schedule "$AUG_SCHEDULE" \
   --aug-max-prob 0.55 \
-  --aug-delay <Step 2에서 결정한 값> \
+  --aug-delay "$AUG_DELAY" \
   --aug-exp-decay 5.0 \
   --aug-mask-thin-max 4 \
   --aug-orig-mask-prob 0.5 \
 ```
 
-헤더 주석에 반드시 적을 것: **변경점은 증강 인자뿐 · baseline은 `<net_name>` 런 · 판정은 fg-val 서명 3개 · `SMOKE=1` 먼저**.
+**본 학습(SMOKE=0)은 그대로 `--aug-schedule exp`에 Step 2의 delay를 쓴다** — 위 override는 스모크 게이트 전용이다.
+
+헤더 주석에 반드시 적을 것: **변경점은 증강 인자뿐 · baseline은 `<net_name>` 런 · 판정은 fg-val 서명 3개 · `SMOKE=1` 먼저(단, SMOKE는 `--aug-schedule constant --aug-delay 0`로 강제해야 증강이 실제로 걸린다)**.
 
 - [ ] **Step 4: 문법 검사**
 
@@ -730,10 +751,10 @@ git commit -m "chore(queue): shell22 — 증강 ON arm 슬롯 (fold N, baseline 
 - [ ] **Step 6: 사람에게 스모크 실행 인계** (⚠️ Claude가 실행하지 않는다)
 
 전달할 내용:
-1. `SMOKE=1 bash shell_scripting/shell22.sh` (120 iter)
-2. 확인할 것 세 가지 — ① exit 0 · OOM 없음 ② 로그에 `[aug] … p=` 가 찍히고 **`p > 0`** ③ **iter time을 baseline 로그와 비교** (증강은 샘플당 FFT 2회(15×640×368)를 dataloader에 추가한다. `--num-workers 4`에서 CPU 병목이면 21h가 늘어난다 — 증가폭이 크면 `--num-workers` 상향 후 재측정)
+1. `SMOKE=1 bash shell_scripting/shell22.sh` (120 iter) — ⚠️ **shell22.sh의 SMOKE 분기가 `--aug-schedule constant --aug-delay 0`을 쓰는지 먼저 확인한다.** 1-epoch 스모크에서 본 학습용 `exp`/`ramp` 스케줄을 그대로 쓰면 `p(epoch=0)=0`이라 증강이 무조건 0회 실행되고, 아래 ②를 절대 만족할 수 없는 게이트가 되어 사람이 GPU 서버까지 왕복하는 시간을 헛되이 쓰게 된다. 이 override가 이 스모크 게이트의 존재 이유다.
+2. 확인할 것 세 가지 — ① exit 0 · OOM 없음 ② 로그에 `[aug] … p=` 가 찍히고 **`p > 0`**(constant+delay=0라면 `p = p_max = 0.55`여야 한다) ③ **iter time을 baseline 로그와 비교** (증강은 샘플당 FFT 2회(15×640×368)를 dataloader에 추가한다. `--num-workers 4`에서 CPU 병목이면 21h가 늘어난다 — 증가폭이 크면 `--num-workers` 상향 후 재측정)
 3. ②가 실패하면 **본 학습을 시작하지 않는다**(증강 0회로 21시간을 태우는 것을 막는 게 이 게이트의 유일한 목적)
-4. 통과하면 `bash shell_scripting/shell22.sh` 본 학습(≈21h)
+4. 통과하면 `bash shell_scripting/shell22.sh` 본 학습(≈21h, `SMOKE` 미설정이므로 자동으로 `--aug-schedule exp` + Step 2의 delay로 돈다)
 
 ---
 

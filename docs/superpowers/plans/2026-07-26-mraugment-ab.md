@@ -704,7 +704,7 @@ print('best epoch =', best, '→ --aug-delay =', max(0, best - 1))
 " ../result/<net_name>/val_loss_log_<tag>.npy
 ```
 
-`--aug-delay = max(0, best_epoch - 1)`로 정한다(증강 확률이 과적합 구간을 덮게 하는 것이 목적). 값을 Step 3의 스크립트에 박고, 근거를 스크립트 주석에 남긴다.
+`--aug-delay = max(0, best_epoch - 1)`로 정한다(증강 확률이 과적합 구간을 덮게 하는 것이 목적). 이 값은 스크립트에 박지 않는다 — `shell22.sh`는 `AUG_DELAY` 환경변수를 필수로 요구하고(`: "${AUG_DELAY:?…}"` 형태의 가드), 없으면 exit 2로 거부한다. 근거는 스크립트 주석에 남긴다.
 
 - [ ] **Step 3: `shell22.sh` 작성**
 
@@ -718,7 +718,8 @@ if [ "$SMOKE" = "1" ]; then
     #    constant + delay=0 → p=p_max로 강제해야 스모크가 실제로 증강 경로를 태운다.
     AUG_SCHEDULE="constant"; AUG_DELAY=0
 else
-    AUG_SCHEDULE="exp"; AUG_DELAY=<Step 2에서 결정한 값>
+    AUG_SCHEDULE="exp"
+    : "${AUG_DELAY:?Step 2에서 구한 값을 AUG_DELAY=<값>으로 넘겨야 한다 — 자동추정/기본값 금지, 없으면 exit 2}"
 fi
 ```
 
@@ -754,7 +755,7 @@ git commit -m "chore(queue): shell22 — 증강 ON arm 슬롯 (fold N, baseline 
 1. `SMOKE=1 bash shell_scripting/shell22.sh` (120 iter) — ⚠️ **shell22.sh의 SMOKE 분기가 `--aug-schedule constant --aug-delay 0`을 쓰는지 먼저 확인한다.** 1-epoch 스모크에서 본 학습용 `exp`/`ramp` 스케줄을 그대로 쓰면 `p(epoch=0)=0`이라 증강이 무조건 0회 실행되고, 아래 ②를 절대 만족할 수 없는 게이트가 되어 사람이 GPU 서버까지 왕복하는 시간을 헛되이 쓰게 된다. 이 override가 이 스모크 게이트의 존재 이유다.
 2. 확인할 것 세 가지 — ① exit 0 · OOM 없음 ② 로그에 `[aug] … p=` 가 찍히고 **`p > 0`**(constant+delay=0라면 `p = p_max = 0.55`여야 한다) ③ **iter time을 baseline 로그와 비교** (증강은 샘플당 FFT 2회(15×640×368)를 dataloader에 추가한다. `--num-workers 4`에서 CPU 병목이면 21h가 늘어난다 — 증가폭이 크면 `--num-workers` 상향 후 재측정)
 3. ②가 실패하면 **본 학습을 시작하지 않는다**(증강 0회로 21시간을 태우는 것을 막는 게 이 게이트의 유일한 목적)
-4. 통과하면 `bash shell_scripting/shell22.sh` 본 학습(≈21h, `SMOKE` 미설정이므로 자동으로 `--aug-schedule exp` + Step 2의 delay로 돈다)
+4. 통과하면 `AUG_DELAY=<Step 2에서 구한 값> bash shell_scripting/shell22.sh` 본 학습(≈21h, `SMOKE` 미설정 시 `--aug-schedule exp`로 돈다). **`AUG_DELAY`가 없으면 스크립트가 즉시 exit 2로 거부한다** — 서버에서 헛걸음하지 않도록 값을 미리 준비해서 넘길 것.
 
 ---
 

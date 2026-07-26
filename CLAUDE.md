@@ -141,7 +141,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 10. 범위 밖 (후순위 / 다른 팀원)
 
-GRAPPA prior+residual 배선 · bbox 가중 손실 · SVD coil compression · progressive expansion · config 스윕. 상세: `strategy/candidates.md`, `strategy/implementation.md`.
+미배선: GRAPPA prior+residual · progressive expansion · config 스윕. 배선 완료·상태 다름: bbox 가중 손실(run12 시도→퇴행 롤백, 기본 off) · SVD coil compression(배선 완료·미채택). 상세: `strategy/candidates.md`, `strategy/implementation.md`.
 
 ---
 

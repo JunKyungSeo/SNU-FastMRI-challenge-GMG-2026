@@ -5,6 +5,7 @@
 #   [실험 목적] 데이터 증강(MRAugment)이 val loss 과적합 구간을 늦추는지 보는 A/B 실험이다.
 #     - OFF arm = 이미 완료된 shell21.sh 런(net_name=promptmr_kfold_f${FOLD}). 여기서 다시
 #       돌리지 않는다 — 21시간짜리 런을 또 태울 이유가 없다.
+#       ⚠️ 이 런의 완주·과적합 여부는 repo에 기록 없음 — 재사용 전 config 대조 필수.
 #     - ON  arm = 이 슬롯(shell22.sh). train.py 호출은 shell21.sh와 **증강 인자 7개와
 #       -n/--run-tag(NET/TAG) 이름만 다르다.** FOLD·K_FOLD·KFOLD_SEED·num-cascades·n-feat0·
 #       sens-n-feat0·n-history·lr·fg-loss·area-weight·grad-clip·accum-steps·데이터 경로는
@@ -114,7 +115,7 @@ fi
 
 # ==========================================================
 #  ↓↓↓  PromptMR+ K-Fold 학습 + MRAugment ON (fold $FOLD)  ↓↓↓
-#     baseline(shell21.sh)과 train.py 인자는 --aug-* 6개와 -n/--run-tag(NET/TAG)만 다르다.
+#     baseline(shell21.sh)과 train.py 인자는 --aug-* 7개와 -n/--run-tag(NET/TAG)만 다르다.
 #     이 슬롯도 학습 + hold-out 검증까지만 한다. 채점(recon_eval)은 leaderboard 데이터가
 #     있는 다른 환경에서 하므로 여기서 GPU를 더 쓰지 않는다.
 # ==========================================================

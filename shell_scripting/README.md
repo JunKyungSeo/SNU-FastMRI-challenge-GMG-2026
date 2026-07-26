@@ -19,10 +19,10 @@ for i in $(seq 1 10); do bash
 
 1. 맨 위 주석에 **목적** 한 줄.
 2. 실행하면 `[START] <슬롯>` 배너로 **어디서 시작됐는지** echo.
-3. stdout+stderr 가 `logs/<슬롯>_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력).
+3. stdout+stderr 가 `logs/<슬롯>[_f<FOLD>]_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력). shell19/21/22처럼 K-Fold를 쓰는 슬롯은 `logs/${SLOT}_f${FOLD}_${TS}.log` 형태로 fold가 파일명에 들어간다.
 4. 끝나면 `[DONE ] <슬롯> ... exit=<코드>` 로 종료코드 고지.
 5. 실행되는 명령이 `set -x`로 로그에 그대로 찍힌다 — 어떤 config·`--num-workers`로 돌렸는지 **로그만 봐도** 안다. (슬롯이 `_template.sh` 기준으로 만들어졌을 때. 기존 슬롯은 `cp _template.sh shellN.sh`로 갱신.)
-6. **GPU 학습엔 순차 run 번호 필수** — `--run-tag runN -n sdum_runN`(스모크 포함, 번호 재사용·무번호 'smoke' 금지). 다음 번호는 `training_anal/CLAUDE.md` run 이력 표에서 "마지막+1".
+6. **GPU 학습엔 식별 가능한 이름 필수** — 현행 관례는 `-n promptmr_kfold_f<FOLD>[_변주] --run-tag pmr_kf_f<FOLD>[_변주]`(예: `pmr_kf_f2` ↔ 증강 ON arm `pmr_kf_f2_aug`), 스모크는 `_smoke` suffix를 붙인다. 다음 번호가 필요한 옛 관례(`runN`)를 쓸 경우엔 `training_anal/CLAUDE.md` run 이력 표에서 "마지막+1".
 7. **`-r 100` 고정**(≈7분마다 heartbeat). 단 `--max-iters N` 스모크는 예외 — N보다 작은 `-r`(5~10)이라야 capped iter가 로그에 찍힌다.
 
 ## 파일

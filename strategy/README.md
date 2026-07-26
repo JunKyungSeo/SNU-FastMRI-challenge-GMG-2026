@@ -25,7 +25,7 @@
 ### ✅ 확정 (→ [confirmed_model.md](confirmed_model.md))
 - 입력 2분기: **k-space readout(높이) 640→384 crop, 폭 native** + **GRAPPA 영상 도메인 유지(fft 안 함)**
 - **전역 스칼라 정규화 ÷s** (입력유도, acc 무관 단일, k-space·GRAPPA·target 동일), 출력 ×s
-- 증강: mask(k-space만)·flip(전부 동기), 지수 스케줄 (로직 구현됨, 배선 대기)
+- 증강: mask(k-space만)·flip(전부 동기), 스케줄 exp/ramp/constant (로직·CLI·epoch 배선 완료 2026-07-26, 기본 off — --aug-on으로 켠다. A/B는 shell22.sh ON arm 대기)
 - 감도맵 **1회 추정 후 재사용** (mask=그대로 / flip=flip)
 - main: VarNet cascade+DC, **GRAPPA 영상 prior 채널 + residual**
 

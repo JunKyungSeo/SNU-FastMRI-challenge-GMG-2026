@@ -34,8 +34,6 @@ SNU FastMRI Challenge 도전기
     * {mask 형식}은 "acc4", "acc8" 중 하나입니다.
     * train은 "acc4", "acc8" 각각 {순번} 1 ~ 85, val은 각각 1 ~ 15 입니다.
 
-> phase1에서는 train, val 데이터만 제공됩니다. 성능 평가용 leaderboard 데이터셋은 추후 별도로 배포될 예정입니다.
-
 ### Annotation
 * fastMRI+ knee 병변 bounding box는 각 image h5의 `attrs['annotations']`에 JSON으로 저장되어 있습니다.
 * 형식: `{ "<slice>": [ {"x", "y", "width", "height", "label"}, ... ] }` (384 x 384 image 공간 기준, width·height가 16 초과인 박스만 포함)
@@ -51,13 +49,27 @@ SNU FastMRI Challenge 도전기
 
 ```bash
 ├── .gitignore
+├── CLAUDE.md              # repo 작업 규칙
 ├── README.md
+├── summary.md             # 프로젝트 통합 현황 (최신 상태 요약)
+├── worklog.md             # 변경 히스토리 (누가·언제·왜)
 ├── train.py
 ├── train.sh · recon_eval.sh   # 실행 래퍼
 ├── recon_eval.py          # 고정 채점 하네스(수정 금지): SSIM_full·SSIM_bbox·추론시간 산출
 ├── requirements.txt
-├── scripts
-│   └── reconstruct.py     # leaderboard reconstruction 엔트리
+├── docs                   # README 이미지 등
+├── scripts                # 보조 도구 (분석·탐침·병합)
+│   ├── reconstruct.py     # leaderboard reconstruction 엔트리
+│   ├── merge_moe.py       # acc4/acc8 전문가 → MoE 체크포인트 병합
+│   ├── probe_oom*.py      # VRAM 탐침 (SDUM · PromptMR+)
+│   └── ...                # bbox_ssim_breakdown·lesion_stats·coil_energy_report 등
+├── shell_scripting        # GPU 작업 큐 (상세: shell_scripting/README.md)
+│   ├── _train_template.sh      # 학습 슬롯 원본 ([고정 인자] + [이번 run] 구조)
+│   ├── _evaluation_template.sh # reconstruct+채점 슬롯 원본
+│   ├── shellN.sh          # 현역 큐 슬롯 (shell16~22)
+│   ├── notify.sh          # 작업 완료 Gmail 알림
+│   ├── legacy/            # 종료된 슬롯 보관 (shell1~14 등, 역할 표: legacy/README.md)
+│   └── logs/              # 실행 로그 (git 미추적)
 ├── strategy               # 대회 전략·구현 문서 (인덱스: strategy/README.md)
 │   ├── README.md          # 전략 문서 인덱스 + 상태 대시보드
 │   ├── promptmr_plus.md   # ✅ 현재 백본 SPEC (PromptMR+)
@@ -65,23 +77,26 @@ SNU FastMRI Challenge 도전기
 │   ├── candidates.md      # 미결정 후보·열린 A/B
 │   ├── rejected.md        # 제외한 기법 + 이유
 │   └── ...                # model_strategy·augmentation·preprocessing·related_work (근거)
-└── utils
-    ├── common
-    │   ├── loss_function.py  # SSIMLoss(masked) + bbox_ssim_loss
-    │   ├── metrics.py        # ssim_full·ssim_bbox·foreground_mask (채점 정합, 고정)
-    │   └── utils.py          # center_crop·save_reconstructions 등
-    ├── data
-    │   ├── load_data.py      # 데이터셋 로딩 + GRAPPA 로딩 + dataloader 배선
-    │   └── transforms.py     # DataTransform(readout crop·정규화·GRAPPA·coil compression) + MRIAugmentor
-    ├── learning
-    │   ├── test_part.py      # load_model·prep_volume·recon_slice(채점 하네스 계약) + forward
-    │   └── train_part.py     # train/train_epoch/validate (손실·grad accum·clip·resume)
-    └── model
-        ├── fastmri/          # vendored fastMRI 연산 (fft·complex·coil combine·sens_expand)
-        ├── promptmr/         # ★ PromptMR+ 백본(vendored·slim) + config·adapter
-        ├── sdum/             # 레거시 SDUM (보존, 배선 제거)
-        ├── unet.py           # VarNet 내부 regularizer U-Net
-        └── varnet.py         # 레거시 E2E-VarNet 백본
+├── training_anal          # run별 학습 분석 기록 (run 이력 표: training_anal/CLAUDE.md)
+├── utils
+│   ├── common
+│   │   ├── loss_function.py  # SSIMLoss(masked) + bbox_ssim_loss
+│   │   ├── metrics.py        # ssim_full·ssim_bbox·foreground_mask (채점 정합, 고정)
+│   │   └── utils.py          # center_crop·save_reconstructions 등
+│   ├── data
+│   │   ├── load_data.py      # 데이터셋 로딩 + GRAPPA 로딩 + dataloader 배선 (k-fold 분할 포함)
+│   │   └── transforms.py     # DataTransform(readout crop·정규화·GRAPPA·coil compression) + MRIAugmentor
+│   ├── learning
+│   │   ├── test_part.py      # load_model·prep_volume·recon_slice(채점 하네스 계약) + forward
+│   │   └── train_part.py     # train/train_epoch/validate (손실·grad accum·clip·resume)
+│   └── model
+│       ├── fastmri/          # vendored fastMRI 연산 (fft·complex·coil combine·sens_expand)
+│       ├── promptmr/         # ★ PromptMR+ 백본(vendored·slim) + config·adapter
+│       ├── moe.py            # acc4/acc8 MoE 라우팅 래퍼 (MoEWrapper)
+│       ├── sdum/             # 레거시 SDUM (보존, 배선 제거)
+│       ├── unet.py           # VarNet 내부 regularizer U-Net
+│       └── varnet.py         # 레거시 E2E-VarNet 백본
+└── viewer_result          # h5_viewer.py 뷰어 + 시각화 산출물
 ```
 
 ## 3. Before you start

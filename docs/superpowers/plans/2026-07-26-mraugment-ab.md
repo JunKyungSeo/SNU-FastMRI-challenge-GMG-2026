@@ -704,7 +704,21 @@ print('best epoch =', best, '→ --aug-delay =', max(0, best - 1))
 " ../result/<net_name>/val_loss_log_<tag>.npy
 ```
 
-`--aug-delay = max(0, best_epoch - 1)`로 정한다(증강 확률이 과적합 구간을 덮게 하는 것이 목적). 이 값은 스크립트에 박지 않는다 — `shell22.sh`는 `AUG_DELAY` 환경변수를 필수로 요구하고(`: "${AUG_DELAY:?…}"` 형태의 가드), 없으면 exit 2로 거부한다. 근거는 스크립트 주석에 남긴다.
+⚠️ **`--aug-delay = best_epoch - 1`로 정하지 말 것 — 2026-07-26 실패한 지침이다.** baseline val이 epoch 8에서 꺾혔다고 D=7을 주면, 지수식이 `t=D`에서 정확히 0이라 **증강은 epoch 8·9 두 개에서만 돈다**(Σp=0.98). 증강은 정규화이므로 최적화 경로 전체를 바꿔야 효과가 나온다(논문 Fig 3a에서 DA 곡선이 baseline과 갈라지는 데 수십 epoch이 걸린다) — 이미 8 epoch 동안 훈련셋을 외운 뒤 켜면 남은 2 epoch로는 아무 일도 일어나지 않는다. 그 상태로 A/B를 돌리면 결과가 null로 나와도 **"증강 무효"인지 "투여량 없었음"인지 구분이 안 되어 실험이 답을 못 준다.**
+
+**올바른 기준: `D ≈ T의 20~30%`** (10 epoch 런이면 **D=2~3**, Σp=3.25~2.80 → 증강이 6~7 epoch 작용). 덮어야 하는 것은 "과적합이 일어난 지점"이 아니라 **"과적합으로 가는 경로"**다. 참고로 MRAugment 공식 repo 기본값은 `aug_delay=0`(Σp=4.14)이고, 우리 문서가 경고하는 "초반 강한 증강 → 수렴 실패"는 exp 스케줄이 `p(1)=0.22`로 이미 완화한다. `best_epoch`는 상한(`D < best_epoch`)으로만 쓴다.
+
+투여량은 이 한 줄로 확인한다 — `Σp`가 2.5 미만이면 D를 낮춰라:
+```bash
+python -c "
+import numpy as np
+D,T,decay,pmax=3,10,5.0,0.55
+p=[0.0 if t<D else pmax/(1-np.exp(-decay))*(1-np.exp(-decay*(t-D)/(T-D))) for t in range(T)]
+print('epoch별 p =', [round(v,3) for v in p]); print('Σp =', round(sum(p),3))
+"
+```
+
+이 값은 스크립트에 박지 않는다 — `shell22.sh`는 `AUG_DELAY` 환경변수를 필수로 요구하고(`: "${AUG_DELAY:?…}"` 형태의 가드), 없으면 exit 2로 거부한다. 근거는 스크립트 주석에 남긴다.
 
 - [ ] **Step 3: `shell22.sh` 작성**
 

@@ -80,7 +80,8 @@ import numpy as np, sys
 log = np.load(sys.argv[1])
 for e, v in log: print(int(e), f'{v:.6f}')
 best = int(log[np.argmin(log[:,1]), 0])
-print('best epoch =', best, '→ AUG_DELAY =', max(0, best - 1))
+print('best epoch =', best, ' ← D는 이 값보다 작아야 한다(상한으로만 쓴다)')
+print('권장 AUG_DELAY =', min(3, max(0, best - 1)), ' # 10 epoch 런은 D=2~3. best-1을 그대로 쓰면 증강이 1~2 epoch만 돌아 실험이 답을 못 준다')
 " ../result/promptmr_kfold_f${FOLD}/val_loss_log_pmr_kf_f${FOLD}.npy
 EOF
         exit 2

@@ -151,7 +151,8 @@ python recon_eval.py -n <net_name> -p /root/Data/leaderboard   # SSIM_full·SSIM
 > 원칙: **hallucination-free lesion fidelity** — 병변 bbox를 훼손하지 않고 물리적으로 유효한 변형만. (상세: [`augmentation.md`](strategy/augmentation.md))
 
 * **채택(ON)**: ① 좌-우(phase-encode) **flip** — k-space·GRAPPA·target·bbox 동기. ② **ACS 보존 마스크 thinning**(중앙 ACS 100% 보존, 주변부만, k-space에만). ③ (기본 off) k-space 랜덤 위상·보수적 측정 노이즈.
-* **스케줄**: warmup(초기 off) → **지수형 확률 점증**, 샘플별 **결정적 RNG**(재현성).
+* **스케줄**: `--aug-delay D`(기본 0)까지는 off → `--aug-schedule exp|ramp|constant`로 총 epoch T까지
+  `--aug-max-prob`(기본 0.55)까지 점증, 샘플별 **결정적 RNG**(재현성). **기본 off — `--aug-on` 필요.**
 * **제외**: 위-아래 flip·회전/스케일/elastic·image 노이즈·밝기/대비·cutout·MixUp/CutMix(병변 왜곡=hallucination, SSIM_bbox 파괴).
 
 ### 전처리(Preprocessing) 전략 요약

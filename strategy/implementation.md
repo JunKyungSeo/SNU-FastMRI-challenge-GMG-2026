@@ -67,8 +67,8 @@
 
 > ✅ **구현 완료 (2026-07-26)**: `train.py` `parse()`(`--aug-*` 11개 플래그) · `utils/data/load_data.py`의 `AugmentConfig(...)` 전달 · `utils/data/transforms.py`의 `_prob`/`probs`(MRAugment `schedule_p` 형태로 재구현) · `utils/learning/train_part.py`의 epoch 루프(매 epoch `set_epoch` 호출 + `[aug]` 로그 + `--aug-on`인데 미배선이면 `RuntimeError`) 모두 배선 완료. 테스트: `scripts/tests/test_augment.py`(16개). 서버 검증: `scripts/verify_aug.sh`(전항목 통과).
 
-### 7. bbox 손실 소비부 (손실 확정 후 — candidates)
-- `DataTransform`은 `return_bbox=True`로 bbox 파싱·flip 동기까지 됨(`_bbox_collate` 포함). **손실에서 소비하는 부분만 미배선** → [`candidates.md`](candidates.md) 손실 확정 후.
+### 7. ✅ bbox 손실 소비부 (배선 완료 · run12 롤백)
+- `DataTransform`은 `return_bbox=True`로 bbox 파싱·flip 동기까지 됨(`_bbox_collate` 포함). **손실 소비부 배선 완료**: `train.py:48 --bbox-loss-lambda` · `train_part.py:29,69,90` · `loss_function.py:74 bbox_ssim_loss`. run12에서 λ=0.5로 실학습 → 퇴행 확인 후 기본값 0.0(off)으로 롤백([`training_anal/2026-07-18-run12-bbox-uc-analysis.md`](../training_anal/2026-07-18-run12-bbox-uc-analysis.md)).
 
 ### 8. ⬜ 학습 기록 장치 (Claude 입력용)
 > 학습 소요 시간·중단 지점 같은 걸 사람이 손으로 옮겨 적지 않아도, Claude가 파일로 읽을 수 있게 하는 최소 장치.
@@ -84,17 +84,17 @@
 
 ---
 
-## 증강 스케줄 배선 상세 (구 todo.md)
+## 증강 스케줄 배선 상세 (구 todo.md, 설계 근거로 보존 — 반영 완료)
 
 > 왜 train.py/train_part.py 두 곳인가: 증강 로직은 `transforms.py`에 있으나 **transform은 "지금 몇 epoch인지" 모른다**. epoch·설정을 위(train.py args)→아래(transform)로 내리는 통로가 6a·6b.
 > 비유: train.py=볼륨 노브 설치 / train_part.py=곡 진행(epoch)에 따라 볼륨 조절 / transforms.py=실제 소리.
 
-**6a train.py 주의**: 기본값 전부 off·보수적(재현성). 현재 `DataTransform(isforward, max_key)`만 받으므로 시그니처 확장은 transforms 작업(2·3)과 연동.
+**6a train.py 주의**: 기본값 전부 off·보수적(재현성). ✅ 반영됨 — `DataTransform`의 `__init__`은 이미 `augmentor`/`is_train`/`return_bbox`/`normalize`/`readout_crop` 등을 전부 받도록 확장돼 있다(§6은 완료 상태).
 
 **6b train_part.py 주의**:
 ```python
 for epoch in range(start_epoch, args.num_epochs):
-    train_loader.dataset.transform.set_epoch(epoch)   # ← 추가
+    train_loader.dataset.transform.set_epoch(epoch)   # ✅ 반영됨: train_part.py:396
     train_epoch(args, epoch, model, train_loader, optimizer, loss_type)
 ```
 - val_loader는 `set_epoch` 미호출 또는 `aug_on=False`. `save_reconstructions`/`validate`는 안 건드림.

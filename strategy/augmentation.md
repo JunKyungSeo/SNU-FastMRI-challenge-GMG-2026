@@ -39,15 +39,17 @@
 - ❌ 밝기/gamma/image-domain 노이즈, elastic, cutout/erasing, MixUp/CutMix, 임의각 회전·스케일·shear, naive 합성병변 삽입 — 전부 **SSIM_bbox 직접 파괴/hallucination 위험**
 
 **스케줄**
-- 첫 10~15 epoch aug off(기본기) → 지수형으로 확률 p=0.5~0.6까지 점증
-- 강도는 warmup(≈4ep)→막판 decay(막판엔 깨끗한 데이터로 consolidation)
+- 구현된 형태: `--aug-schedule exp --aug-delay D --aug-max-prob 0.55`(기본값) — delay D epoch까지 aug off,
+  이후 지수형으로 확률이 총 epoch T까지 p=0.55로 점증. (아래 §3에서 예전에 권고하던 "첫 10~15 epoch off →
+  p=0.5~0.6"은 49행에서 폐기된 값이었다 — 이 TL;DR도 구현된 값으로 갱신함.)
+- **강도(intensity) 스케줄·막판 decay는 미구현** — 위 확률 스케줄만 구현돼 있다.
 - **모든 aug RNG는 고정 seed**(조직측 재현성 검증 대비)
 
 **실험 우선순위(먼저 켤 것)**: ① mask-aug + 좌우 flip(**최대 이득으로 예상 — 검증 전 가설**) → ② 원본마스크 혼합비 튜닝 → ③ GRAPPA FFT prior 입력 → ④ acc4/acc8 커리큘럼 → ⑤ k-space 위상 → ⑥ translation/지터 → ⑦ consistency(후순위, **학습 2× 비용**). 상세 순서·측정법은 §4.1/§4.2.
 
 > ✅ **구현 상태(2026-07-03; 스위치 배선 2026-07-26 완료)**: 위 증강은 `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)와 `utils/data/load_data.py`에 **구현 완료**.
-> **스위치 배선도 완료** — `train.py`의 `--aug-*` 플래그(`--aug-on` 등 11개)와 `train_part.py`의 매 epoch `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일. 확률 스케줄은 MRAugment 원 논문의 `schedule_p` 형태(delay D·총 epoch T로 정규화한 exp/ramp/constant)로 재구현됐다 — 참고로 배선 전 기본값이던 `warmup_epochs=10`은 10-epoch 런에서 매 epoch `p=0`을 내는 값이라, 증강이 조용히 한 번도 발동하지 않는 문제가 있었다.
-> bbox는 `return_bbox=True`일 때 `DataTransform`이 `annotations`를 파싱해 flip과 동기 반환(가변 길이용 `_bbox_collate` 포함). bbox를 **손실에 쓰려면** train_part 소비부는 아직 배선 필요.
+> **스위치 배선도 완료** — `train.py`의 `--aug-*` 플래그(`--aug-on` 등 11개)와 `train_part.py`의 매 epoch `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일. 확률 스케줄은 MRAugment **공식 구현**(`mraugment/data_augment.py`)의 `schedule_p` 형태 — 논문 식(`p(t)=p_max/(1−e^{−c})·(1−e^{−tc/T})`, c=5, p_max=0.55) + 공식 repo가 얹은 delay D 정규화 — 와 같은 형태로 재구현됐다(코드 주석도 `transforms.py:181,234`에서 그렇게 적는다; delay D 자체는 논문 식엔 없다). 참고로 배선 전 기본값이던 `warmup_epochs=10`은 10-epoch 런에서 매 epoch `p=0`을 내는 값이라, 증강이 조용히 한 번도 발동하지 않는 문제가 있었다.
+> bbox는 `return_bbox=True`일 때 `DataTransform`이 `annotations`를 파싱해 flip과 동기 반환(가변 길이용 `_bbox_collate` 포함). **손실 소비부 배선 완료**(`--bbox-loss-lambda` / `train_part.py` / `loss_function.py`의 `bbox_ssim_loss`) — run12에서 λ=0.5 시도 → 퇴행으로 기본 0.0(off) 유지.
 
 ---
 

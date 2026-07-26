@@ -10,8 +10,12 @@
 import torch
 import torch.nn as nn
 
-# acc4 ≈ frac 0.25, acc8 ≈ frac 0.125 → 두 분포의 중앙(0.1875)을 임계값으로.
-DEFAULT_ACC_THRESHOLD = 0.1875
+# 실측(/workspace/Data 200 volume 전수): acc4 frac 0.3090~0.3119, acc8 frac 0.1957~0.1995.
+# 이론값 1/4·1/8(=0.25·0.125)보다 높은 이유는 마스크 중앙의 ACS(자동보정) 영역이 가속률과
+# 무관하게 항상 꽉 채워져 있어서다. 그래서 옛 임계값 0.1875는 **두 분포 모두보다 아래**라
+# frac<임계가 절대 성립하지 않았고, acc8 볼륨 100개가 전부 acc4 전문가로 갔다(전수 확인).
+# 두 분포 사이 구간(0.1995~0.3090)의 중앙 부근인 0.25를 쓴다 — 양쪽 마진 약 25%.
+DEFAULT_ACC_THRESHOLD = 0.25
 
 
 def extract_acc_from_mask(mask, threshold=DEFAULT_ACC_THRESHOLD):

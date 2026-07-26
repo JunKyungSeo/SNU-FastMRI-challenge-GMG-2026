@@ -303,11 +303,13 @@ def kfold_split(args):
     (예: train/…/knee_acc4_1.h5 = 23슬라이스, val/…/knee_acc4_1.h5 = 31슬라이스) 각각 독립
     단위로 다룬다 → fold마다 정확히 200/k개가 떨어진다.
 
-    ⚠️ --acc 4/8 을 함께 주면 그 가속률 볼륨만 모아서 분할한다. 즉 **--acc 값이 바뀌면 fold
-    경계도 같이 바뀐다.** --acc 하나만 쓰는 단독 실험에선 정상이지만, 한 파이프라인 안에서
-    --acc를 바꿔가며(MoE의 pretrain --acc all → 미세조정 --acc 4/8) 같은 hold-out으로 채점하려
-    하면 단계마다 빼두는 볼륨이 달라져 채점셋이 오염된다(실측: 40개 중 30개). 그 조합을 쓸
-    거면 acc4·acc8을 각각 k등분해 합치는 층화 분할로 먼저 바꿔야 한다.
+    **acc 층화(2026-07-26~)**: acc4·acc8 볼륨을 _stratified_folds로 **각각** k등분해 fold별로
+    합친다. 그룹별 셔플이 서로 독립이라 --acc all/4/8 중 뭘 줘도 **같은 볼륨은 항상 같은
+    fold** → MoE의 pretrain(--acc all)→미세조정(--acc 4/8)을 같은 hold-out으로 이어도
+    채점셋이 오염되지 않는다. (구버전은 "필터 후 분할"이라 경계가 --acc에 종속 —
+    실측 40개 중 30개 오염. 그 코드는 이 층화로 대체됨.)
+    ⚠️ 구버전(비층화)으로 나눈 기존 런(promptmr_kfold_f1/f2)과는 hold-out이 다르다.
+    그 런들과 val 숫자를 나란히 비교하지 말 것.
 
     난수는 seed만의 함수(RandomState(kfold_seed))라 같은 seed면 언제 돌려도 같은 분할이 나온다.
     """
@@ -319,20 +321,33 @@ def kfold_split(args):
     acc_want = _norm_acc(getattr(args, "acc", "all"))
 
     roots = kfold_roots(args)
-    ids = []
+    ids_by_group = {}   # acc 토큰('4'/'8') → volume_id 리스트
+    no_token = []
     for r in roots:
         for f in sorted((r / "kspace").glob("*.h5")):
-            if acc_want is not None and _file_acc(f.name) != acc_want:
+            acc = _file_acc(f.name)
+            if acc is None:
+                no_token.append(str(f))
                 continue
-            ids.append(volume_id(r, f.name))
-    if not ids:
-        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다"
-                         f"{'' if acc_want is None else f' (acc={acc_want} 필터 적용)'}.")
+            ids_by_group.setdefault(acc, []).append(volume_id(r, f.name))
+    if no_token:
+        raise ValueError(
+            "K-Fold 층화: 파일명에 accN 토큰이 없어 그룹을 정할 수 없습니다:\n  "
+            + "\n  ".join(no_token))
+    if not ids_by_group:
+        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다.")
 
-    ids = np.array(sorted(ids))
-    shuffled = ids[np.random.RandomState(seed).permutation(len(ids))]
-    val_ids = set(map(str, np.array_split(shuffled, k)[val_fold]))
-    train_ids = set(map(str, shuffled)) - val_ids
+    folds = _stratified_folds(ids_by_group, k, seed)
+
+    if acc_want is not None:
+        # --acc 4/8: 조립된 fold에서 그 그룹만 남긴다. 경계 자체는 안 움직인다(층화 불변식).
+        keep = set(ids_by_group.get(acc_want, []))
+        if not keep:
+            raise ValueError(f"K-Fold: acc={acc_want} 볼륨이 없습니다({roots}).")
+        folds = [f & keep for f in folds]
+
+    val_ids = folds[val_fold]
+    train_ids = set().union(*folds) - val_ids
     return train_ids, val_ids
 
 

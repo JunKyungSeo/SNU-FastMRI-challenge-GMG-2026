@@ -54,3 +54,71 @@ def test_deterministic_same_seed():
 def test_group_smaller_than_k_raises():
     with pytest.raises(ValueError, match="k="):
         _stratified_folds({"4": _ids(4, 3)}, k=5, seed=430)
+
+
+# ---------- kfold_split 통합 테스트 (tmp_path에 빈 h5 touch) ----------
+
+def _make_data(tmp_path, n4=50, n8=50):
+    """train/·val/ 두 root에 같은 이름의 acc4/acc8 파일을 touch.
+    실데이터처럼 두 root에 동명 볼륨이 존재 → volume_id가 구분해 총 2*(n4+n8)개."""
+    for root in ("train", "val"):
+        d = tmp_path / root / "kspace"
+        d.mkdir(parents=True)
+        for i in range(n4):
+            (d / f"knee_acc4_{i}.h5").touch()
+        for i in range(n8):
+            (d / f"knee_acc8_{i}.h5").touch()
+    return tmp_path
+
+
+def _args(tmp_path, acc="all", k=5, fold=0, seed=430):
+    return SimpleNamespace(
+        data_path_train=tmp_path / "train", data_path_val=tmp_path / "val",
+        k_fold=k, val_fold=fold, kfold_seed=seed, acc=acc)
+
+
+def test_acc_filter_keeps_fold_boundaries(tmp_path):
+    """핵심 불변식: --acc 4/8의 분할 == --acc all의 분할에서 그 acc만 남긴 것."""
+    _make_data(tmp_path)
+    for fold in range(5):
+        tr_all, va_all = kfold_split(_args(tmp_path, "all", fold=fold))
+        tr_4, va_4 = kfold_split(_args(tmp_path, "4", fold=fold))
+        tr_8, va_8 = kfold_split(_args(tmp_path, "8", fold=fold))
+        assert va_4 == {v for v in va_all if "acc4" in v}
+        assert tr_4 == {v for v in tr_all if "acc4" in v}
+        assert va_8 == {v for v in va_all if "acc8" in v}
+        assert tr_8 == {v for v in tr_all if "acc8" in v}
+
+
+def test_partition_complete_disjoint_balanced(tmp_path):
+    """5개 val fold가 전체 200 볼륨을 정확히 1회씩 커버 + train/val 서로소 + fold마다 acc 20/20."""
+    _make_data(tmp_path)   # 총 200 = acc4 100 + acc8 100
+    seen = set()
+    for fold in range(5):
+        tr, va = kfold_split(_args(tmp_path, fold=fold))
+        assert tr.isdisjoint(va)
+        assert len(tr) + len(va) == 200
+        assert len(va) == 40
+        assert sum(1 for v in va if "acc4" in v) == 20
+        assert sum(1 for v in va if "acc8" in v) == 20
+        seen |= va
+    assert len(seen) == 200
+
+
+def test_kfold_split_deterministic(tmp_path):
+    _make_data(tmp_path)
+    assert kfold_split(_args(tmp_path)) == kfold_split(_args(tmp_path))
+
+
+def test_file_without_acc_token_raises(tmp_path):
+    """acc 토큰 없는 h5가 섞이면 fail-fast (이 데이터셋은 acc4/acc8 전수 규약)."""
+    _make_data(tmp_path)
+    (tmp_path / "train" / "kspace" / "weird_noacc.h5").touch()
+    with pytest.raises(ValueError, match="accN"):
+        kfold_split(_args(tmp_path))
+
+
+def test_acc_filter_no_match_raises(tmp_path):
+    _make_data(tmp_path, n8=0)   # acc8 파일 없음
+    with pytest.raises(ValueError):
+        kfold_split(_args(tmp_path, acc="8"))

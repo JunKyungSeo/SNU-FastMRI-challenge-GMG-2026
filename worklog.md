@@ -52,7 +52,8 @@
 주의: 교체 전 파티션으로 돈 promptmr_kfold_f1/f2와 새 런의 val은 비교 불가다. shell22의
 증강 A/B는 OFF arm(f2)이 구파티션이라 baseline 재학습 없이는 무효 — 다음 run 결정에서 처리.
 
-상태: 커밋 13943cb · f5b8d89. 서버 pytest·스모크 검증은 아직(아래 핸드오프).
+상태: 커밋 9f2794f(층화 헬퍼·단위 테스트) 13943cb(독립성 테스트 보강) f5b8d89(kfold_split 교체·통합 테스트).
+서버 pytest·스모크 검증은 아직(아래 핸드오프).
 
 핸드오프 → @esel34: 서버에서 python -m pytest scripts/tests/test_kfold_stratify.py -v 와
 SMOKE=1 FOLD=0 bash shell_scripting/shell21.sh 를 돌려 [K-Fold] 로그의 val 구성이

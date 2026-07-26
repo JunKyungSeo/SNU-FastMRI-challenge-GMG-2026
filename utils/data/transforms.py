@@ -190,6 +190,9 @@ class AugmentConfig:
         # 개별 aug on/off
         self.flip = kw.get("flip", True)                   # 좌-우(width)만
         self.mask = kw.get("mask", True)
+        # 변환별 가중치(공식 repo --aug_weight_*): 실제 확률 = p · w_i. 한쪽만 0으로 두면 분리 A/B가 된다.
+        self.weight_flip = kw.get("weight_flip", 1.0)
+        self.weight_mask = kw.get("weight_mask", 1.0)
         self.phase = kw.get("phase", False)                # marginal → 기본 off
         self.noise = kw.get("noise", False)                # 검토 → 기본 off
         # ※ translation은 미채택: target이 384로 center-crop돼 제공되는데 모델은 640×368에서
@@ -212,6 +215,14 @@ class MRIAugmentor:
 
     def set_epoch(self, epoch):
         self.epoch = int(epoch)
+
+    def probs(self):
+        """(p, p_flip, p_mask). 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산."""
+        c = self.cfg
+        p = self._prob()
+        p_flip = min(1.0, max(0.0, p * float(c.weight_flip)))
+        p_mask = min(1.0, max(0.0, p * float(c.weight_mask) * (1.0 - float(c.orig_mask_prob))))
+        return p, p_flip, p_mask
 
     # ---- 스케줄 ----
     def _prob(self):
@@ -284,19 +295,19 @@ class MRIAugmentor:
         K = kspace_c * M                       # 제공 언더샘플 적용
         if (not cfg.on) or (target is None):
             return K, M, target, bbox, grappa
-        p = self._prob()
+        p, p_flip, p_mask = self.probs()
         if p <= 0.0:
             return K, M, target, bbox, grappa
         rng = self._rng(fname, sl)
         tgt = target
 
-        # 1) mask augmentation (원본 유지 확률 반영 → test 고정마스크 분포 정합). GRAPPA엔 미적용.
-        if cfg.mask and (rng.random() < p) and (rng.random() >= cfg.orig_mask_prob):
+        # 1) mask augmentation — 원본(고정)마스크 혼합을 p_mask에 이미 반영(test 분포 정합). GRAPPA엔 미적용.
+        if cfg.mask and (rng.random() < p_mask):
             M = self._aug_mask(rng, M)
             K = kspace_c * M
 
         # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
-        if cfg.flip and (rng.random() < p):
+        if cfg.flip and (rng.random() < p_flip):
             K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
 
         # 3) k-space 랜덤 위상 (global, magnitude/RSS 불변 → bbox 채점 불변, 이득 marginal). GRAPPA 불변.

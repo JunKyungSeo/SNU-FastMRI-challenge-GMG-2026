@@ -169,3 +169,30 @@ def test_default_delay_is_zero_so_aug_starts_immediately():
     aug = MRIAugmentor(AugmentConfig(on=True, total_epochs=10, max_prob=0.55))
     aug.set_epoch(0); assert aug._prob() == 0.0
     aug.set_epoch(1); assert aug._prob() > 0.0
+
+
+def test_probs_applies_weights_and_orig_mask_mix():
+    aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5,
+                                     weight_flip=1.0, weight_mask=1.0, orig_mask_prob=0.5))
+    p, p_flip, p_mask = aug.probs()
+    assert p == 0.5
+    assert p_flip == pytest.approx(0.5)
+    assert p_mask == pytest.approx(0.25)      # p · w · (1 - orig_mask_prob)
+
+
+def test_probs_are_clipped_to_one():
+    aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.9,
+                                     weight_flip=4.0, orig_mask_prob=0.0))
+    _, p_flip, _ = aug.probs()
+    assert p_flip == 1.0
+
+
+def test_weight_zero_disables_one_transform_only():
+    """weight_flip=0이면 flip은 안 걸리고 mask만 걸린다(분리 A/B의 근거)."""
+    aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=1.0,
+                                     flip=True, mask=True, weight_flip=0.0,
+                                     weight_mask=1.0, orig_mask_prob=0.0))
+    M, T = make_mask(), make_target()
+    _, M2, T2, _, _ = aug(make_kspace(), M, T, None, None, "knee_acc4_1.h5", 0)
+    assert np.array_equal(T2, T), "weight_flip=0인데 flip이 걸렸다"
+    assert M2.sum() < M.sum(), "mask 증강이 걸리지 않았다"

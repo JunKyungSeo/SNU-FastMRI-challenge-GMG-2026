@@ -272,6 +272,25 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     return data_loader
 
 
+def _stratified_folds(ids_by_group, k, seed):
+    """acc 그룹별 독립 셔플 → 각각 k등분 → fold별 합집합. 길이 k의 set 리스트 반환.
+
+    각 그룹이 **자기만의** RandomState(seed)로 섞이므로 한 그룹의 fold 배정은
+    다른 그룹의 존재 여부와 무관하다 — --acc 필터가 fold 경계를 못 움직이는 근거.
+    그룹 순회는 sorted(키) 순서라 결정적이다.
+    """
+    folds = [set() for _ in range(k)]
+    for key in sorted(ids_by_group):
+        ids = np.array(sorted(ids_by_group[key]))
+        if len(ids) < k:
+            raise ValueError(
+                f"K-Fold 층화: acc{key} 볼륨 {len(ids)}개 < k={k} — 빈 fold가 생긴다.")
+        shuffled = ids[np.random.RandomState(seed).permutation(len(ids))]
+        for i, chunk in enumerate(np.array_split(shuffled, k)):
+            folds[i].update(map(str, chunk))
+    return folds
+
+
 def kfold_roots(args):
     """K-Fold가 합쳐 쓰는 데이터 root 목록 (원본 train/ + val/ 전부 = 200 volume)."""
     return [Path(args.data_path_train), Path(args.data_path_val)]

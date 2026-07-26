@@ -259,3 +259,21 @@ def test_probs_are_gated_by_on_off_switch():
     _, p_flip2, p_mask2 = mask_off.probs()
     assert p_flip2 > 0.0
     assert p_mask2 == 0.0
+
+
+def test_flip_lr_closed_form_matches_image_domain_reference():
+    """_flip_lr의 FFT-free closed form(roll(flip(K),1)·ramp)이 옛 이미지 도메인 왕복
+    (ifftc→flip→fftc, 재마스킹 포함)과 항상 일치하는지 못박는 회귀 테스트.
+    참조값을 이 테스트 안에서 옛 방식대로 직접 계산해두면, 이후 누군가 _flip_lr을 건드려
+    이 동치가 깨지는 순간 테스트가 실패한다(공식이 조용히 틀려도 놓치지 않도록)."""
+    K, M, T = make_kspace(), make_mask(), make_target()
+
+    M2 = np.roll(np.flip(M), 1).astype(np.float32)
+    ref = _fftc(np.ascontiguousarray(_ifftc(K * M)[:, :, ::-1])) * M2
+
+    aug = MRIAugmentor(flip_only_cfg())
+    K2, _, _, _, _ = aug(K, M, T, None, None, "knee_acc4_1.h5", 0)
+
+    rel = np.linalg.norm(K2 - ref) / np.linalg.norm(ref)
+    assert rel < 1e-5, f"closed form이 이미지 도메인 참조와 어긋난다: {rel:.2e}"
+    assert K2.dtype == np.complex64, f"K2 dtype이 complex128로 승격됐다: {K2.dtype}"

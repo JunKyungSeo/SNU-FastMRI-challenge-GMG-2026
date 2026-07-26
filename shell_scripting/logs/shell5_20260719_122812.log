@@ -1,0 +1,18 @@
+==========================================================
+[START] shell5   2026-07-19 12:28:12
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell5_20260719_122812.log
+==========================================================
++ python recon_eval.py -n sdum_run13 -p /root/Data/leaderboard
++ tee ../result/sdum_run13/recon_eval_run13.txt
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+Terminated
+==========================================================
+[DONE ] shell5   2026-07-19 12:30:25   exit=143
+[비교] run13 vs run11(best): full 0.9161 / bbox 0.9095 / 1514ms.
+       run13 ≈ run11 → UC 중립(bbox가 run12 원흉) · run13 < run11 → UC 유해(UC 제거 근거).
+[저장] 점수: ../result/sdum_run13/recon_eval_run13.txt (+ 이 슬롯 로그).
+==========================================================

@@ -126,13 +126,13 @@ fi
 set -x
 python train.py --model promptmr --readout-crop \
     --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 \
-    -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 4 --use-checkpoint \
+    -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 6 --use-checkpoint \
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 \
     --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
     --aug-on --aug-schedule "$AUG_SCHEDULE" --aug-max-prob 0.55 --aug-delay "$AUG_DELAY" \
     --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 \
     -n "$NET" --run-tag "$TAG" \
-    -t /workspace/Data/train/ -v /workspace/Data/val/
+    -t /root/Data/train/ -v /root/Data/val/
 { TRAIN_STATUS=$?; set +x; } 2>/dev/null
 echo "[TRAIN] $NET (fold $FOLD) 종료   exit=$TRAIN_STATUS"
 

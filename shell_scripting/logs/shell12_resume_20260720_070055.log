@@ -1,0 +1,25 @@
+==========================================================
+[START] shell12_resume   2026-07-20 07:00:55
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell12_resume_20260720_070055.log
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --coil-compress --n-virtual-coils 8 --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 1e-6 -e 10 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run1 --run-tag pmr_run1 -t /root/Data/train/ -v /root/Data/val/ --resume
+/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py:188: UserWarning: CUDA initialization: The NVIDIA driver on your system is too old (found version 12040). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver. (Triggered internally at /__w/pytorch/pytorch/c10/cuda/CUDAFunctions.cpp:119.)
+  return torch._C._cuda_getDeviceCount() > 0
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 79, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 217, in train
+    torch.cuda.set_device(device)
+  File "/usr/local/lib/python3.10/dist-packages/torch/cuda/__init__.py", line 687, in set_device
+    device = _get_device_index(device)
+  File "/usr/local/lib/python3.10/dist-packages/torch/cuda/_utils.py", line 582, in _get_device_index
+    raise ValueError(f"Expected a cuda device, but got: {device}")
+ValueError: Expected a cuda device, but got: cpu
+[TRAIN] promptmr_run1 재개학습 종료   exit=1
+[RECON] 학습이 exit=1 로 끝나 채점 건너뜀.
+==========================================================
+[DONE ] shell12_resume   2026-07-20 07:00:58   train=1 recon/exit=1
+[저장] 점수: ../result/promptmr_run1/recon_eval_run1.txt (+ 이 슬롯 로그).
+==========================================================

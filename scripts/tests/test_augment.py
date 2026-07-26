@@ -217,3 +217,26 @@ def test_set_epoch_reaches_augmentor_through_transform():
 
     # augmentor가 없는 val transform에서도 set_epoch은 안전한 no-op
     DataTransform(isforward=False, max_key="max").set_epoch(5)
+
+
+def test_datatransform_mask_and_kspace_stay_consistent():
+    """VarNet의 data-consistency layer는 반환된 mask_t로 kspace를 마스킹한다는 전제로 동작한다.
+    mask_t는 mask1d에서, kspace는 augmentor가 반환한 K에서 각각 만들어지는 서로 다른 코드
+    경로라 __call__ 내부 순서가 바뀌면 둘이 어긋날 수 있는데, 그래도 크래시도 안 나고 조용히
+    복원 품질만 나빠진다. 그래서 '마스크가 0인 PE 컬럼은 k-space도 정확히 0'을 직접 검증한다.
+    (증강이 실제로 라인을 지우도록 mask aug를 p=1로 강제해 검증이 vacuous하지 않게 만든다.)"""
+    aug = MRIAugmentor(mask_only_cfg())
+    dt = DataTransform(isforward=False, max_key="max", augmentor=aug, is_train=True)
+
+    out = dt(make_mask(), make_kspace(), make_target(), {"max": 1.0}, "knee_acc4_1.h5", 0)
+    mask_t, kspace_t, target_out, maximum, fname, sl = out[:6]
+
+    mask_np = np.asarray(mask_t).reshape(-1)                 # (1,1,W,1) → (W,)
+    kspace_np = np.asarray(kspace_t)                          # (coils, H, W, 2)
+
+    assert mask_np.sum() > 0, "마스크가 전부 0이라 아래 검증이 vacuous하다"
+    assert mask_np.sum() < mask_np.shape[0], "mask aug가 라인을 하나도 안 지웠다 — 검증이 vacuous하다"
+
+    zero_cols = np.where(mask_np == 0)[0]
+    assert np.all(kspace_np[:, :, zero_cols, :] == 0), (
+        "mask==0인 PE 컬럼에 0이 아닌 k-space가 남아있다 — mask_t와 kspace가 어긋났다")

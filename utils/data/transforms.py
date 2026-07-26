@@ -24,9 +24,9 @@ def to_tensor(data):
 #   채택(ON): 좌-우(width/phase-encode) 플립만 · ACS 보존 마스크 증강 · 소폭 정수 translation
 #             · k-space 랜덤 위상(marginal) · 측정 노이즈(보수적)
 #   위-아래(readout) 플립은 제외(무릎 뼈 위치가 뒤바뀌는 비현실 형태) — augmentation.md Tier 3.
-#   스케줄: 지수형 확률(첫 warmup epoch off → max_prob 점증) · 샘플별 결정적 RNG(재현성).
-#   ※ epoch 전달·args 정의는 train_part.py/train.py 배선 필요(strategy/todo.md).
-#     기본값은 전부 off라, 배선 전엔 기존 학습과 동일하게 동작.
+#   스케줄: MRAugment schedule_p 형태 — delay D까지 off, T(=총 epoch)로 정규화한 exp/ramp/constant 증가.
+#   epoch 전달(train_part.py set_epoch)·args 정의(train.py --aug-*)는 배선 완료.
+#     --aug-on 기본값이 off라, 켜지 않으면 기존 학습과 동일하게 동작.
 # ============================================================================
 
 def _fftc(img, axes=(-2, -1)):
@@ -273,6 +273,9 @@ class MRIAugmentor:
         마스크는 even-length 정확 공식 M'[j]=M[(W-j)%W] = roll(flip(M),1)로 도출(1-라인 오차 방지).
         검증: recon(K_flip) == flip(recon(K)) (오차 ~1e-7), 샘플 라인 수 보존.
         GRAPPA(영상 384², 있으면)도 같은 좌우 flip으로 동기 — 두 입력의 해부 정렬 유지."""
+        assert mask.shape[0] % 2 == 0, (
+            f"좌우 flip의 마스크 공식 roll(flip(M),1)은 짝수 폭에서만 성립한다 (W={mask.shape[0]}). "
+            "홀수 폭이면 flip된 k-space 에너지가 마스크 밖으로 나가 조용히 삭제된다.")
         coil = _ifftc(K)[:, :, ::-1]
         K2 = _fftc(np.ascontiguousarray(coil))
         M2 = np.roll(np.flip(mask), 1).astype(np.float32)
@@ -349,7 +352,7 @@ class DataTransform:
                  ※ grappa 폭 384 vs kspace 폭 W(368/372) 격자 차 → network에서 폭 crop 또는 출력단 384² head로 정합.
       • scale  : per-sample 정규화 스칼라. 최종 출력·SSIM은 이 값으로 역정규화(원 스케일 복귀) 후 채점.
       • 감도맵 1회 추정 후 재사용(mask증강=그대로/flip=flip)은 network(varnet.py) 쪽 최적화 — 여기선 미포함.
-      • 증강 확률 스케줄(warmup→지수)은 구현돼 있으나 epoch 전달(train_part set_epoch)은 배선 필요(나중/동료).
+      • 증강 확률 스케줄(delay→exp/ramp/constant)은 구현·epoch 전달(train_part set_epoch) 모두 배선 완료.
     """
 
     # GRAPPA 키(image 파일 내). load_data.py가 이 키로 읽어 넘겨준다.

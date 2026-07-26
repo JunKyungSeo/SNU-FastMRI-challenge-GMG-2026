@@ -31,6 +31,7 @@ for i in $(seq 1 10); do bash
 |---|---|
 | `shell1.sh` ~ `shell10.sh` | 큐 슬롯. 비어 있으면 실행 시 `[TODO]` 로 티나게 실패한다. |
 | `_template.sh` | 슬롯 11개째부터 복사해서 쓰는 원본. |
+| `notify.sh` | 작업 끝났을 때 Gmail 알림 발송 (큐 슬롯 아님). 최초 1회 파일 상단 [설정] 채우기. `bash shellN.sh; bash notify.sh "제목"` 처럼 뒤에 이어 쓴다. |
 | `logs/` | 실행 로그 (git 미추적). |
 
 새 슬롯이 더 필요하면:

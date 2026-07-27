@@ -1,0 +1,46 @@
+==========================================================
+[START] shell17   2026-07-22 14:02:56   SMOKE=0  NET=promptmr_run4
+[CWD  ] /workspace/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell17_20260722_140256.log
+[CONF ] full coil(압축 없음) · nc10 · nf48 · sens24 · lr 2e-4 상수 · 10 epoch
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 2e-4 -e 10 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run4 --run-tag pmr_run4 -t /workspace/Data/train/ -v /workspace/Data/val/
+Current cuda device:  0
+Traceback (most recent call last):
+  File "/workspace/FastMRI_SNU_2026_GMG/train.py", line 83, in <module>
+    train(args)
+  File "/workspace/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 350, in train
+    train_loader = create_data_loaders(data_path = args.data_path_train, args = args, shuffle=True)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 196, in create_data_loaders
+    data_storage = SliceData(
+                   ^^^^^^^^^^
+  File "/workspace/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 54, in __init__
+    num_slices = self._get_metadata(fname)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/workspace/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 104, in _get_metadata
+    with h5py.File(fname, "r") as hf:
+         ^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/h5py/_hl/files.py", line 555, in __init__
+    fid = make_fid(name, mode, userblock_size, fapl, fcpl, swmr=swmr)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/h5py/_hl/files.py", line 232, in make_fid
+    fid = h5f.open(name, flags, fapl=fapl)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "h5py/_objects.pyx", line 54, in h5py._objects.with_phil.wrapper
+  File "h5py/_objects.pyx", line 55, in h5py._objects.with_phil.wrapper
+  File "h5py/h5f.pyx", line 106, in h5py.h5f.open
+IsADirectoryError: [Errno 21] Unable to synchronously open file (file read failed: time = Wed Jul 22 14:03:01 2026
+, filename = '/workspace/Data/train/image/.ipynb_checkpoints', file descriptor = 38, errno = 21, error message = 'Is a directory', buf = 0x7ffde8460578, total read size = 8, bytes this sub-read = 8, offset = 0)
+[TRAIN] promptmr_run4 종료   exit=1
+[MEM  ] 위 로그의 '[mem] epoch N peak allocated' 줄을 training_anal/ 에 기록할 것 —
+        full coil·nc10 의 실측 peak는 이 repo에 아직 남은 적이 없다.
+[RECON] 학습이 exit=1 로 끝나 복원·채점 건너뜀.
+==========================================================
+[DONE ] shell17   2026-07-22 14:03:02   train=1 recon/exit=1
+[저장] 점수: ../result/promptmr_run4/recon_eval_run4.txt
+       복원: ../result/promptmr_run4/reconstructions_leaderboard/acc{4,8}
+[비교] run3(../result/promptmr_run3/recon_eval_run3.txt)와 3축 전부 비교할 것.
+       SSIM_bbox 차이가 핵심이다 — 추론시간은 +15% 예상이나 점수 기여는 ~0.00n 단위다.
+==========================================================

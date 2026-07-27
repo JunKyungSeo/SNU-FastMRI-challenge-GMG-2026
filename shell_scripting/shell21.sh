@@ -28,6 +28,8 @@
 #         각각 독립적인 hold-out 성적으로 읽을 것.
 #
 #   [fold2 구성]  train 160 vol (4343 slice)  /  val 40 vol (acc4 22 · acc8 18, 1099 slice)
+#                 ⚠️ 교체 전(비층화) 기준이다. 층화 이후엔 acc 구성도 슬라이스 수도 달라진다
+#                    (층화는 fold마다 acc4/acc8 비율을 같게 맞춘다).
 #   [config]      f1과 동일: full coil · nc10 · nf48 · sens24 · n-history3 · lr 2e-4 상수 ·
 #                 fg-loss + area-weight · grad-clip 0.1 · accum 2 · checkpointing on · 10 epoch
 #

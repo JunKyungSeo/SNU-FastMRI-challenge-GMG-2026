@@ -278,6 +278,13 @@ def _stratified_folds(ids_by_group, k, seed):
     각 그룹이 **자기만의** RandomState(seed)로 섞이므로 한 그룹의 fold 배정은
     다른 그룹의 존재 여부와 무관하다 — --acc 필터가 fold 경계를 못 움직이는 근거.
     그룹 순회는 sorted(키) 순서라 결정적이다.
+
+    ⚠️ "독립"은 **다른 그룹의 영향을 안 받는다**는 뜻이지 순열이 서로 다르다는 뜻이 아니다.
+    모든 그룹이 같은 seed를 쓰므로 크기가 같은 두 그룹은 **동일한 순열**을 받는다(정렬한
+    리스트의 같은 위치가 같은 fold로 간다). 이건 결함이 아니다 — 결정성·균형·acc 불변식이
+    모두 성립하고, 혹시 knee_acc4_i와 knee_acc8_i가 같은 출처의 볼륨이라면 오히려 둘을 같은
+    fold에 묶어 누수를 막는다. 그러니 seed+hash(key) 같은 걸로 **탈상관시키지 말 것** —
+    acc4_i와 acc8_i의 관계를 먼저 확인하지 않고 바꾸면 없던 누수를 만들 수 있다.
     """
     folds = [set() for _ in range(k)]
     for key in sorted(ids_by_group):
@@ -301,7 +308,8 @@ def kfold_split(args):
 
     **분할 단위는 volume**이다. train/과 val/에 이름이 같은 볼륨이 30쌍 있지만 서로 남남이라
     (예: train/…/knee_acc4_1.h5 = 23슬라이스, val/…/knee_acc4_1.h5 = 31슬라이스) 각각 독립
-    단위로 다룬다 → fold마다 정확히 200/k개가 떨어진다.
+    단위로 다룬다. fold 크기는 그룹별 k등분의 합이라, 그룹 볼륨 수가 k로 안 나눠떨어지면
+    fold마다 ±1 차이가 난다(총합은 그대로).
 
     **acc 층화(2026-07-26~)**: acc4·acc8 볼륨을 _stratified_folds로 **각각** k등분해 fold별로
     합친다. 그룹별 셔플이 서로 독립이라 --acc all/4/8 중 뭘 줘도 **같은 볼륨은 항상 같은
@@ -312,6 +320,11 @@ def kfold_split(args):
     그 런들과 val 숫자를 나란히 비교하지 말 것.
 
     난수는 seed만의 함수(RandomState(kfold_seed))라 같은 seed면 언제 돌려도 같은 분할이 나온다.
+
+    ⚠️ 동작 변경: 파일명에 accN 토큰이 없는 h5는 이제 ValueError로 즉시 중단시킨다. 층화는
+    모든 볼륨을 어느 한 그룹에 넣어야 성립하기 때문이다. 구버전은 --acc all일 때 그런 파일을
+    조용히 포함시켰으므로, 여태 돌던 설정이 갑자기 멈출 수 있다(이 데이터셋은 acc4/acc8 전수라
+    정상 경로에선 안 걸린다).
     """
     k = int(getattr(args, "k_fold", 5))
     val_fold = int(getattr(args, "val_fold", 0))

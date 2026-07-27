@@ -78,8 +78,12 @@ def _args(tmp_path, acc="all", k=5, fold=0, seed=430):
 
 
 def test_acc_filter_keeps_fold_boundaries(tmp_path):
-    """핵심 불변식: --acc 4/8의 분할 == --acc all의 분할에서 그 acc만 남긴 것."""
-    _make_data(tmp_path)
+    """핵심 불변식: --acc 4/8의 분할 == --acc all의 분할에서 그 acc만 남긴 것.
+
+    일부러 불균형·비정수 분할로 잡는다(acc4 106개 · acc8 94개, 둘 다 k=5로 안 나눠떨어짐).
+    다른 테스트는 전부 100/100처럼 딱 떨어지는 크기라 array_split의 나머지 분배 경로와
+    그룹 크기가 다른 경우가 여기서만 밟힌다. 아래 단언은 전부 '투영 동일성'이라 크기와 무관."""
+    _make_data(tmp_path, n4=53, n8=47)   # 두 root × (53+47) = acc4 106 · acc8 94
     for fold in range(5):
         tr_all, va_all = kfold_split(_args(tmp_path, "all", fold=fold))
         tr_4, va_4 = kfold_split(_args(tmp_path, "4", fold=fold))

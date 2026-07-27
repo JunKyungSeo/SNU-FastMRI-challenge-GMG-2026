@@ -12,9 +12,9 @@
 # ============================================================
 
 # ===== [설정] 여기 3줄만 채우면 됨 =====
-GMAIL_ADDR="brightdear999@gmail.com"   # 보내는 Gmail 계정 (SMTP 로그인에 쓰임)
-APP_PW="여기에_16자리_앱비밀번호"       # Gmail 앱 비밀번호 (공백 없이 붙여서)
-TO_ADDR="brightdear999@gmail.com"      # ★ 받는 이메일 주소는 여기 ★
+GMAIL_ADDR="grgrgrgr579@gmail.com"   # 보내는 Gmail 계정 (SMTP 로그인에 쓰임)
+APP_PW="vrgvggogkaaivlzt"       # Gmail 앱 비밀번호 (공백 없이 붙여서)
+TO_ADDR="bedso@snu.ac.kr, esel343434@snu.ac.kr"      # ★ 받는 이메일 주소는 여기 ★
 # ======================================
 
 SUBJECT="${1:-작업 완료}"

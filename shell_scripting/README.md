@@ -25,6 +25,7 @@ bash shell_scripting/shell11.sh ; bash shell_scripting/_notify.sh "완료"
 |---|---|
 | `shellN.sh` | 큐 슬롯. |
 | `_train_template.sh` | 학습 슬롯 원본. 결과 덮어쓰기 가드만 있음(이어서 `--resume`, 덮어쓰기 `FORCE=1`). |
-| `_evaluation_template.sh` | reconstruct+채점 슬롯 원본. |
+| `_evaluation_template.sh` | reconstruct+채점 슬롯 원본. 점수 사본을 `results/`에 남긴다. |
+| `results/` | recon_eval 점수 사본 (작은 txt). **커밋해서 전 환경 공유** — 이게 점수의 정본. |
 | `notify.sh` | 작업 끝났을 때 Gmail 알림 발송 (큐 슬롯 아님). |
 | `logs/` | 실행 로그 |

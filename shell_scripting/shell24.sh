@@ -24,6 +24,13 @@
 #     3 epoch 내내 소수 4째 자리만 흔들려(0.07694→0.07690→0.07694) 미세조정을 했다고
 #     말할 수 없는 상태였다. lr 이 낮았던 건지 이미 수렴인지 가르려고 lr 을 올렸다.
 #
+#   [증강] 기본 ON (AUG=0 으로 끔). MRAugment 좌우 flip + ACS 보존 mask thinning.
+#     ⚠️ 증강 이득은 아직 A/B 로 확인된 적이 없다. 그래도 켜는 건 남은 시간에 "MoE + 증강"을
+#        한꺼번에 노리는 선택이고, 대신 **결과가 나빠도 둘 중 뭐 때문인지 이 런만으론 못 가린다.**
+#        증강을 격리하려면 AUG=0 으로 pretrain 을 한 번 더 돌려 ①끼리 비교해야 한다.
+#     확률 스케줄은 총 epoch(T)로 정규화되므로 delay 를 단계별로 준다(T의 20~30% 권장):
+#        pretrain T=10 → AUG_DELAY_PRE=3 / 미세조정 T=5 → AUG_DELAY_FT=1
+#
 #   ⚠️ 실행 전 서버에서 층화 테스트를 먼저 통과시킬 것 (31시간 태우고 분할이 틀리면 손해가 크다):
 #        python -m pytest scripts/tests/test_kfold_stratify.py -v
 #
@@ -35,6 +42,7 @@
 #   STAGE=merge    bash shell_scripting/shell24.sh      # ④+⑤
 #   STAGE=all      bash shell_scripting/shell24.sh      # ①→⑤ 순차 (기본값, ~31h)
 #   FOLD=3 STAGE=all bash ...                           # 다른 fold
+#   AUG=0 STAGE=pretrain bash ...                       # 증강 끄고 (증강 격리 비교용)
 #   FORCE=1 ...                                         # 기존 결과를 덮어쓸 때만
 # ============================================================
 set -uo pipefail
@@ -60,13 +68,27 @@ KFOLD_SEED="${KFOLD_SEED:-430}"
 STAGE="${STAGE:-all}"
 SMOKE="${SMOKE:-0}"
 
-PRE_EPOCHS=10        # 공유 사전학습 (shell21 단일 모델과 동일 길이 → baseline 으로도 읽힌다)
+PRE_EPOCHS=10        # 공유 사전학습
 FT_EPOCHS=5          # 미세조정 (lr 은 BASE_ARGS 의 2e-4 를 그대로 물려받는다)
+
+# --- 증강(MRAugment): 기본 ON. AUG=0 으로 끌 수 있다 ---
+#   ⚠️ 증강 이득은 아직 A/B 로 확인 안 됐다(shell22 는 OFF arm 이 구파티션이라 무효). 그래도 켜는 건
+#      "MoE 이득 + 증강 이득"을 한 번에 노리는 선택이다 — 시간이 없어 변수 분리를 포기한 것이니,
+#      결과가 나쁘면 둘 중 뭐 때문인지 이 런만으로는 못 가린다는 걸 알고 읽을 것.
+#      (증강만 격리하려면 AUG=0 으로 한 번 더 돌려 pretrain 끼리 비교해야 한다.)
+#   확률 스케줄은 총 epoch(T)로 정규화되므로 delay 는 단계별로 따로 준다(권장 T의 20~30%).
+AUG="${AUG:-1}"
+AUG_DELAY_PRE="${AUG_DELAY_PRE:-3}"    # T=10 → 3 (30%)
+AUG_DELAY_FT="${AUG_DELAY_FT:-1}"      # T=5  → 1 (20%)
+AUG_COMMON=( --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0
+             --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 )
 
 LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
 # --- net_name: fold 를 이름에 넣는다. 안 넣으면 옛 promptmr_moe_shared(고정분할)와 섞인다 ---
-SUF=""; [ "$SMOKE" = "1" ] && SUF="_smoke"
+SUF=""
+[ "${AUG:-1}" = "1" ] && SUF="${SUF}_aug"     # 증강 런은 이름을 달리한다(비증강 런과 섞이면 비교가 깨진다)
+[ "$SMOKE" = "1" ] && SUF="${SUF}_smoke"
 NET_SHARED="promptmr_moe_f${FOLD}_shared${SUF}"
 NET_ACC4="promptmr_moe_f${FOLD}_acc4${SUF}"
 NET_ACC8="promptmr_moe_f${FOLD}_acc8${SUF}"
@@ -78,6 +100,20 @@ if [ "$SMOKE" = "1" ]; then
 else
     EXTRA=""
 fi
+
+# 단계별 증강 인자를 만든다(AUG=0 이면 빈 배열 → 증강 off).
+#   스모크는 schedule=constant·delay=0 으로 강제한다. exp 스케줄은 1 epoch 런에서 p(epoch=0)=0 이
+#   나와 증강이 한 번도 안 걸리고, 그러면 "배선됐는지"를 확인하려는 스모크가 아무것도 검증 못 한다.
+AUG_ARGS=()
+aug_args_for() {   # $1=delay → 전역 AUG_ARGS 갱신
+    AUG_ARGS=()
+    [ "$AUG" = "1" ] || return 0
+    if [ "$SMOKE" = "1" ]; then
+        AUG_ARGS=( "${AUG_COMMON[@]}" --aug-schedule constant --aug-delay 0 )
+    else
+        AUG_ARGS=( "${AUG_COMMON[@]}" --aug-schedule exp --aug-delay "$1" )
+    fi
+}
 
 # --- 로그 ---
 SLOT="$(basename "$0" .sh)"
@@ -141,11 +177,13 @@ do_pretrain() {
     gpu_guard || return 2
     overwrite_guard "$NET_SHARED" || return 2
     local R; R="$(resume_flag "$NET_SHARED")"
+    aug_args_for "$AUG_DELAY_PRE"
     echo "[① pretrain] $NET_SHARED  (--acc all, fold $FOLD hold-out) ${R:+[resume]}"
+    echo "[① aug] ${AUG_ARGS[*]:-(off)}"
     set -x
     python train.py "${BASE_ARGS[@]}" \
         --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" \
-        --acc all -e "$PRE_EPOCHS" $EXTRA $R \
+        --acc all -e "$PRE_EPOCHS" $EXTRA $R "${AUG_ARGS[@]}" \
         -n "$NET_SHARED" --run-tag "pmr_moe_f${FOLD}_shared"
     { local st=$?; set +x; } 2>/dev/null
     echo "[① pretrain] exit=$st"
@@ -159,12 +197,14 @@ do_ft() {   # $1=acc(4|8)  $2=net_name
     fi
     overwrite_guard "$2" || return 2
     local R; R="$(resume_flag "$2")"
+    aug_args_for "$AUG_DELAY_FT"
     # --resume 과 --init-from 은 배타적이고 resume 이 우선이다(train.py). 재개면 init-from 은 무시된다.
     echo "[② ft$1] $2  (--acc $1 --init-from shared) ${R:+[resume]}"
+    echo "[② aug] ${AUG_ARGS[*]:-(off)}"
     set -x
     python train.py "${BASE_ARGS[@]}" \
         --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" \
-        --acc "$1" -e "$FT_EPOCHS" $EXTRA $R \
+        --acc "$1" -e "$FT_EPOCHS" $EXTRA $R "${AUG_ARGS[@]}" \
         --init-from "$SHARED_BEST" \
         -n "$2" --run-tag "pmr_moe_f${FOLD}_acc$1"
     { local st=$?; set +x; } 2>/dev/null
@@ -220,6 +260,8 @@ echo "=========================================================="
 echo "[DONE ] $SLOT (fold $FOLD)  STAGE=$STAGE  $(date '+%F %T')  exit=$STATUS"
 if [ "$SMOKE" = "1" ]; then
     echo "[SMOKE] 확인할 것:"
+    echo "        (0) ⚠️ 증강이 실제로 걸렸는가 — 로그에 '[aug] epoch=0 p=0.5500' 처럼 p>0 이 찍혀야 한다."
+    echo "            (AUG=1 인데 p=0.0000 이거나 [aug] 줄 자체가 없으면 배선이 안 된 것이다.)"
     echo "        (1) 세 단계 다 OOM 없이 exit 0 인가"
     echo "        (2) [K-Fold] 로그의 val 구성이 **세 단계에서 일관적인가** — 이게 층화의 서명이다."
     echo "            ① --acc all 의 val (acc4 A · acc8 B) 에 대해 ② 는 acc4 A, ③ 은 acc8 B 여야 한다."

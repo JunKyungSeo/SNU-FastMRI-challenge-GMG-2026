@@ -1,0 +1,9 @@
+==========================================================
+[START] shell21 (fold 2 / 5)   2026-07-26 12:41:54   SMOKE=0  NET=promptmr_kfold_f2
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell21_f2_20260726_124154.log
+[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=5 · fold=2 · seed=430 · 10 epoch
+==========================================================
+[GPU  ] used=2MiB
+[STOP] ../result/promptmr_kfold_f2/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 결과가 사라진다.
+       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 FORCE=1 로 실행할 것.

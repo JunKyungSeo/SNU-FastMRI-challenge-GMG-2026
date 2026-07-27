@@ -19,7 +19,7 @@ for i in $(seq 1 10); do bash
 
 1. 맨 위 주석에 **목적** 한 줄.
 2. 실행하면 `[START] <슬롯>` 배너로 **어디서 시작됐는지** echo.
-3. stdout+stderr 가 `logs/<슬롯>_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력).
+3. stdout+stderr 가 `logs/<슬롯>[_f<FOLD>]_<YYYYMMDD_HHMMSS>.log` 로 남는다 (터미널에도 동시 출력). shell19/21처럼 K-Fold를 쓰는 슬롯은 `logs/${SLOT}_f${FOLD}_${TS}.log` 형태로 fold가 파일명에 들어간다.
 4. 끝나면 `[DONE ] <슬롯> ... exit=<코드>` 로 종료코드 고지.
 5. 실행되는 명령이 `set -x`로 로그에 그대로 찍힌다 — 어떤 config·`--num-workers`로 돌렸는지 **로그만 봐도** 안다. (슬롯이 `_template.sh` 기준으로 만들어졌을 때. 기존 슬롯은 `cp _template.sh shellN.sh`로 갱신.)
 6. **GPU 학습엔 순차 run 번호 필수** — `--run-tag runN -n sdum_runN`(스모크 포함, 번호 재사용·무번호 'smoke' 금지). 다음 번호는 `training_anal/CLAUDE.md` run 이력 표에서 "마지막+1".
@@ -31,7 +31,8 @@ for i in $(seq 1 10); do bash
 |---|---|
 | `shell1.sh` ~ `shell10.sh` | 큐 슬롯. 비어 있으면 실행 시 `[TODO]` 로 티나게 실패한다. |
 | `_template.sh` | 슬롯 11개째부터 복사해서 쓰는 원본. |
-| `logs/` | 실행 로그 (git 미추적). |
+| `notify.sh` | 작업 끝났을 때 Gmail 알림 발송 (큐 슬롯 아님). 최초 1회 파일 상단 [설정] 채우기. `bash shellN.sh; bash notify.sh "제목"` 처럼 뒤에 이어 쓴다. |
+| `logs/` | 실행 로그 (**git 추적함** — `.gitignore`에서 해제). |
 
 새 슬롯이 더 필요하면:
 

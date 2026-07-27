@@ -91,11 +91,11 @@ fi
 python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # --- 가드: 기존 학습 결과를 말없이 덮어쓰지 않는다 (f1이 21시간짜리다) ---
-if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; then
-    echo "[STOP] ../result/$NET/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 결과가 사라진다."
-    echo "       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 FORCE=1 로 실행할 것."
-    exit 2
-fi
+#if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; then
+#    echo "[STOP] ../result/$NET/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 ##결과가 사라진다."
+#    echo "       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 ##FORCE=1 로 실행할 것."
+#    exit 2
+#fi
 
 # ==========================================================
 #  ↓↓↓  PromptMR+ K-Fold 학습 (fold $FOLD)  ↓↓↓
@@ -108,7 +108,7 @@ python train.py --model promptmr --readout-crop \
     -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 4 --use-checkpoint \
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 \
     --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
-    -n "$NET" --run-tag "$TAG" \
+    -n "$NET" --run-tag "$TAG" --resume \
     -t /workspace/Data/train/ -v /workspace/Data/val/
 { TRAIN_STATUS=$?; set +x; } 2>/dev/null
 echo "[TRAIN] $NET (fold $FOLD) 종료   exit=$TRAIN_STATUS"

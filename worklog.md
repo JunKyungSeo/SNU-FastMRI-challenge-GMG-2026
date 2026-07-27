@@ -36,6 +36,32 @@
 
 ---
 
+## 2026-07-26 14:42 UTC / 2026-07-26 23:42 KST — @bedso
+
+한 줄 요약: kfold_split을 acc 층화 분할로 교체했다. --acc 값과 무관하게 fold 경계가 고정된다.
+
+무엇: acc4·acc8 볼륨을 각각 k등분해 fold별로 합치는 층화 분할을 kfold_split의 기본 동작으로
+넣었다. 순수 헬퍼 _stratified_folds와 pytest(scripts/tests/test_kfold_stratify.py, 서버 실행)를
+같이 추가했다. shell21·shell22 헤더의 관련 경고도 현행화했다.
+
+왜: 기존 구현은 --acc로 거른 뒤 분할해서, MoE의 pretrain(--acc all)→미세조정(--acc 4/8)을
+이으면 단계마다 hold-out이 달라졌다(실측 40개 중 30개 오염, 4런 분석 문서 참고). 층화가
+팀 합의된 전제 조건이었고(shell21 주석·4런 분석 §6), 이번에 기본 동작으로 교체했다.
+플래그 방식(기본 off)도 검토했으나 실수로 빼먹으면 오염이 재발하므로 기본 교체를 골랐다.
+
+주의: 교체 전 파티션으로 돈 promptmr_kfold_f1/f2와 새 런의 val은 비교 불가다. shell22의
+증강 A/B는 OFF arm(f2)이 구파티션이라 baseline 재학습 없이는 무효 — 다음 run 결정에서 처리.
+
+상태: 커밋 9f2794f(층화 헬퍼·단위 테스트) 13943cb(독립성 테스트 보강) f5b8d89(kfold_split 교체·통합 테스트)
+4a2fefe(슬롯 경고·worklog). 서버 pytest·스모크 검증은 아직(아래 핸드오프).
+
+핸드오프 → @esel34: 서버에서 python -m pytest scripts/tests/test_kfold_stratify.py -v 와
+SMOKE=1 FOLD=0 bash shell_scripting/shell21.sh 를 돌려달라. 확인할 것은 [K-Fold] 로그의 val
+구성이 fold를 바꿔도 acc4·acc8 개수가 똑같이 나오는지, 그리고 그 값이 같은 줄에 찍히는
+train+val 총계를 k로 나눈 값과 맞는지다. 층화의 서명이 바로 그 두 가지다. 구체적 숫자를
+미리 적지 않는 이유는 실제 acc4/acc8 볼륨 수에 따라 달라져서다. 예전 f2의 22 대 18 같은
+값을 기준으로 삼으면 정상 결과를 실패로 읽게 된다.
+
 ## 2026-07-19 01:42 UTC / 2026-07-19 10:42 KST — @esel34
 
 한 줄 요약: 증강 RNG의 프로세스 간 재현성 버그를 찾아 고쳤다(현재는 잠복 상태).

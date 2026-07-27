@@ -389,6 +389,19 @@ def train(args):
     for epoch in range(start_epoch, args.num_epochs):
         print(f'Epoch #{epoch:2d} ............... {args.net_name} ...............')
 
+        # 증강 스케줄에 epoch 전달(implementation.md §6b). val 로더는 is_train=False라 augmentor가 없다.
+        # persistent_workers를 안 쓰므로 epoch마다 워커가 새로 떠 이 값이 워커 복사본에 실린다.
+        tf = getattr(train_loader.dataset, "transform", None)
+        if tf is not None:
+            tf.set_epoch(epoch)
+        augmentor = getattr(tf, "augmentor", None) if tf is not None else None
+        if augmentor is not None:
+            p, p_flip, p_mask = augmentor.probs()
+            print(f"[aug] epoch={epoch} p={p:.4f} p_flip={p_flip:.4f} p_mask={p_mask:.4f}")
+        elif getattr(args, "aug_on", False):
+            raise RuntimeError("--aug-on 인데 augmentor가 배선되지 않았다 "
+                               "(train_loader.dataset.transform.augmentor is None) — 증강 0회로 학습될 뻔했다.")
+
         # epoch 순열을 (seed, epoch)만의 함수로 고정 — 재개 시 같은 순서를 재현해야 저장된
         # iter까지 건너뛴 지점이 실제로 그때 그 지점이 된다. generator가 없으면(=val 로더 등)
         # 아무것도 안 한다.

@@ -61,6 +61,24 @@ def parse():
     parser.add_argument('--acc', type=str, default='all', choices=['all', '4', '8'], help='학습 데이터를 가속률로 필터(파일명 accN 기준). all=전체. MoE expert 학습 시 4 또는 8.')
     parser.add_argument('--init-from', type=str, default='', help='Option C 미세조정: 지정한 체크포인트의 model 가중치만 로드해 초기화(optimizer/epoch은 새로 시작). --resume과 배타적(resume 우선).')
 
+    # ---- 증강 (MRAugment 부분집합: 좌우 flip + ACS 보존 mask thinning). 기본 off = 기존 학습과 동일 ----
+    #   스케줄은 공식 repo(MathFLDS/MRAugment) schedule_p와 동일 형태 — delay D + 총 epoch T 정규화.
+    parser.add_argument('--aug-on', action='store_true', help='데이터 증강 켜기. 기본 off면 기존 학습과 100%% 동일(비트 동일).')
+    parser.add_argument('--aug-schedule', type=str, default='exp', choices=['exp', 'ramp', 'constant'],
+                        help='증강 확률 스케줄. exp=지수 점증(공식 기본), ramp=선형, constant=고정')
+    parser.add_argument('--aug-max-prob', type=float, default=0.55, help='p_max — 마지막 epoch에서의 증강 확률(논문 기본 0.55)')
+    parser.add_argument('--aug-delay', type=int, default=0, help='앞쪽 몇 epoch을 증강 없이 보낼지(D). 과적합이 시작되는 epoch 직전에 두는 것이 목적')
+    parser.add_argument('--aug-exp-decay', type=float, default=5.0, help='--aug-schedule exp의 감쇠 계수 c (공식 기본 5.0)')
+    parser.add_argument('--aug-flip', action=argparse.BooleanOptionalAction, default=True,
+                        help='좌-우(phase-encode) 플립. 끄려면 --no-aug-flip')
+    parser.add_argument('--aug-mask', action=argparse.BooleanOptionalAction, default=True,
+                        help='ACS 보존 마스크 추가 언더샘플. 끄려면 --no-aug-mask')
+    parser.add_argument('--aug-weight-flip', type=float, default=1.0, help='flip 확률 가중치 (실제 확률 = p × 이 값). 0이면 flip만 끔')
+    parser.add_argument('--aug-weight-mask', type=float, default=1.0, help='mask 증강 확률 가중치 (실제 확률 = p × 이 값 × (1-orig-mask-prob))')
+    parser.add_argument('--aug-mask-thin-max', type=int, default=4, help='주변부 추가 언더샘플 최대 배수(ACS는 항상 보존)')
+    parser.add_argument('--aug-orig-mask-prob', type=float, default=0.5,
+                        help='원본(제공 고정) 마스크를 그대로 쓸 확률 — test 분포 정합·OOD 방지용')
+
     args = parser.parse_args()
     return args
 

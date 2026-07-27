@@ -187,18 +187,21 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
 
     # ------------------------------------------------------------------
     # augmentation 설정 — train.py args에서 읽음(없으면 getattr 기본값 = 전부 off).
-    # 즉 train.py에 --aug-* 인자를 아직 안 넣었다면 기존 학습과 100% 동일하게 동작.
-    # (인자 정의·매 epoch set_epoch 배선은 strategy/todo.md의 3·4번.)
+    # --aug-on 기본값이 off라, 안 넘기면 기존 학습과 100% 동일하게 동작한다.
+    # (인자 정의는 train.py, 매 epoch set_epoch 배선은 train_part.py — 둘 다 완료.)
     # ------------------------------------------------------------------
     aug_on = getattr(args, "aug_on", False)
     cfg = AugmentConfig(
         on=aug_on,
         schedule=getattr(args, "aug_schedule", "exp"),
-        warmup_epochs=getattr(args, "aug_warmup_epochs", 10),
-        ramp_epochs=getattr(args, "aug_ramp_epochs", 15),
-        max_prob=getattr(args, "aug_max_prob", 0.5),
+        delay=getattr(args, "aug_delay", 0),
+        total_epochs=int(getattr(args, "num_epochs", 1)),   # T = 런 길이 → 스케줄이 자동 스케일
+        exp_decay=getattr(args, "aug_exp_decay", 5.0),
+        max_prob=getattr(args, "aug_max_prob", 0.55),
         flip=getattr(args, "aug_flip", True),
         mask=getattr(args, "aug_mask", True),
+        weight_flip=getattr(args, "aug_weight_flip", 1.0),
+        weight_mask=getattr(args, "aug_weight_mask", 1.0),
         phase=getattr(args, "aug_phase", False),
         noise=getattr(args, "aug_noise", False),
         mask_thin_max=getattr(args, "aug_mask_thin_max", 4),
@@ -269,6 +272,32 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     return data_loader
 
 
+def _stratified_folds(ids_by_group, k, seed):
+    """acc 그룹별 독립 셔플 → 각각 k등분 → fold별 합집합. 길이 k의 set 리스트 반환.
+
+    각 그룹이 **자기만의** RandomState(seed)로 섞이므로 한 그룹의 fold 배정은
+    다른 그룹의 존재 여부와 무관하다 — --acc 필터가 fold 경계를 못 움직이는 근거.
+    그룹 순회는 sorted(키) 순서라 결정적이다.
+
+    ⚠️ "독립"은 **다른 그룹의 영향을 안 받는다**는 뜻이지 순열이 서로 다르다는 뜻이 아니다.
+    모든 그룹이 같은 seed를 쓰므로 크기가 같은 두 그룹은 **동일한 순열**을 받는다(정렬한
+    리스트의 같은 위치가 같은 fold로 간다). 이건 결함이 아니다 — 결정성·균형·acc 불변식이
+    모두 성립하고, 혹시 knee_acc4_i와 knee_acc8_i가 같은 출처의 볼륨이라면 오히려 둘을 같은
+    fold에 묶어 누수를 막는다. 그러니 seed+hash(key) 같은 걸로 **탈상관시키지 말 것** —
+    acc4_i와 acc8_i의 관계를 먼저 확인하지 않고 바꾸면 없던 누수를 만들 수 있다.
+    """
+    folds = [set() for _ in range(k)]
+    for key in sorted(ids_by_group):
+        ids = np.array(sorted(ids_by_group[key]))
+        if len(ids) < k:
+            raise ValueError(
+                f"K-Fold 층화: acc{key} 볼륨 {len(ids)}개 < k={k} — 빈 fold가 생긴다.")
+        shuffled = ids[np.random.RandomState(seed).permutation(len(ids))]
+        for i, chunk in enumerate(np.array_split(shuffled, k)):
+            folds[i].update(map(str, chunk))
+    return folds
+
+
 def kfold_roots(args):
     """K-Fold가 합쳐 쓰는 데이터 root 목록 (원본 train/ + val/ 전부 = 200 volume)."""
     return [Path(args.data_path_train), Path(args.data_path_val)]
@@ -279,15 +308,23 @@ def kfold_split(args):
 
     **분할 단위는 volume**이다. train/과 val/에 이름이 같은 볼륨이 30쌍 있지만 서로 남남이라
     (예: train/…/knee_acc4_1.h5 = 23슬라이스, val/…/knee_acc4_1.h5 = 31슬라이스) 각각 독립
-    단위로 다룬다 → fold마다 정확히 200/k개가 떨어진다.
+    단위로 다룬다. fold 크기는 그룹별 k등분의 합이라, 그룹 볼륨 수가 k로 안 나눠떨어지면
+    fold마다 ±1 차이가 난다(총합은 그대로).
 
-    ⚠️ --acc 4/8 을 함께 주면 그 가속률 볼륨만 모아서 분할한다. 즉 **--acc 값이 바뀌면 fold
-    경계도 같이 바뀐다.** --acc 하나만 쓰는 단독 실험에선 정상이지만, 한 파이프라인 안에서
-    --acc를 바꿔가며(MoE의 pretrain --acc all → 미세조정 --acc 4/8) 같은 hold-out으로 채점하려
-    하면 단계마다 빼두는 볼륨이 달라져 채점셋이 오염된다(실측: 40개 중 30개). 그 조합을 쓸
-    거면 acc4·acc8을 각각 k등분해 합치는 층화 분할로 먼저 바꿔야 한다.
+    **acc 층화(2026-07-26~)**: acc4·acc8 볼륨을 _stratified_folds로 **각각** k등분해 fold별로
+    합친다. 그룹별 셔플이 서로 독립이라 --acc all/4/8 중 뭘 줘도 **같은 볼륨은 항상 같은
+    fold** → MoE의 pretrain(--acc all)→미세조정(--acc 4/8)을 같은 hold-out으로 이어도
+    채점셋이 오염되지 않는다. (구버전은 "필터 후 분할"이라 경계가 --acc에 종속 —
+    실측 40개 중 30개 오염. 그 코드는 이 층화로 대체됨.)
+    ⚠️ 구버전(비층화)으로 나눈 기존 런(promptmr_kfold_f1/f2)과는 hold-out이 다르다.
+    그 런들과 val 숫자를 나란히 비교하지 말 것.
 
     난수는 seed만의 함수(RandomState(kfold_seed))라 같은 seed면 언제 돌려도 같은 분할이 나온다.
+
+    ⚠️ 동작 변경: 파일명에 accN 토큰이 없는 h5는 이제 ValueError로 즉시 중단시킨다. 층화는
+    모든 볼륨을 어느 한 그룹에 넣어야 성립하기 때문이다. 구버전은 --acc all일 때 그런 파일을
+    조용히 포함시켰으므로, 여태 돌던 설정이 갑자기 멈출 수 있다(이 데이터셋은 acc4/acc8 전수라
+    정상 경로에선 안 걸린다).
     """
     k = int(getattr(args, "k_fold", 5))
     val_fold = int(getattr(args, "val_fold", 0))
@@ -297,20 +334,33 @@ def kfold_split(args):
     acc_want = _norm_acc(getattr(args, "acc", "all"))
 
     roots = kfold_roots(args)
-    ids = []
+    ids_by_group = {}   # acc 토큰('4'/'8') → volume_id 리스트
+    no_token = []
     for r in roots:
         for f in sorted((r / "kspace").glob("*.h5")):
-            if acc_want is not None and _file_acc(f.name) != acc_want:
+            acc = _file_acc(f.name)
+            if acc is None:
+                no_token.append(str(f))
                 continue
-            ids.append(volume_id(r, f.name))
-    if not ids:
-        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다"
-                         f"{'' if acc_want is None else f' (acc={acc_want} 필터 적용)'}.")
+            ids_by_group.setdefault(acc, []).append(volume_id(r, f.name))
+    if no_token:
+        raise ValueError(
+            "K-Fold 층화: 파일명에 accN 토큰이 없어 그룹을 정할 수 없습니다:\n  "
+            + "\n  ".join(no_token))
+    if not ids_by_group:
+        raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다.")
 
-    ids = np.array(sorted(ids))
-    shuffled = ids[np.random.RandomState(seed).permutation(len(ids))]
-    val_ids = set(map(str, np.array_split(shuffled, k)[val_fold]))
-    train_ids = set(map(str, shuffled)) - val_ids
+    folds = _stratified_folds(ids_by_group, k, seed)
+
+    if acc_want is not None:
+        # --acc 4/8: 조립된 fold에서 그 그룹만 남긴다. 경계 자체는 안 움직인다(층화 불변식).
+        keep = set(ids_by_group.get(acc_want, []))
+        if not keep:
+            raise ValueError(f"K-Fold: acc={acc_want} 볼륨이 없습니다({roots}).")
+        folds = [f & keep for f in folds]
+
+    val_ids = folds[val_fold]
+    train_ids = set().union(*folds) - val_ids
     return train_ids, val_ids
 
 

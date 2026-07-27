@@ -89,7 +89,6 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 - **GRAPPA prior + residual**: `varnet.py` `VarNet.forward` 보조 채널 경로 + residual(out=grappa+f).
 - **감도맵 재사용**: sens 추정을 per-view forward에서 분리(mask=그대로/flip=flip).
 - **소비부 확장**: train_part.py/test_part.py 배치 언패킹 확장 + 출력 `×s` 역정규화.
-- **증강 스케줄 배선**: train.py `--aug-*` 인자 + train_part.py `set_epoch`.
 - **acc-conditioned GRAPPA 가중**(후보): mask frac≤0.25→acc8/else acc4로 conditioning → 융합 가중 학습. [`candidates.md`](candidates.md).
 
 ### ⏳ 보류 (외부조건)

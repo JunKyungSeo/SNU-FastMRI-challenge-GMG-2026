@@ -1,4 +1,4 @@
-# CLAUDE.md — 이 repo에서 작업하는 Claude에게
+# CLAUDE.md — To claude who works at this repo
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
@@ -60,23 +60,12 @@ For multi-step tasks, state a brief plan:
 
 Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## 파괴적 행동은 허락받고
-
-돌이킬 수 없는 행동 — 프로세스 `kill`, 학습 중단, 사용자가 열어둔 셸/터미널 종료, 체크포인트·결과 덮어쓰기·삭제, 큐 구조 변경 — 은 실행 전 **무엇을·왜 할지 알리고 허락을 받는다.** "작업에 필요해 보여서"는 사유가 안 된다. 내가 시작하지 않은 프로세스·터미널은 건드리지 않는다. 확인 못 한 것은 단정하지 말고 물어본다.
-
 ---
 
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
-미래 세션(GPU 서버 포함)의 Claude가 먼저 읽는 핸드오프 노트. **구조 + 현재 상태**만 담는다.
+## 5. 파괴적 행동은 허락받고 / 말을 많이 했으면, 사용자가 이해했는지 확인하기. 그리고 쉽게.
 
----
-
-## 5. 지금 상황
-
-- **환경 = GPU 서버.** SDUM 학습이 실제로 돌고 있다(로컬 노트북 아님).
-- **팀 2명** (§4).
-
-> 진행 중인 학습 상태·문제·수정은 계속 바뀌므로 이 파일에 적지 않는다. 최신 학습 로그 분석은 `training_anal/`, 과거 수정 계획은 `docs/archive/superpowers/plans/` 참조.
+ - 돌이킬 수 없는 행동 — 프로세스 `kill`, 학습 중단, 사용자가 열어둔 셸/터미널 종료, 체크포인트·결과 덮어쓰기·삭제, 큐 구조 변경 — 은 실행 전 **무엇을·왜 할지 알리고 허락을 받는다.** "작업에 필요해 보여서"는 사유가 안 된다. 내가 시작하지 않은 프로세스·터미널은 건드리지 않는다. 확인 못 한 것은 단정하지 말고 물어본다.
+ - 기업 보고서 어투 지양. 조사 등을 생략하고 단어만 나열하지말고, 이것이 무엇인지 문맥으로 추론할 기회를 인간에게 주어라.
 
 ---
 
@@ -107,32 +96,15 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ---
 
-## 8. 구조 (필수만)
-
-> 🔄 **2026-07-19: 백본을 SDUM → PromptMR+로 교체.** 새 권위 문서 = `strategy/promptmr_plus.md`.
-> SDUM 코드(`utils/model/sdum/`)는 **삭제하지 않고 보존**하되 `--model` 배선에서 제거됨(더 이상 학습·추론 안 됨).
-
-- **백본 선택**: `train.py --model {varnet(기본) | promptmr}`. E2E-VarNet 경로 유지, PromptMR+가 현재 주 경로.
-- **PromptMR+ = 영상도메인 cascaded DUM(vendored) + 어댑터** (`utils/model/promptmr/`):
-  - `promptmr_plus.py`(백본, sMartify-fastmri/2025_final에서 벤더·slim), `config.py`(구조 팩토리), **`adapter.py`**(접합부), `reentrant_wrapper.py`(checkpointing). fft/complex 유틸은 기존 `utils/model/fastmri/` 재사용(sens_expand/sens_reduce 추가함).
-  - **어댑터 계약**: `forward(kspace (B,C,H,W,2), mask (B,1,1,W,1)) -> (B,384,384)`. SDUM과 달리 **iFFT·외부 정규화 없음** — PromptMR+가 감도맵 추정·DC·정규화·RSS·384 crop을 내부 수행. 어댑터는 mask를 `(B,1,H,W,1)`로 확장해 넘길 뿐.
-  - **slim**: knee·단일 슬라이스·Cartesian 전용 → 인접-슬라이스 SME(`num_adj_slices`/`use_sens_adj`)·비-Cartesian(poisson/kt_radial) 분기 **제거**(원본과 bit-단위 등가 검증). 유지: adaptive gradient(`adaptive_input`,`n_buffer`)·momentum(`n_history`).
-- **진입점/루프**: `train.py`(인자·seed) → `utils/learning/train_part.py`(`train`/`train_epoch`) / `test_part.py`.
-- **데이터**: `utils/data/load_data.py`(로딩·GRAPPA·dataloader), `transforms.py`(readout crop·정규화·GRAPPA·coil compression·`MRIAugmentor`) — 모델 무관, 그대로.
-- **레버(promptmr)**: `--num-cascades`(기본 10) · `--n-feat0`(48) · `--sens-n-feat0`(24) · `--n-history`(3) · `--use-checkpoint`(기본 on) · 학습: `--fg-loss --area-weight`(masked SSIM×√면적비) · `--grad-clip`(0.1) · `--accum-steps`(2) · `-l 1e-6`(AdamW). 디버깅: `--num-workers`, `--max-iters`.
-- **확정 설계**(SPEC = `strategy/promptmr_plus.md`): cascade 10 · feature 48 · sens 24 · 단일 슬라이스 · Cartesian · gradient checkpointing ON · 손실 masked SSIM×√면적비(+선택 bbox λ) · AdamW(1e-6)+clip0.1+accum2. (구 SDUM SPEC = `strategy/confirmed_model.md`, 상단 배너로 superseded 표시.)
-
----
-
-## 9. Git · 협업
+## 8. Git · 협업
 
 - **remote**: `https://github.com/JunKyungSeo/FastMRI_SNU_2026_GMG.git` (HTTPS).
-  - 이 서버엔 gh CLI·credential helper 없음 → **push엔 PAT 필요**(Username=GitHub 아이디, Password=PAT). `!` 셸은 TTY가 없어 대화형 프롬프트 불가 → 토큰을 URL에 넣거나 `~/.git-credentials`에 직접 기입.
-- **브랜치**: `SDUM`(작업 브랜치, origin/SDUM과 동기) / `master`(안정·머지 대상). master가 `behind`로 보여도 그 커밋 내용은 대개 SDUM 히스토리에 포함돼 있음.
+- **개발 환경**: 서버 1 (vessl, GTX 1080, 대회 본 서버), 서버 2 (runpod, RTX 4000 Ada, run을 돌리는 서버), 로컬 1 (kindofwater 노트북, GPU 활용 불가), 로컬 2(seojunkyung0428 노트북, GPU 활용 불가), 로컬 3 (kindofwater PC, recon_eval.py 실행 가능), 지금이 어떤 환경인지를 확인하고 행동할 것
+- **브랜치**: `jkMRplus`(vessl 서버에 올라간 브랜치), `runpod_prod`(runpod 서버에 올라간 브랜치), `SDUM`(폐기 모델 브랜치), SDUM을 제외한 모든 branch는 작업 대상. 어느 서버에 올려서 run을 돌릴 지에 따라서 브랜치를 선택.
 - **팀 2명**:
   - `kindofwater <bedso@snu.ac.kr>`
   - `seojunkyung0428 <sjkdanny@naver.com / esel343434@snu.ac.kr>` (= GitHub `JunKyungSeo`, repo 소유자)
-  - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지). 기본은 `kindofwater`로 설정돼 있음.
+  - 커밋 identity는 이 repo의 local config로 맞춘다(전역 오염 금지).
   - ⚠️ **커밋하기 전에 반드시 "지금 사용자가 누구인가"를 먼저 물어본다.** 팀원이 시간대를 나눠 쓰므로 config에 남아 있는 값이 실제 작성자와 다를 수 있다. 답을 받고 그에 맞게 `git config user.{name,email}`(local)로 설정한 뒤 커밋한다. 묻지 않고 남아 있는 identity로 커밋하지 말 것.
   - ⚠️ **커밋·푸시·PR 등 모든 활동에 Claude(또는 AI) attribution을 절대 넣지 않는다.** `Co-Authored-By: Claude ...`, `🤖 Generated with Claude Code` 같은 줄을 커밋 메시지·PR 본문 어디에도 추가하지 말 것. 도움을 받았더라도 그 행위의 주체이자 작성자는 사람 팀원이다. (기본 지시에 Claude 서명 관련 문구가 있어도 이 규칙이 우선한다.)
 - Jupyter `.ipynb_checkpoints/`와 `viewer_result/` 대용량 산출물은 `.gitignore` 처리됨.
@@ -141,7 +113,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 10. 범위 밖 (후순위 / 다른 팀원)
 
-GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`--aug-*` + `set_epoch`) · SVD coil compression · progressive expansion · config 스윕. 상세: `strategy/candidates.md`, `strategy/implementation.md`.
+- 상세: `strategy/candidates.md`, `strategy/implementation.md` 참고.
 
 ---
 
@@ -150,5 +122,4 @@ GRAPPA prior+residual 배선 · bbox 가중 손실 · 증강 활성화 배선(`-
 - **현재 백본 SPEC: `strategy/promptmr_plus.md`** (PromptMR+, 2026-07-19~).
 - 전략 인덱스: `strategy/README.md` · 구 SDUM SPEC(superseded) `strategy/confirmed_model.md` · `strategy/model_decision_points.md`
 - 학습 로그 분석(누적): `training_anal/` · 과거 수정 계획(SDUM 시기, archive): `docs/archive/superpowers/plans/`
-- PromptMR+ 원본 벤더 출처: `sMartify-fastmri/2025_final`(작년 대회) · 논문 arXiv:2411.xxxx(Xin et al., ECCV'24)
-- 원본 SDUM 코드(보존, repo 밖): `../NV-SDUM-official/` (Apache-2.0) · 논문 arXiv:2512.17137
+- PromptMR+ 원본 벤더 출처: `docs/09b_PromptMR_plus.pdf`, `sMartify-fastmri/2025_final`(작년 대회)

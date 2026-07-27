@@ -52,12 +52,15 @@
 주의: 교체 전 파티션으로 돈 promptmr_kfold_f1/f2와 새 런의 val은 비교 불가다. shell22의
 증강 A/B는 OFF arm(f2)이 구파티션이라 baseline 재학습 없이는 무효 — 다음 run 결정에서 처리.
 
-상태: 커밋 9f2794f(층화 헬퍼·단위 테스트) 13943cb(독립성 테스트 보강) f5b8d89(kfold_split 교체·통합 테스트).
-서버 pytest·스모크 검증은 아직(아래 핸드오프).
+상태: 커밋 9f2794f(층화 헬퍼·단위 테스트) 13943cb(독립성 테스트 보강) f5b8d89(kfold_split 교체·통합 테스트)
+4a2fefe(슬롯 경고·worklog). 서버 pytest·스모크 검증은 아직(아래 핸드오프).
 
 핸드오프 → @esel34: 서버에서 python -m pytest scripts/tests/test_kfold_stratify.py -v 와
-SMOKE=1 FOLD=0 bash shell_scripting/shell21.sh 를 돌려 [K-Fold] 로그의 val 구성이
-acc4 20 · acc8 20으로 나오는지 확인 부탁한다.
+SMOKE=1 FOLD=0 bash shell_scripting/shell21.sh 를 돌려달라. 확인할 것은 [K-Fold] 로그의 val
+구성이 fold를 바꿔도 acc4·acc8 개수가 똑같이 나오는지, 그리고 그 값이 같은 줄에 찍히는
+train+val 총계를 k로 나눈 값과 맞는지다. 층화의 서명이 바로 그 두 가지다. 구체적 숫자를
+미리 적지 않는 이유는 실제 acc4/acc8 볼륨 수에 따라 달라져서다. 예전 f2의 22 대 18 같은
+값을 기준으로 삼으면 정상 결과를 실패로 읽게 된다.
 
 ## 2026-07-19 01:42 UTC / 2026-07-19 10:42 KST — @esel34
 

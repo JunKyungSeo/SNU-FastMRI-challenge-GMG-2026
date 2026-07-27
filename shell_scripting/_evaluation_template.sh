@@ -27,7 +27,10 @@ mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/${SLOT}_${TS}.log"
 exec > >(tee -a "$LOG") 2>&1
 
-OUT="../result/${NET}/recon_eval_${TS}.txt"   # 점수 사본 (timestamp 로 덮어쓰기 방지)
+# 점수 사본 — repo 안(results/)에 떨어뜨려 커밋·푸시로 모든 환경에서 공유한다
+OUT_DIR="shell_scripting/results"
+mkdir -p "$OUT_DIR"
+OUT="$OUT_DIR/recon_eval_${NET}_${TS}.txt"
 
 echo "=========================================================="
 echo "[START] $SLOT   $(date '+%F %T')   NET=$NET"
@@ -46,5 +49,6 @@ python -u recon_eval.py -n "$NET" -p "$LEADERBOARD" | tee "$OUT"
 echo "=========================================================="
 echo "[DONE ] $SLOT   $(date '+%F %T')   exit=$STATUS"
 echo "[저장] 점수: $OUT   (+ 재구성 h5: ../result/${NET}/reconstructions_leaderboard/)"
+echo "[공유] 점수 사본은 repo 안이다 — git add \"$OUT\" 커밋·푸시하면 모든 환경에서 보인다."
 echo "=========================================================="
 exit "$STATUS"

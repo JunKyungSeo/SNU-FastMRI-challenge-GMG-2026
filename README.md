@@ -69,7 +69,8 @@ SNU FastMRI Challenge 도전기
 │   ├── shellN.sh          # 현역 큐 슬롯 (shell16~22)
 │   ├── notify.sh          # 작업 완료 Gmail 알림
 │   ├── legacy/            # 종료된 슬롯 보관 (shell1~14 등, 역할 표: legacy/README.md)
-│   └── logs/              # 실행 로그 (git 미추적)
+│   ├── results/           # recon_eval 점수 사본 (작은 txt — 커밋해서 전 환경 공유)
+│   └── logs/              # 실행 로그 (서버에만, 필요한 것만 선별 커밋)
 ├── strategy               # 대회 전략·구현 문서 (인덱스: strategy/README.md)
 │   ├── README.md          # 전략 문서 인덱스 + 상태 대시보드
 │   ├── promptmr_plus.md   # ✅ 현재 백본 SPEC (PromptMR+)

@@ -1,0 +1,30 @@
+==========================================================
+[START] shell24 (fold 2 / 5)  STAGE=all  SMOKE=0  2026-07-28 16:11:09
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell24_f2_all_20260728_161109.log
+[BR   ] jkMRplus (2d704ff)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+==========================================================
+[GPU  ] used=2MiB
+[① pretrain] promptmr_moe_f2_shared_aug  (--acc all, fold 2 hold-out) 
+[① aug] --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 --aug-schedule exp --aug-delay 3
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all -e 10 --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 --aug-schedule exp --aug-delay 3 -n promptmr_moe_f2_shared_aug --run-tag pmr_moe_f2_shared
+Current cuda device:  0
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 107, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 363, in train
+    train_loader, val_loader = create_kfold_data_loaders(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 369, in create_kfold_data_loaders
+    train_ids, val_ids = kfold_split(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 351, in kfold_split
+    raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다.")
+ValueError: K-Fold: 데이터 경로([PosixPath('/workspace/Data/train'), PosixPath('/workspace/Data/val')])에서 h5 파일을 찾지 못했습니다.
+[① pretrain] exit=1
+==========================================================
+[DONE ] shell24 (fold 2)  STAGE=all  2026-07-28 16:11:12  exit=1
+[저장] val loss: ../result/promptmr_moe_f2_*/val_loss_log_pmr_moe_f2_*.npy
+       병합본  : ../result/promptmr_moe_f2_aug/checkpoints/best_model.pt
+[판정] 정본은 채점이다 — promptmr_moe_f2_aug(MoE) 와 promptmr_moe_f2_shared_aug(단일) 를 각각 채점해
+       SSIM_full·SSIM_bbox·시간 3축으로 비교할 것. val 은 계기판일 뿐이다.
+==========================================================

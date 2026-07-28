@@ -1,0 +1,29 @@
+==========================================================
+[START] shell22 (fold 2 / 5)   2026-07-28 16:30:09   SMOKE=0  NET=promptmr_kfold_f2_aug
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell22_f2_20260728_163009.log
+[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=5 · fold=2 · seed=430 · 10 epoch
+[AUG  ] schedule=exp delay=7 max-prob=0.55 exp-decay=5.0 mask-thin-max=4 orig-mask-prob=0.5
+==========================================================
+[GPU  ] used=2MiB
+[RESUME] ../result/promptmr_kfold_f2_aug/checkpoints/ 체크포인트 발견 → --resume 으로 이어학습한다.
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -e 10 -r 100 --num-workers 6 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --resume --k-fold 5 --val-fold 2 --kfold-seed 430 --aug-on --aug-schedule exp --aug-max-prob 0.55 --aug-delay 7 --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 -n promptmr_kfold_f2_aug --run-tag pmr_kf_f2_aug -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+[resume] 후보 {'model.pt': (9, 0), 'latest.pt': (9, 500)} → latest.pt 선택
+[resume] start_epoch=9 start_iter=500 best_val=0.0891
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 9 ............... promptmr_kfold_f2_aug ...............
+[aug] epoch=9 p=0.5340 p_flip=0.5340 p_mask=0.2670
+[resume] epoch 9: iter 0~499 건너뛰는 중 (가중치는 iter 500 시점 것) ...
+[resume] skip 100/500 (8s)
+[resume] skip 200/500 (15s)
+[resume] skip 300/500 (21s)
+[resume] skip 400/500 (29s)
+[resume] skip 500/500 (35s)
+[resume] 건너뛰기 완료 (36s) → iter 500부터 학습 재개
+Epoch = [  9/ 10] Iter = [ 500/4358] Loss = 0.01077 Time = 5.3157s
+Epoch = [  9/ 10] Iter = [ 600/4358] Loss = 0.04347 Time = 453.8620s
+Epoch = [  9/ 10] Iter = [ 700/4358] Loss = 0.08669 Time = 461.7295s
+Epoch = [  9/ 10] Iter = [ 800/4358] Loss = 0.04558 Time = 461.6923s

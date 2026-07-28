@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # ============================================================
-# GPU 작업 큐 슬롯 — MRAugment A/B 실험, 증강 ON arm (promptmr_kfold_f2_aug)   [shell22.sh]
+# GPU 작업 큐 슬롯 — 증강 A/B 실험, 증강 ON arm (promptmr_kfold_f2_aug)   [shell22.sh]
 #
-#   [실험 목적] 데이터 증강(MRAugment)이 val loss 과적합 구간을 늦추는지 보는 A/B 실험이다.
+#   [실험 목적] 데이터 증강(좌우 flip)이 val loss 과적합 구간을 늦추는지 보는 A/B 실험이다.
+#     ⚠️ (2026-07-28) mask thinning 이 코드에서 제거되어 증강 = 좌우 flip 하나뿐이다.
+#        따라서 이 A/B가 재는 것도 "flip 의 순효과" 하나다(strategy/augmentation.md §0).
 #     - OFF arm = 이미 완료된 shell21.sh 런(net_name=promptmr_kfold_f${FOLD}). 여기서 다시
 #       돌리지 않는다 — 21시간짜리 런을 또 태울 이유가 없다.
 #       ⚠️ 이 런의 완주·과적합 여부는 repo에 기록 없음 — 재사용 전 config 대조 필수.
@@ -64,7 +66,7 @@ if [ "$SMOKE" = "1" ]; then
     NET="promptmr_kfold_f${FOLD}_aug_smoke"; TAG="pmr_kf_f${FOLD}_aug_smoke"; EXTRA="--max-iters 120"; EPOCHS=1
     # ⚠️ 이거 "단순화"하지 말 것 — 일관성 없어 보이지만 의도한 것이다.
     #    1-epoch 스모크(epoch=0)에서 exp/ramp 스케줄은 공식상 t=delay일 때 1 - e^0 = 0, 즉
-    #    p(epoch=0) = 0 이 **정확히** 나온다. 그러면 스모크 런은 "[aug] epoch=0 p=0.0000"을 찍고
+    #    p(epoch=0) = 0 이 **정확히** 나온다. 그러면 스모크 런은 "[aug] epoch=0 p_flip=0.0000"을 찍고
     #    p<=0 조기 리턴으로 증강을 0회 수행한 채 exit 0으로 "성공"해버려서, 이 스모크 게이트가
     #    아무것도 검증하지 못한 채 통과한 것처럼 보인다. 그래서 스모크에서만 스케줄 자체를
     #    constant로 바꾸고 delay=0을 줘서 p = p_max = 0.55 를 epoch 0부터 강제한다.
@@ -96,7 +98,7 @@ echo "[START] $SLOT (fold $FOLD / $K_FOLD)   $(date '+%F %T')   SMOKE=$SMOKE  NE
 echo "[CWD  ] $(pwd)"
 echo "[LOG  ] $LOG"
 echo "[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=$K_FOLD · fold=$FOLD · seed=$KFOLD_SEED · ${EPOCHS} epoch"
-echo "[AUG  ] schedule=$AUG_SCHEDULE delay=$AUG_DELAY max-prob=0.55 exp-decay=5.0 mask-thin-max=4 orig-mask-prob=0.5"
+echo "[AUG  ] 좌우 flip · schedule=$AUG_SCHEDULE delay=$AUG_DELAY max-prob=0.55 exp-decay=5.0"
 echo "=========================================================="
 
 # --- 가드: GPU 비었는지 (used < 500MiB) ---
@@ -118,8 +120,8 @@ if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; the
 fi
 
 # ==========================================================
-#  ↓↓↓  PromptMR+ K-Fold 학습 + MRAugment ON (fold $FOLD)  ↓↓↓
-#     baseline(shell21.sh)과 train.py 인자는 --aug-* 7개와 -n/--run-tag(NET/TAG)만 다르다.
+#  ↓↓↓  PromptMR+ K-Fold 학습 + 증강(좌우 flip) ON (fold $FOLD)  ↓↓↓
+#     baseline(shell21.sh)과 train.py 인자는 --aug-* 5개와 -n/--run-tag(NET/TAG)만 다르다.
 #     이 슬롯도 학습 + hold-out 검증까지만 한다. 채점(recon_eval)은 leaderboard 데이터가
 #     있는 다른 환경에서 하므로 여기서 GPU를 더 쓰지 않는다.
 # ==========================================================
@@ -130,7 +132,7 @@ python train.py --model promptmr --readout-crop \
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --resume \
     --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
     --aug-on --aug-schedule "$AUG_SCHEDULE" --aug-max-prob 0.55 --aug-delay "$AUG_DELAY" \
-    --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 \
+    --aug-exp-decay 5.0 \
     -n "$NET" --run-tag "$TAG" \
     -t /root/Data/train/ -v /root/Data/val/
 { TRAIN_STATUS=$?; set +x; } 2>/dev/null
@@ -139,7 +141,7 @@ echo "[TRAIN] $NET (fold $FOLD) 종료   exit=$TRAIN_STATUS"
 if [ "$SMOKE" = "1" ]; then
     echo "=========================================================="
     echo "[SMOKE] 확인할 것 (fold $FOLD, 증강 ON arm):"
-    echo "        (0) ⚠️ 가장 중요 — 로그에 '[aug] epoch=0 p=0.5500' (또는 p>0인 값)이 찍혔는가."
+    echo "        (0) ⚠️ 가장 중요 — 로그에 '[aug] epoch=0 p_flip=0.5500' (또는 p_flip>0인 값)이 찍혔는가."
     echo "            p=0.0000 이면 STOP — 본 학습(21시간)을 시작하지 말 것. 증강이 조용히"
     echo "            0회 수행되고 있다는 뜻이고, 그 상태로 21시간을 태우면 아무것도 검증하지 못한다."
     echo "        (1) OOM 없이 exit 0 인가"

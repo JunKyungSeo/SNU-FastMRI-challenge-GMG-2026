@@ -1,0 +1,18 @@
+==========================================================
+[START] shell24 (fold 2 / 5)  STAGE=all  SMOKE=0  2026-07-27 07:41:29
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell24_f2_all_20260727_074129.log
+[BR   ] runpod_prod (09003f3)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+==========================================================
+[GPU  ] used=2MiB
+[① pretrain] promptmr_moe_f2_shared  (--acc all, fold 2 hold-out) 
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all -e 10 -n promptmr_moe_f2_shared --run-tag pmr_moe_f2_shared
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 0 ............... promptmr_moe_f2_shared ...............
+Epoch = [  0/ 10] Iter = [   0/4358] Loss = 0.1763 Time = 3.3773s
+Epoch = [  0/ 10] Iter = [ 100/4358] Loss = 0.2028 Time = 166.9955s
+Epoch = [  0/ 10] Iter = [ 200/4358] Loss = 0.123 Time = 167.1637s

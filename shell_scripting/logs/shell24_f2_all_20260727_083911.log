@@ -1,0 +1,71 @@
+==========================================================
+[START] shell24 (fold 2 / 5)  STAGE=all  SMOKE=1  2026-07-27 08:39:11
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell24_f2_all_20260727_083911.log
+[BR   ] runpod_prod (09003f3)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 1ep · ft 1ep
+==========================================================
+[GPU  ] used=2MiB
+[① pretrain] promptmr_moe_f2_shared_smoke  (--acc all, fold 2 hold-out) 
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all -e 1 --max-iters 120 -n promptmr_moe_f2_shared_smoke --run-tag pmr_moe_f2_shared
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 0 ............... promptmr_moe_f2_shared_smoke ...............
+Epoch = [  0/  1] Iter = [   0/4358] Loss = 0.1763 Time = 3.4858s
+Epoch = [  0/  1] Iter = [ 100/4358] Loss = 0.2026 Time = 166.1739s
+[mem] epoch 0 peak allocated = 2.95GB / reserved = 3.43GB
+loss file saved! ../result/promptmr_moe_f2_shared_smoke/val_loss_log_pmr_moe_f2_shared
+Epoch = [   0/   1] TrainLoss = 0.1068 ValLoss = 0.1288 TrainTime = 201.7541s ValTime = 351.1010s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.3158s
+[① pretrain] exit=0
+[GPU  ] used=2MiB
+[② ft4] promptmr_moe_f2_acc4_smoke  (--acc 4 --init-from shared) [resume]
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 4 -e 1 --max-iters 120 --resume --init-from ../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt -n promptmr_moe_f2_acc4_smoke --run-tag pmr_moe_f2_acc4
+Current cuda device:  0
+[resume] 후보 {'model.pt': (1, 0)} → model.pt 선택
+[resume] start_epoch=1 start_iter=0 best_val=0.0951
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=4 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 80 · acc8 0) · 2195 slice
+[K-Fold] val    20 vol (acc4 20 · acc8 0) · 548 slice
+[② ft4] exit=0
+[GPU  ] used=2MiB
+[② ft8] promptmr_moe_f2_acc8_smoke  (--acc 8 --init-from shared) [resume]
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 -e 1 --max-iters 120 --resume --init-from ../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt -n promptmr_moe_f2_acc8_smoke --run-tag pmr_moe_f2_acc8
+Current cuda device:  0
+[resume] 후보 {'model.pt': (1, 0)} → model.pt 선택
+[resume] start_epoch=1 start_iter=0 best_val=0.1473
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+[② ft8] exit=0
+[④ merge] promptmr_moe_f2_acc4_smoke + promptmr_moe_f2_acc8_smoke → promptmr_moe_f2_smoke
++ python scripts/merge_moe.py --acc4-net promptmr_moe_f2_acc4_smoke --acc8-net promptmr_moe_f2_acc8_smoke --out-net promptmr_moe_f2_smoke
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 82, in <module>
+    main()
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 50, in main
+    c8 = _load_best(args.result_root, args.acc8_net)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 33, in _load_best
+    ckpt = torch.load(path, map_location="cpu", weights_only=False)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/serialization.py", line 1491, in load
+    with _open_zipfile_reader(opened_file) as opened_zipfile:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/serialization.py", line 771, in __init__
+    super().__init__(torch._C.PyTorchFileReader(name_or_buffer))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: PytorchStreamReader failed reading zip archive: failed finding central directory
+[④ merge] 실패 exit=1
+==========================================================
+[DONE ] shell24 (fold 2)  STAGE=all  2026-07-27 08:49:27  exit=1
+[SMOKE] 확인할 것:
+        (1) 세 단계 다 OOM 없이 exit 0 인가
+        (2) [K-Fold] 로그의 val 구성이 **세 단계에서 일관적인가** — 이게 층화의 서명이다.
+            ① --acc all 의 val (acc4 A · acc8 B) 에 대해 ② 는 acc4 A, ③ 은 acc8 B 여야 한다.
+            어긋나면 층화가 안 먹은 것이니 본 학습을 돌리지 말 것.
+        (3) merge 가 config 불일치로 거부되지 않았는가
+==========================================================

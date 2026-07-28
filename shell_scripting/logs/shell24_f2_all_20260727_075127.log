@@ -1,0 +1,78 @@
+==========================================================
+[START] shell24 (fold 2 / 5)  STAGE=all  SMOKE=1  2026-07-27 07:51:27
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell24_f2_all_20260727_075127.log
+[BR   ] runpod_prod (09003f3)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 1ep · ft 1ep
+==========================================================
+[GPU  ] used=2MiB
+[① pretrain] promptmr_moe_f2_shared_smoke  (--acc all, fold 2 hold-out) 
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all -e 1 --max-iters 120 -n promptmr_moe_f2_shared_smoke --run-tag pmr_moe_f2_shared
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 0 ............... promptmr_moe_f2_shared_smoke ...............
+Epoch = [  0/  1] Iter = [   0/4358] Loss = 0.1763 Time = 3.8268s
+Epoch = [  0/  1] Iter = [ 100/4358] Loss = 0.2023 Time = 166.8441s
+[mem] epoch 0 peak allocated = 2.95GB / reserved = 3.43GB
+loss file saved! ../result/promptmr_moe_f2_shared_smoke/val_loss_log_pmr_moe_f2_shared
+Epoch = [   0/   1] TrainLoss = 0.1068 ValLoss = 0.1294 TrainTime = 203.1365s ValTime = 347.6154s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.3098s
+[① pretrain] exit=0
+[GPU  ] used=2MiB
+[② ft4] promptmr_moe_f2_acc4_smoke  (--acc 4 --init-from shared) 
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 4 -e 1 --max-iters 120 --init-from ../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt -n promptmr_moe_f2_acc4_smoke --run-tag pmr_moe_f2_acc4
+Current cuda device:  0
+[init-from] '../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt' 의 model 가중치로 초기화 (미세조정 시작)
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=4 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 80 · acc8 0) · 2195 slice
+[K-Fold] val    20 vol (acc4 20 · acc8 0) · 548 slice
+Epoch # 0 ............... promptmr_moe_f2_acc4_smoke ...............
+Epoch = [  0/  1] Iter = [   0/2195] Loss = 0.0612 Time = 5.1001s
+Epoch = [  0/  1] Iter = [ 100/2195] Loss = 0.1115 Time = 168.3407s
+[mem] epoch 0 peak allocated = 3.35GB / reserved = 4.00GB
+loss file saved! ../result/promptmr_moe_f2_acc4_smoke/val_loss_log_pmr_moe_f2_acc4
+Epoch = [   0/   1] TrainLoss = 0.07269 ValLoss = 0.09514 TrainTime = 205.7365s ValTime = 178.3468s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.2893s
+[② ft4] exit=0
+[GPU  ] used=2MiB
+[② ft8] promptmr_moe_f2_acc8_smoke  (--acc 8 --init-from shared) 
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /workspace/Data/train/ -v /workspace/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 -e 1 --max-iters 120 --init-from ../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt -n promptmr_moe_f2_acc8_smoke --run-tag pmr_moe_f2_acc8
+Current cuda device:  0
+[init-from] '../result/promptmr_moe_f2_shared_smoke/checkpoints/best_model.pt' 의 model 가중치로 초기화 (미세조정 시작)
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_moe_f2_acc8_smoke ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.09837 Time = 3.5443s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.09622 Time = 166.8281s
+[mem] epoch 0 peak allocated = 2.87GB / reserved = 3.56GB
+loss file saved! ../result/promptmr_moe_f2_acc8_smoke/val_loss_log_pmr_moe_f2_acc8
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 107, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 427, in train
+    save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 283, in save_model
+    shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
+  File "/usr/lib/python3.12/shutil.py", line 273, in copyfile
+    _fastcopy_sendfile(fsrc, fdst)
+  File "/usr/lib/python3.12/shutil.py", line 164, in _fastcopy_sendfile
+    raise err from None
+  File "/usr/lib/python3.12/shutil.py", line 150, in _fastcopy_sendfile
+    sent = os.sendfile(outfd, infd, offset, blocksize)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+OSError: [Errno 28] No space left on device: '../result/promptmr_moe_f2_acc8_smoke/checkpoints/model.pt' -> '../result/promptmr_moe_f2_acc8_smoke/checkpoints/best_model.pt'
+[② ft8] exit=1
+==========================================================
+[DONE ] shell24 (fold 2)  STAGE=all  2026-07-27 08:14:25  exit=1
+[SMOKE] 확인할 것:
+        (1) 세 단계 다 OOM 없이 exit 0 인가
+        (2) [K-Fold] 로그의 val 구성이 **세 단계에서 일관적인가** — 이게 층화의 서명이다.
+            ① --acc all 의 val (acc4 A · acc8 B) 에 대해 ② 는 acc4 A, ③ 은 acc8 B 여야 한다.
+            어긋나면 층화가 안 먹은 것이니 본 학습을 돌리지 말 것.
+        (3) merge 가 config 불일치로 거부되지 않았는가
+==========================================================

@@ -31,8 +31,10 @@ LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
 # ===== [이번 run] 여기만 채운다 =====
 FOLD="${FOLD:-2}"
+# shell24 가 AUG=1(기본)이면 net 이름에 _aug 를 붙인다 — 채점 대상도 같은 규칙으로 맞춘다.
+AUG="${AUG:-1}"; ASUF=""; [ "$AUG" = "1" ] && ASUF="_aug"
 # MoE 먼저, 단일 baseline 다음 — 둘 다 채점해야 MoE 가 이득인지 판정된다(shell24 ⑤ 와 동일).
-NETS="${NETS:-promptmr_moe_f${FOLD} promptmr_moe_f${FOLD}_shared}"
+NETS="${NETS:-promptmr_moe_f${FOLD}${ASUF} promptmr_moe_f${FOLD}_shared${ASUF}}"
 
 # --- 로그 ---
 SLOT="$(basename "$0" .sh)"

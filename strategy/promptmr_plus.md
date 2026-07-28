@@ -5,9 +5,7 @@
 
 ## 왜 바꿨나
 SDUM(NV cascaded)에서 작년 대회 우승 코드 `sMartify-fastmri/2025_final`의 **PromptMR+**로 백본 교체.
-PromptMR+의 self-adaptive gradient(기여 #1)·momentum feature aggregation(기여 #2)이 정적 knee에도
-유효(논문 Table 3, knee acc4/8 검증). 인접-슬라이스 SME(기여 #3)는 우리 단일 슬라이스 파이프라인과
-안 맞아 제거.
+PromptMR+의 self-adaptive gradient(기여 #1)·momentum feature aggregation(기여 #2)이 정적 knee에도 유효(논문 Table 3, knee acc4/8 검증). 인접-슬라이스 SME(기여 #3)는 적용 여부 검토중
 
 ## 확정 구조
 | 항목 | 값 |

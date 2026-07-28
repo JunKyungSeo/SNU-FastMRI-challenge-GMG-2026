@@ -1,0 +1,178 @@
+==========================================================
+[START] shell16   2026-07-22 03:12:09   SMOKE=0  NET=promptmr_run3
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell16_20260722_031209.log
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --coil-compress --n-virtual-coils 8 --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 2e-4 --lr-step-size 11 --lr-gamma 0.3 -e 10 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run3 --run-tag pmr_run3 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+[scheduler] StepLR step_size=11ep gamma=0.3, base_lr=0.0002
+Epoch # 0 ............... promptmr_run3 ...............
+Epoch = [  0/ 10] Iter = [   0/4651] Loss = 0.3054 Time = 3.2922s
+Epoch = [  0/ 10] Iter = [ 100/4651] Loss = 0.1028 Time = 204.1082s
+Epoch = [  0/ 10] Iter = [ 200/4651] Loss = 0.09859 Time = 206.1719s
+Epoch = [  0/ 10] Iter = [ 300/4651] Loss = 0.07279 Time = 208.7888s
+Epoch = [  0/ 10] Iter = [ 400/4651] Loss = 0.07025 Time = 208.4888s
+Epoch = [  0/ 10] Iter = [ 500/4651] Loss = 0.05498 Time = 209.1152s
+Epoch = [  0/ 10] Iter = [ 600/4651] Loss = 0.155 Time = 209.8687s
+Epoch = [  0/ 10] Iter = [ 700/4651] Loss = 0.0559 Time = 209.6062s
+Epoch = [  0/ 10] Iter = [ 800/4651] Loss = 0.1237 Time = 209.3094s
+Epoch = [  0/ 10] Iter = [ 900/4651] Loss = 0.02741 Time = 209.3807s
+Epoch = [  0/ 10] Iter = [1000/4651] Loss = 0.064 Time = 213.3190s
+Epoch = [  0/ 10] Iter = [1100/4651] Loss = 0.0747 Time = 208.4774s
+Epoch = [  0/ 10] Iter = [1200/4651] Loss = 0.06859 Time = 209.8718s
+Epoch = [  0/ 10] Iter = [1300/4651] Loss = 0.09797 Time = 209.9058s
+Epoch = [  0/ 10] Iter = [1400/4651] Loss = 0.06147 Time = 208.1320s
+Epoch = [  0/ 10] Iter = [1500/4651] Loss = 0.09826 Time = 212.0462s
+Epoch = [  0/ 10] Iter = [1600/4651] Loss = 0.1096 Time = 209.7364s
+Epoch = [  0/ 10] Iter = [1700/4651] Loss = 0.07136 Time = 209.7193s
+Epoch = [  0/ 10] Iter = [1800/4651] Loss = 0.09955 Time = 209.0124s
+Epoch = [  0/ 10] Iter = [1900/4651] Loss = 0.09629 Time = 208.5675s
+Epoch = [  0/ 10] Iter = [2000/4651] Loss = 0.07945 Time = 211.8660s
+Epoch = [  0/ 10] Iter = [2100/4651] Loss = 0.146 Time = 209.8977s
+Epoch = [  0/ 10] Iter = [2200/4651] Loss = 0.1148 Time = 208.8354s
+Epoch = [  0/ 10] Iter = [2300/4651] Loss = 0.0459 Time = 209.0591s
+Epoch = [  0/ 10] Iter = [2400/4651] Loss = 0.04039 Time = 209.6219s
+Epoch = [  0/ 10] Iter = [2500/4651] Loss = 0.1072 Time = 212.3820s
+Epoch = [  0/ 10] Iter = [2600/4651] Loss = 0.1066 Time = 210.1179s
+Epoch = [  0/ 10] Iter = [2700/4651] Loss = 0.1039 Time = 209.5889s
+Epoch = [  0/ 10] Iter = [2800/4651] Loss = 0.03743 Time = 209.7638s
+Epoch = [  0/ 10] Iter = [2900/4651] Loss = 0.1151 Time = 209.9582s
+Epoch = [  0/ 10] Iter = [3000/4651] Loss = 0.06402 Time = 212.3763s
+Epoch = [  0/ 10] Iter = [3100/4651] Loss = 0.05118 Time = 210.0901s
+Epoch = [  0/ 10] Iter = [3200/4651] Loss = 0.1123 Time = 209.8288s
+Epoch = [  0/ 10] Iter = [3300/4651] Loss = 0.09384 Time = 209.6620s
+Epoch = [  0/ 10] Iter = [3400/4651] Loss = 0.1257 Time = 209.5580s
+Epoch = [  0/ 10] Iter = [3500/4651] Loss = 0.05143 Time = 213.2912s
+Epoch = [  0/ 10] Iter = [3600/4651] Loss = 0.1073 Time = 209.7769s
+Epoch = [  0/ 10] Iter = [3700/4651] Loss = 0.08387 Time = 209.2566s
+Epoch = [  0/ 10] Iter = [3800/4651] Loss = 0.07174 Time = 208.8781s
+Epoch = [  0/ 10] Iter = [3900/4651] Loss = 0.05659 Time = 210.6404s
+Epoch = [  0/ 10] Iter = [4000/4651] Loss = 0.08182 Time = 212.5406s
+Epoch = [  0/ 10] Iter = [4100/4651] Loss = 0.09871 Time = 209.6100s
+Epoch = [  0/ 10] Iter = [4200/4651] Loss = 0.2095 Time = 209.8837s
+Epoch = [  0/ 10] Iter = [4300/4651] Loss = 0.01207 Time = 209.6665s
+Epoch = [  0/ 10] Iter = [4400/4651] Loss = 0.1423 Time = 208.7995s
+Epoch = [  0/ 10] Iter = [4500/4651] Loss = 0.08084 Time = 211.9698s
+Epoch = [  0/ 10] Iter = [4600/4651] Loss = 0.03229 Time = 210.5228s
+[mem] epoch 0 peak allocated = 2.24GB / reserved = 3.77GB
+loss file saved! ../result/promptmr_run3/val_loss_log_pmr_run3
+Epoch = [   0/  10] TrainLoss = 0.07932 ValLoss = 0.0988 TrainTime = 9758.3696s ValTime = 229.2094s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.3951s
+Epoch # 1 ............... promptmr_run3 ...............
+Epoch = [  1/ 10] Iter = [   0/4651] Loss = 0.01168 Time = 3.1025s
+Epoch = [  1/ 10] Iter = [ 100/4651] Loss = 0.1095 Time = 209.7958s
+Epoch = [  1/ 10] Iter = [ 200/4651] Loss = 0.04688 Time = 209.1185s
+Epoch = [  1/ 10] Iter = [ 300/4651] Loss = 0.05725 Time = 210.0312s
+Epoch = [  1/ 10] Iter = [ 400/4651] Loss = 0.04123 Time = 208.8641s
+Epoch = [  1/ 10] Iter = [ 500/4651] Loss = 0.1531 Time = 213.0755s
+Epoch = [  1/ 10] Iter = [ 600/4651] Loss = 0.08514 Time = 210.3267s
+Epoch = [  1/ 10] Iter = [ 700/4651] Loss = 0.02435 Time = 209.8458s
+Epoch = [  1/ 10] Iter = [ 800/4651] Loss = 0.04531 Time = 210.3162s
+Epoch = [  1/ 10] Iter = [ 900/4651] Loss = 0.04526 Time = 209.7159s
+Epoch = [  1/ 10] Iter = [1000/4651] Loss = 0.07122 Time = 213.0521s
+Epoch = [  1/ 10] Iter = [1100/4651] Loss = 0.08719 Time = 210.5208s
+Epoch = [  1/ 10] Iter = [1200/4651] Loss = 0.08249 Time = 209.7795s
+Epoch = [  1/ 10] Iter = [1300/4651] Loss = 0.07817 Time = 209.8692s
+Epoch = [  1/ 10] Iter = [1400/4651] Loss = 0.07352 Time = 209.5235s
+Epoch = [  1/ 10] Iter = [1500/4651] Loss = 0.03861 Time = 212.8123s
+Epoch = [  1/ 10] Iter = [1600/4651] Loss = 0.08378 Time = 208.9265s
+Epoch = [  1/ 10] Iter = [1700/4651] Loss = 0.04762 Time = 210.9047s
+Epoch = [  1/ 10] Iter = [1800/4651] Loss = 0.03473 Time = 209.1737s
+Epoch = [  1/ 10] Iter = [1900/4651] Loss = 0.1525 Time = 209.6545s
+Epoch = [  1/ 10] Iter = [2000/4651] Loss = 0.04438 Time = 213.5675s
+Epoch = [  1/ 10] Iter = [2100/4651] Loss = 0.1005 Time = 208.9888s
+Epoch = [  1/ 10] Iter = [2200/4651] Loss = 0.12 Time = 209.5979s
+Epoch = [  1/ 10] Iter = [2300/4651] Loss = 0.06023 Time = 209.6130s
+Epoch = [  1/ 10] Iter = [2400/4651] Loss = 0.03271 Time = 209.4111s
+Epoch = [  1/ 10] Iter = [2500/4651] Loss = 0.04402 Time = 213.7688s
+Epoch = [  1/ 10] Iter = [2600/4651] Loss = 0.08 Time = 209.8307s
+Epoch = [  1/ 10] Iter = [2700/4651] Loss = 0.08154 Time = 209.3388s
+Epoch = [  1/ 10] Iter = [2800/4651] Loss = 0.04395 Time = 208.3084s
+Epoch = [  1/ 10] Iter = [2900/4651] Loss = 0.0484 Time = 210.0555s
+Epoch = [  1/ 10] Iter = [3000/4651] Loss = 0.02015 Time = 212.7872s
+Epoch = [  1/ 10] Iter = [3100/4651] Loss = 0.06533 Time = 209.1629s
+Epoch = [  1/ 10] Iter = [3200/4651] Loss = 0.04157 Time = 209.6393s
+Epoch = [  1/ 10] Iter = [3300/4651] Loss = 0.11 Time = 209.5838s
+Epoch = [  1/ 10] Iter = [3400/4651] Loss = 0.03949 Time = 209.8477s
+Epoch = [  1/ 10] Iter = [3500/4651] Loss = 0.038 Time = 213.2232s
+Epoch = [  1/ 10] Iter = [3600/4651] Loss = 0.04915 Time = 208.9855s
+Epoch = [  1/ 10] Iter = [3700/4651] Loss = 0.03516 Time = 209.7226s
+Epoch = [  1/ 10] Iter = [3800/4651] Loss = 0.06559 Time = 210.4694s
+Epoch = [  1/ 10] Iter = [3900/4651] Loss = 0.09322 Time = 209.5398s
+Epoch = [  1/ 10] Iter = [4000/4651] Loss = 0.06396 Time = 212.6369s
+Epoch = [  1/ 10] Iter = [4100/4651] Loss = 0.06177 Time = 210.1874s
+Epoch = [  1/ 10] Iter = [4200/4651] Loss = 0.05538 Time = 209.4297s
+Epoch = [  1/ 10] Iter = [4300/4651] Loss = 0.1159 Time = 209.8855s
+Epoch = [  1/ 10] Iter = [4400/4651] Loss = 0.02732 Time = 209.4264s
+Epoch = [  1/ 10] Iter = [4500/4651] Loss = 0.04093 Time = 212.7649s
+Epoch = [  1/ 10] Iter = [4600/4651] Loss = 0.02872 Time = 210.2281s
+[mem] epoch 1 peak allocated = 2.24GB / reserved = 3.77GB
+loss file saved! ../result/promptmr_run3/val_loss_log_pmr_run3
+Epoch = [   1/  10] TrainLoss = 0.07037 ValLoss = 0.09549 TrainTime = 9783.2451s ValTime = 229.1166s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 5.0962s
+Epoch # 2 ............... promptmr_run3 ...............
+Epoch = [  2/ 10] Iter = [   0/4651] Loss = 0.0741 Time = 2.8479s
+Epoch = [  2/ 10] Iter = [ 100/4651] Loss = 0.06367 Time = 209.4755s
+Epoch = [  2/ 10] Iter = [ 200/4651] Loss = 0.07123 Time = 209.4151s
+Epoch = [  2/ 10] Iter = [ 300/4651] Loss = 0.09262 Time = 209.0079s
+Epoch = [  2/ 10] Iter = [ 400/4651] Loss = 0.06571 Time = 210.1619s
+Epoch = [  2/ 10] Iter = [ 500/4651] Loss = 0.06687 Time = 212.9476s
+Epoch = [  2/ 10] Iter = [ 600/4651] Loss = 0.0861 Time = 209.6128s
+Epoch = [  2/ 10] Iter = [ 700/4651] Loss = 0.0539 Time = 210.2528s
+Epoch = [  2/ 10] Iter = [ 800/4651] Loss = 0.1476 Time = 209.2967s
+Epoch = [  2/ 10] Iter = [ 900/4651] Loss = 0.07188 Time = 209.5405s
+Epoch = [  2/ 10] Iter = [1000/4651] Loss = 0.03672 Time = 213.0985s
+Epoch = [  2/ 10] Iter = [1100/4651] Loss = 0.1771 Time = 208.6654s
+Epoch = [  2/ 10] Iter = [1200/4651] Loss = 0.0304 Time = 209.2584s
+Epoch = [  2/ 10] Iter = [1300/4651] Loss = 0.1118 Time = 209.4688s
+Epoch = [  2/ 10] Iter = [1400/4651] Loss = 0.07726 Time = 210.0180s
+Epoch = [  2/ 10] Iter = [1500/4651] Loss = 0.08277 Time = 212.5005s
+Epoch = [  2/ 10] Iter = [1600/4651] Loss = 0.05167 Time = 209.9462s
+Epoch = [  2/ 10] Iter = [1700/4651] Loss = 0.04766 Time = 209.2929s
+Epoch = [  2/ 10] Iter = [1800/4651] Loss = 0.0386 Time = 209.8433s
+Epoch = [  2/ 10] Iter = [1900/4651] Loss = 0.1587 Time = 209.2304s
+Epoch = [  2/ 10] Iter = [2000/4651] Loss = 0.1012 Time = 212.5023s
+Epoch = [  2/ 10] Iter = [2100/4651] Loss = 0.06054 Time = 210.0632s
+Epoch = [  2/ 10] Iter = [2200/4651] Loss = 0.057 Time = 209.2594s
+Epoch = [  2/ 10] Iter = [2300/4651] Loss = 0.02398 Time = 210.4543s
+Epoch = [  2/ 10] Iter = [2400/4651] Loss = 0.04548 Time = 211.0197s
+Epoch = [  2/ 10] Iter = [2500/4651] Loss = 0.03858 Time = 212.2124s
+Epoch = [  2/ 10] Iter = [2600/4651] Loss = 0.1206 Time = 210.4743s
+Epoch = [  2/ 10] Iter = [2700/4651] Loss = 0.08773 Time = 209.6881s
+Epoch = [  2/ 10] Iter = [2800/4651] Loss = 0.06594 Time = 210.0671s
+Epoch = [  2/ 10] Iter = [2900/4651] Loss = 0.07298 Time = 210.3733s
+Epoch = [  2/ 10] Iter = [3000/4651] Loss = 0.03676 Time = 213.2959s
+Epoch = [  2/ 10] Iter = [3100/4651] Loss = 0.07363 Time = 208.7078s
+Epoch = [  2/ 10] Iter = [3200/4651] Loss = 0.0524 Time = 208.6090s
+Epoch = [  2/ 10] Iter = [3300/4651] Loss = 0.04288 Time = 210.7247s
+Epoch = [  2/ 10] Iter = [3400/4651] Loss = 0.0332 Time = 210.1285s
+Epoch = [  2/ 10] Iter = [3500/4651] Loss = 0.007482 Time = 212.3097s
+Epoch = [  2/ 10] Iter = [3600/4651] Loss = 0.06017 Time = 210.7390s
+Epoch = [  2/ 10] Iter = [3700/4651] Loss = 0.1818 Time = 209.5697s
+Epoch = [  2/ 10] Iter = [3800/4651] Loss = 0.06458 Time = 209.3999s
+Epoch = [  2/ 10] Iter = [3900/4651] Loss = 0.06178 Time = 211.1630s
+Epoch = [  2/ 10] Iter = [4000/4651] Loss = 0.04977 Time = 212.8982s
+Epoch = [  2/ 10] Iter = [4100/4651] Loss = 0.03006 Time = 209.2852s
+Epoch = [  2/ 10] Iter = [4200/4651] Loss = 0.06839 Time = 209.5350s
+Epoch = [  2/ 10] Iter = [4300/4651] Loss = 0.1014 Time = 210.6795s
+Epoch = [  2/ 10] Iter = [4400/4651] Loss = 0.04016 Time = 209.5030s
+Epoch = [  2/ 10] Iter = [4500/4651] Loss = 0.04066 Time = 212.7433s
+Epoch = [  2/ 10] Iter = [4600/4651] Loss = 0.1067 Time = 209.4395s
+[mem] epoch 2 peak allocated = 2.24GB / reserved = 3.77GB
+loss file saved! ../result/promptmr_run3/val_loss_log_pmr_run3
+Epoch = [   2/  10] TrainLoss = 0.06853 ValLoss = 0.09392 TrainTime = 9783.2362s ValTime = 228.8616s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 5.2240s
+Epoch # 3 ............... promptmr_run3 ...............
+Epoch = [  3/ 10] Iter = [   0/4651] Loss = 0.03843 Time = 3.0764s
+Terminated
+[TRAIN] promptmr_run3 종료   exit=143
+[RECON] 학습이 exit=143 로 끝나 채점 건너뜀.
+==========================================================
+[DONE ] shell16   2026-07-22 11:35:31   train=143 recon/exit=143
+[저장] 점수: ../result/promptmr_run3/recon_eval_run3.txt (+ 이 슬롯 로그).
+[비교] run1(압축8·nc4)·run2(전코일·nc10) 둘 다 lr 1e-6(미학습) → run3 상승폭이 lr 수정 효과.
+==========================================================

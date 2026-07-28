@@ -1,0 +1,30 @@
+==========================================================
+[START] shell13   2026-07-21 00:25:41
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell13_20260721_002541.log
+==========================================================
+[GPU ] used=2MiB
+
+=== A) 기준선: 압축했다고 가정한 코일 8개 (기존 확정 config nc=4) ===
+OK   cascades=4 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=8 HxW=384x480 peak=1.93GB
+
+=== B) 코일 전부(15). checkpointing 유무 비교 — 이번 수정의 효과 ===
+OOM  cascades=4 n_feat0=48 sens=24 n_hist=3 ckpt=False coils=15 HxW=384x480
+OK   cascades=4 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 peak=2.03GB
+
+=== C) 코일 전부(15) + cascade 스윕 — nc 를 어디까지 올릴 수 있나 ===
+OK   cascades=6 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 peak=2.20GB
+OK   cascades=8 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 peak=2.38GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 peak=2.56GB
+OK   cascades=12 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 peak=2.73GB
+
+==========================================================
+[DONE ] shell13   2026-07-21 00:26:21
+[읽는 법]
+  - B 의 두 줄 차이 = cascade checkpointing + 코일별 sens checkpointing 이 실제로 번 양.
+  - C 에서 OK 로 끝나는 가장 큰 nc 가 코일 전부 쓰면서 감당 가능한 cascade 수.
+    peak 이 ~7.0GB 를 넘으면 실학습에선 쓰지 말 것(폭 변동·단편화 여유 필요).
+  - 전부 OOM 이면 코일 압축을 되살리는 게 아니라 먼저 원인을 다시 볼 것:
+    checkpointing 이 정말 켜졌는지(--use-checkpoint), compute_sens_per_coil 이 True 인지.
+[다음] 통과한 nc 를 shell14.sh 의 --num-cascades 에 넣고 실학습.
+==========================================================

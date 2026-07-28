@@ -1,0 +1,70 @@
+==========================================================
+[START] shell4   2026-07-18 01:25:51
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell4_20260718_012551.log
+==========================================================
++ python train.py --model sdum --num-cascades 4 --channels 16 32 -b 1 -l 2.4e-4 -e 10 -r 100 --num-workers 4 --readout-crop --warmup-iters 200 --fg-loss --uc -n sdum_run13 --run-tag run13 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+[scheduler] warmup=200 → cosine, total_iters=46510, base_lr=0.00024
+Epoch # 0 ............... sdum_run13 ...............
+Epoch = [  0/ 10] Iter = [   0/4651] Loss = 0.2622 Time = 4.7914s
+Epoch = [  0/ 10] Iter = [ 100/4651] Loss = 0.08283 Time = 406.0156s
+Epoch = [  0/ 10] Iter = [ 200/4651] Loss = 0.1699 Time = 406.6021s
+Epoch = [  0/ 10] Iter = [ 300/4651] Loss = 0.1013 Time = 407.9226s
+Epoch = [  0/ 10] Iter = [ 400/4651] Loss = 0.162 Time = 406.0667s
+Epoch = [  0/ 10] Iter = [ 500/4651] Loss = 0.1069 Time = 411.3873s
+Epoch = [  0/ 10] Iter = [ 600/4651] Loss = 0.1265 Time = 405.5340s
+Epoch = [  0/ 10] Iter = [ 700/4651] Loss = 0.1309 Time = 408.4533s
+Epoch = [  0/ 10] Iter = [ 800/4651] Loss = 0.123 Time = 404.6022s
+Epoch = [  0/ 10] Iter = [ 900/4651] Loss = 0.1686 Time = 405.7705s
+Epoch = [  0/ 10] Iter = [1000/4651] Loss = 0.1731 Time = 408.5574s
+Epoch = [  0/ 10] Iter = [1100/4651] Loss = 0.1098 Time = 405.7029s
+Epoch = [  0/ 10] Iter = [1200/4651] Loss = 0.09511 Time = 405.8196s
+Epoch = [  0/ 10] Iter = [1300/4651] Loss = 0.05806 Time = 405.0887s
+Epoch = [  0/ 10] Iter = [1400/4651] Loss = 0.09282 Time = 405.9910s
+Epoch = [  0/ 10] Iter = [1500/4651] Loss = 0.06745 Time = 409.0063s
+Epoch = [  0/ 10] Iter = [1600/4651] Loss = 0.2128 Time = 408.7645s
+Epoch = [  0/ 10] Iter = [1700/4651] Loss = 0.05964 Time = 408.0145s
+Epoch = [  0/ 10] Iter = [1800/4651] Loss = 0.09323 Time = 408.8214s
+Epoch = [  0/ 10] Iter = [1900/4651] Loss = 0.0747 Time = 406.3969s
+Epoch = [  0/ 10] Iter = [2000/4651] Loss = 0.1963 Time = 405.0026s
+Epoch = [  0/ 10] Iter = [2100/4651] Loss = 0.09804 Time = 408.5933s
+Epoch = [  0/ 10] Iter = [2200/4651] Loss = 0.1218 Time = 409.2697s
+Epoch = [  0/ 10] Iter = [2300/4651] Loss = 0.07623 Time = 408.9304s
+Epoch = [  0/ 10] Iter = [2400/4651] Loss = 0.1239 Time = 408.2761s
+Epoch = [  0/ 10] Iter = [2500/4651] Loss = 0.07154 Time = 405.6283s
+Epoch = [  0/ 10] Iter = [2600/4651] Loss = 0.1968 Time = 406.9425s
+Epoch = [  0/ 10] Iter = [2700/4651] Loss = 0.05308 Time = 406.2499s
+Epoch = [  0/ 10] Iter = [2800/4651] Loss = 0.07835 Time = 408.4510s
+Epoch = [  0/ 10] Iter = [2900/4651] Loss = 0.07975 Time = 407.1958s
+Epoch = [  0/ 10] Iter = [3000/4651] Loss = 0.1409 Time = 407.9271s
+Epoch = [  0/ 10] Iter = [3100/4651] Loss = 0.1103 Time = 408.8358s
+Epoch = [  0/ 10] Iter = [3200/4651] Loss = 0.0932 Time = 409.3726s
+Epoch = [  0/ 10] Iter = [3300/4651] Loss = 0.1006 Time = 409.0862s
+Epoch = [  0/ 10] Iter = [3400/4651] Loss = 0.1124 Time = 406.4481s
+Epoch = [  0/ 10] Iter = [3500/4651] Loss = 0.09809 Time = 405.6247s
+Epoch = [  0/ 10] Iter = [3600/4651] Loss = 0.1025 Time = 407.0812s
+Epoch = [  0/ 10] Iter = [3700/4651] Loss = 0.07345 Time = 406.5341s
+Epoch = [  0/ 10] Iter = [3800/4651] Loss = 0.05823 Time = 408.1855s
+Epoch = [  0/ 10] Iter = [3900/4651] Loss = 0.1216 Time = 408.7174s
+Epoch = [  0/ 10] Iter = [4000/4651] Loss = 0.1271 Time = 405.3855s
+Epoch = [  0/ 10] Iter = [4100/4651] Loss = 0.1951 Time = 406.8861s
+Epoch = [  0/ 10] Iter = [4200/4651] Loss = 0.14 Time = 407.2946s
+Epoch = [  0/ 10] Iter = [4300/4651] Loss = 0.1463 Time = 407.3785s
+Epoch = [  0/ 10] Iter = [4400/4651] Loss = 0.1852 Time = 406.7919s
+Epoch = [  0/ 10] Iter = [4500/4651] Loss = 0.09815 Time = 409.8204s
+Epoch = [  0/ 10] Iter = [4600/4651] Loss = 0.06479 Time = 407.8544s
+loss file saved! ../result/sdum_run13/val_loss_log_run13
+Epoch = [   0/  10] TrainLoss = 0.1244 ValLoss = 0.1084 TrainTime = 18947.5370s ValTime = 740.6472s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.3980s
+Epoch # 1 ............... sdum_run13 ...............
+Epoch = [  1/ 10] Iter = [   0/4651] Loss = 0.1402 Time = 4.4664s
+Terminated
+==========================================================
+[DONE ] shell4   2026-07-18 06:54:30   exit=143
+==========================================================

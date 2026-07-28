@@ -1,0 +1,42 @@
+==========================================================
+[START] shell22 (fold 2 / 5)   2026-07-26 09:30:46   SMOKE=1  NET=promptmr_kfold_f2_aug_smoke
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell22_f2_20260726_093046.log
+[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=5 · fold=2 · seed=430 · 1 epoch
+[AUG  ] schedule=constant delay=0 max-prob=0.55 exp-decay=5.0 mask-thin-max=4 orig-mask-prob=0.5
+==========================================================
+[GPU  ] used=2MiB
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -e 1 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --max-iters 120 --aug-on --aug-schedule constant --aug-max-prob 0.55 --aug-delay 0 --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 -n promptmr_kfold_f2_aug_smoke --run-tag pmr_kf_f2_aug_smoke -t /workspace/Data/train/ -v /workspace/Data/val/
+Current cuda device:  0
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 107, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 363, in train
+    train_loader, val_loader = create_kfold_data_loaders(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 322, in create_kfold_data_loaders
+    train_ids, val_ids = kfold_split(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/data/load_data.py", line 310, in kfold_split
+    raise ValueError(f"K-Fold: 데이터 경로({roots})에서 h5 파일을 찾지 못했습니다"
+ValueError: K-Fold: 데이터 경로([PosixPath('/workspace/Data/train'), PosixPath('/workspace/Data/val')])에서 h5 파일을 찾지 못했습니다.
+[TRAIN] promptmr_kfold_f2_aug_smoke (fold 2) 종료   exit=1
+==========================================================
+[SMOKE] 확인할 것 (fold 2, 증강 ON arm):
+        (0) ⚠️ 가장 중요 — 로그에 '[aug] epoch=0 p=0.5500' (또는 p>0인 값)이 찍혔는가.
+            p=0.0000 이면 STOP — 본 학습(21시간)을 시작하지 말 것. 증강이 조용히
+            0회 수행되고 있다는 뜻이고, 그 상태로 21시간을 태우면 아무것도 검증하지 못한다.
+        (1) OOM 없이 exit 0 인가
+        (2) iter 0 대비 Loss 가 내려가는가
+        (3) 'Loss = ... Time = ...' per-iter 시간을 baseline(promptmr_kfold_f2) 로그와
+            비교할 것. 증강은 샘플당 FFT 2회를 dataloader에 추가한다 — --num-workers 4에서
+            CPU 병목이면 21시간이 더 늘어난다. 증가폭이 크면 --num-workers 상향 후 재측정.
+        (0)이 실패하면 본 학습을 시작하지 말 것. 통과하면:
+        AUG_DELAY=<baseline에서 구한 값> bash shell_scripting/shell22.sh  로 본 학습.
+==========================================================
+==========================================================
+[DONE ] shell22 (fold 2)   2026-07-26 09:30:49   train=1
+[저장] val loss: ../result/promptmr_kfold_f2_aug_smoke/val_loss_log_pmr_kf_f2_aug_smoke.npy
+       가중치  : ../result/promptmr_kfold_f2_aug_smoke/checkpoints/best_model.pt   ← 채점은 이걸 다른 환경으로 옮겨서
+[비교] OFF arm = ../result/promptmr_kfold_f2/val_loss_log_pmr_kf_f2.npy (재학습 안 함)
+       ⚠️ f1(promptmr_kfold_f1)은 병합 전 '이름 그룹' 분할이라 hold-out이 다르다 — f1과는
+       나란히 비교하지 말 것. f2 이후 슬롯끼리(이 ON arm 포함)만 비교 가능.
+==========================================================

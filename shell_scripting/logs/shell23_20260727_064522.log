@@ -1,0 +1,58 @@
+==========================================================
+[START] shell23   2026-07-27 06:45:22
+[CWD  ] /root/FastMRI_SNU_2026_GMG   [LOG] shell_scripting/logs/shell23_20260727_064522.log
+[대상 ] promptmr_kfold_f2 promptmr_moe   [입력] /workspace/Data/train/kspace/knee_acc4_46.h5
+==========================================================
+[GPU  ] used=2MiB
+[GPU  ] NVIDIA RTX 4000 Ada Generation, 20475 MiB
+
+---------- promptmr_kfold_f2  checkpoint=off ----------
+[probe] net=promptmr_kfold_f2  use_checkpoint=False
+[probe] 입력 knee_acc4_46.h5  shape=(38, 15, 640, 480)  (W=480)
+[probe] 단일 모델 · param 72.9M · 로드 직후 279 MB (checkpoint 플래그 1곳에 적용)
+[RESULT] ✅ 3 slice 복원 성공
+[RESULT] peak allocated = 0.68 GB / reserved = 0.89 GB (가중치 0.27 GB 포함)
+           4GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           6GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           8GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+[exit ] 0
+
+---------- promptmr_kfold_f2  checkpoint=on ----------
+[probe] net=promptmr_kfold_f2  use_checkpoint=True
+[probe] 입력 knee_acc4_46.h5  shape=(38, 15, 640, 480)  (W=480)
+[probe] 단일 모델 · param 72.9M · 로드 직후 279 MB (checkpoint 플래그 1곳에 적용)
+[RESULT] ✅ 3 slice 복원 성공
+[RESULT] peak allocated = 0.68 GB / reserved = 0.89 GB (가중치 0.27 GB 포함)
+           4GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           6GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           8GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+[exit ] 0
+
+---------- promptmr_moe  checkpoint=off ----------
+[probe] net=promptmr_moe  use_checkpoint=False
+[probe] 입력 knee_acc4_46.h5  shape=(38, 15, 640, 480)  (W=480)
+[probe] MoE(전문가 2개) · param 145.8M · 로드 직후 557 MB (checkpoint 플래그 3곳에 적용)
+[RESULT] ✅ 3 slice 복원 성공
+[RESULT] peak allocated = 0.95 GB / reserved = 1.13 GB (가중치 0.54 GB 포함)
+           4GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           6GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           8GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+[exit ] 0
+
+---------- promptmr_moe  checkpoint=on ----------
+[probe] net=promptmr_moe  use_checkpoint=True
+[probe] 입력 knee_acc4_46.h5  shape=(38, 15, 640, 480)  (W=480)
+[probe] MoE(전문가 2개) · param 145.8M · 로드 직후 557 MB (checkpoint 플래그 3곳에 적용)
+[RESULT] ✅ 3 slice 복원 성공
+[RESULT] peak allocated = 0.95 GB / reserved = 1.13 GB (가중치 0.54 GB 포함)
+           4GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           6GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+           8GB GPU: 들어감  (reserved 기준, 여유 8% 가정)
+[exit ] 0
+
+==========================================================
+[DONE ] shell23   2026-07-27 06:46:00
+[읽는 법] 각 조합의 'peak reserved' 가 목표 GPU VRAM 보다 작으면 그 조합으로 채점 가능.
+          4GB 에서 안 되면: checkpoint on → 그래도 안 되면 단일 모델 → 그래도 안 되면
+          CUDA_VISIBLE_DEVICES="" 로 CPU 채점(느리지만 VRAM 무관, recon_eval 수정 불필요).
+==========================================================

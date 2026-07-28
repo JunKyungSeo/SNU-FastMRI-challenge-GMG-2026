@@ -91,11 +91,18 @@ fi
 # --- cv2 보장 (--fg-loss 의 foreground mask가 cv2 import) ---
 python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
-# --- 가드: 기존 학습 결과를 말없이 덮어쓰지 않는다 (baseline도 21시간짜리다) ---
-if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; then
-    echo "[STOP] ../result/$NET/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 결과가 사라진다."
-    echo "       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 FORCE=1 로 실행할 것."
-    exit 2
+# --- 재개/덮어쓰기 판단: 체크포인트 있으면 이어학습(--resume 자동), FORCE=1 은 처음부터 덮어쓰기 ---
+#   ⚠️ train.py 에 --resume 을 항상 박으면 첫 실행이 FileNotFoundError 로 죽는다(load_resume_checkpoint).
+#      그래서 체크포인트 유무로 RESUME 을 정한다(shell24 와 동일 방침). 예전엔 여기 guard 가
+#      model.pt 있으면 무조건 STOP 이라, --resume 을 넣어도 재개가 막혀 있었다.
+RESUME=""
+if [ -e "../result/$NET/checkpoints/model.pt" ] || [ -e "../result/$NET/checkpoints/latest.pt" ]; then
+    if [ "${FORCE:-0}" = "1" ]; then
+        echo "[WARN] FORCE=1 — 기존 체크포인트를 무시하고 처음부터 학습한다(이전 결과 덮어씀)."
+    else
+        RESUME="--resume"
+        echo "[RESUME] ../result/$NET/checkpoints/ 체크포인트 발견 → --resume 으로 이어학습한다."
+    fi
 fi
 
 # ==========================================================
@@ -108,7 +115,7 @@ set -x
 python train.py --model promptmr --readout-crop \
     --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 \
     -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 6 --use-checkpoint \
-    --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --resume \
+    --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 $RESUME \
     --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
     --aug-on --aug-schedule "$AUG_SCHEDULE" --aug-max-prob 0.5 --aug-delay "$AUG_DELAY" \
     -n "$NET" --run-tag "$TAG" \

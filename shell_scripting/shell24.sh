@@ -56,11 +56,13 @@ cd "$SCRIPT_DIR/.." || exit 1
 # ===== [고정 인자] 런마다 안 바뀌는 것 — 여기 바꾸면 이후 모든 런의 baseline이 바뀐다 =====
 #   ⚠️ 세 단계가 **완전히 같은 아키텍처**여야 한다. --init-from 이 가중치를 로드하고
 #      merge_moe.py 가 두 전문가의 config 일치를 강제하므로(MUST_MATCH), 여기서 갈리면 병합이 거부된다.
+# 데이터 루트 — 서버마다 다르다(vessl=/root/Data, runpod=/workspace/Data). 기본은 이 서버(vessl).
+DATA_ROOT="${DATA_ROOT:-/root/Data}"
 BASE_ARGS=( --model promptmr --readout-crop
     --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3
     -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2
-    -t /workspace/Data/train/ -v /workspace/Data/val/ )
+    -t "$DATA_ROOT/train/" -v "$DATA_ROOT/val/" )
 
 # ===== [이번 run] 여기만 채운다 =====
 FOLD="${FOLD:-2}"

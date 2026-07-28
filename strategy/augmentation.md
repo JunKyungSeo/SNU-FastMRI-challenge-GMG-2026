@@ -21,18 +21,73 @@
 
 ---
 
+## §0 결정 (2026-07-28) — 증강은 좌우 flip 하나만 남긴다
+
+**mask augmentation(ACS 보존 thinning) · k-space 랜덤 위상 · 측정 노이즈를 코드에서 제거했다.** 아래 TL;DR·Tier 표의 해당 항목은 이 절이 대체한다(판단 근거로 문서에는 남긴다).
+
+### 왜 뺐나 — 대회 입력이 acc4/acc8 두 가지로 고정이다
+
+로컬 샘플(`utils/data/kspace_knee_acc{4,8}_1.h5`)의 실제 마스크를 재보면, 두 가속률의 차이는 ACS가 아니라 **주변부 comb 간격뿐**이다.
+
+| | 폭 W | 샘플 라인 | ACS | 주변부 간격 | R_eff |
+|---|---|---|---|---|---|
+| acc4 | 368 | 114 | 29줄(7.9%) | 4 | 3.23 |
+| acc8 | 372 | 74 | 31줄(8.3%) | 8 | 5.03 |
+
+여기에 thinning을 걸면 이렇게 된다. zero-filled SSIM은 중앙 5슬라이스 평균(`data_range=attrs['max']`)이고, 원본 마스크로 만든 재현값이 주최측 `image_input`과 소수 4자리까지 일치해 계산 자체는 검증됐다.
+
+| 원본 | thin | 라인 | R_eff | 간격 | zero-filled SSIM | Δ |
+|---|---|---|---|---|---|---|
+| acc4 (0.8174) | 2 | 71 | 5.18 | 8 | 0.7656 | −0.052 |
+| | 3 | 57 | 6.46 | 12 | 0.7414 | −0.076 |
+| | 4 | 50 | 7.36 | 16 | 0.7308 | −0.087 |
+| acc8 (0.9312) | 2 | 52 | 7.15 | 16 | 0.9156 | −0.016 |
+| | 3 | 45 | 8.27 | 24 | 0.9091 | −0.022 |
+| | 4 | 42 | 8.86 | 32 | 0.9058 | −0.025 |
+
+1. **`acc4 thin=2`만 분포 안쪽이다.** 71줄·간격 8·ACS 29 → acc8(74줄·간격 8·ACS 31)과 사실상 같은 마스크다. acc4 볼륨과 acc8 볼륨은 서로 다른 무릎이라(샘플만 봐도 슬라이스 수 23 vs 31, 폭 368 vs 372) 이건 acc8 체제에 없던 해부학을 넣어주는 진짜 증강이었다.
+2. **나머지는 채점에 없는 입력이다.** 간격 12~32는 대회에서 한 번도 안 나온다. ACS 보존 덕에 R_eff가 8.9를 안 넘지만, aliasing을 결정하는 건 총 라인 수가 아니라 간격이라 안심할 근거가 못 된다.
+3. **노출량이 애초에 작다.** shell24 스케줄(exp, D=3, T=10, p_max 0.55, `orig_mask_prob 0.5`)을 epoch에 대해 적분하면 마스크가 실제로 바뀌는 샘플은 **전체 스텝의 10.5%**이고 thin=2/3/4가 각 3.5%다(`thin=1`이 1/4 확률로 원본을 그대로 돌려주므로 `probs()`가 찍던 값보다 작다). 즉 1번의 이득은 3.5%짜리다.
+
+### 결정타 — MoE 라우팅과 충돌한다
+
+추론 라우터는 마스크 샘플 비율 **0.25**로 acc4/acc8 전문가를 가른다(`utils/model/moe.py`, 실측 acc4 0.310 · acc8 0.199). 그런데 `acc4 thin=2`는 71/368 = **0.193** — 추론이었으면 acc8 전문가로 갔을 입력이다. `--acc 4` 미세조정에 이런 샘플이 섞이면 전문가 경계를 학습으로 흐린다. 3.5%짜리 이득을 사려고 shell24가 재려는 판정을 오염시키는 거래라 접었다.
+
+### 위상·노이즈
+
+위상은 magnitude/RSS 불변이라 SSIM 채점에 원리적으로 영향이 없고(이득 marginal), 노이즈는 검증 전 상태로 기본 off였다. 남겨둘 이유가 없어 같이 제거했다.
+
+### 남긴 것
+
+좌-우(phase-encode) flip. closed form이라 픽셀 정확하고(이미지 도메인 왕복 대비 상대오차 2.5e-07), 결과가 "반대쪽 무릎을 찍은 실제 획득"이라 물리적으로 유효하며, k-space·mask·target·bbox·GRAPPA를 함께 뒤집어 정렬이 유지된다.
+
+### ⚠️ 이건 측정이 아니다
+
+이 repo에서 증강을 켜고 돌린 런은 **아직 0회**다(`--aug-on`이 들어간 로그 없음). 위 판단은 마스크 기하·노출량·라우터 임계의 계산에 근거한 것이지 A/B 결과가 아니다. flip의 순효과는 shell22(ON arm)가 재도록 남겨뒀고, 그보다 싼 선행 탐침이 하나 있다 — **기존 체크포인트로 val을 원본/좌우반전 두 번 돌려 SSIM 차이를 보는 것**(val 1회 356초). 그 차이가 flip 증강이 회수할 수 있는 최대치다.
+
+### 코드 영향
+
+- `AugmentConfig`: `mask` · `phase` · `noise` · `weight_flip` · `weight_mask` · `mask_thin_max` · `orig_mask_prob` · `noise_sigma` · `flip` 필드 삭제 (on/off는 `on` 하나).
+- `MRIAugmentor`: `_aug_mask` 삭제, `probs()`(3-튜플) → `prob()`(flip 확률 하나).
+- `train.py`: `--aug-mask` · `--aug-flip` · `--aug-weight-*` · `--aug-mask-thin-max` · `--aug-orig-mask-prob` 삭제. 남은 플래그는 `--aug-on/-schedule/-max-prob/-delay/-exp-decay` 5개.
+- 학습 로그: `[aug] epoch=N p_flip=0.5500` 형식.
+- 슬롯: shell22·shell24의 마스크 인자 제거(안 지우면 argparse가 죽는다).
+
+---
+
 ## TL;DR — 한눈에 (ON / OFF / 스케줄 / 우선순위)
+
+> ⚠️ 아래 TL;DR은 2026-07-03 시점 기록이다. mask/위상/노이즈 항목은 **§0(2026-07-28)에서 폐기**됐다.
 
 > **조직 기준: 모든 aug는 "SSIM_bbox(순위 결정축)를 해치지 않는가"로 먼저 거른다.** 전체 화질(SSIM_full)만 올리고 병변 bbox를 흐리거나 위조(hallucination)하면 순위가 떨어진다(3등→1등 반전이 bbox 채점에서 발생).
 
 **ON (켠다)**
 - ✅ **좌-우(phase-encode) 플립만**(마스크 동기 플립) — 픽셀 보존 → bbox 안전 + 해부학적으로도 유효(반대쪽 무릎과 동일)
   - ❌ 위-아래(readout) 플립은 **제외**(2026-07-02): 넙다리뼈↔정강이뼈가 뒤바뀌는 비현실적 무릎 형태 → Tier 3
-- ✅ Mask augmentation(추가 언더샘플, 5~16× 랜덤 + center 0.08 + equispaced/오프셋랜덤) — 우리 데이터 유일 정석 물리 aug
-- ✅ **원본(무증강) 고정마스크 입력 반드시 혼합** — test 분포=고정마스크, OOD 방지(= 실제 bbox 채점 조건 정합)
+- ~~Mask augmentation(추가 언더샘플, 5~16× 랜덤 + center 0.08 + equispaced/오프셋랜덤)~~ → **§0에서 제거(2026-07-28)**
+- ~~원본(무증강) 고정마스크 입력 혼합~~ → mask aug의 파라미터였으므로 함께 제거
 - △ **GRAPPA 영상 도메인 prior 채널 + residual**(fft 안 함, [`confirmed_model.md`](confirmed_model.md)) — 제공된 physics 기반 초기해를 영상 그대로 regularizer U-Net에 real-valued prior로 concat. 단 image size/슬라이스/스케일 정규화 필수, A/B 후 채택
-- △ k-space 랜덤 위상(**image-domain smooth phase 한정**) — magnitude/RSS 불변이라 안전하나 **이득 marginal → 저우선**
-- △ coil별 측정 노이즈(강도 보수적, 검토)
+- ~~k-space 랜덤 위상~~ · ~~coil별 측정 노이즈~~ → **§0에서 제거(2026-07-28)**
 - ❌ 정수 픽셀 translation은 **미채택**(target=384 crop vs 모델 640 crop 정렬 불가, 아래 §Tier2 참고)
 
 **OFF (끈다, Tier 3)**
@@ -45,10 +100,10 @@
 - **강도(intensity) 스케줄·막판 decay는 미구현** — 위 확률 스케줄만 구현돼 있다.
 - **모든 aug RNG는 고정 seed**(조직측 재현성 검증 대비)
 
-**실험 우선순위(먼저 켤 것)**: ① mask-aug + 좌우 flip(**최대 이득으로 예상 — 검증 전 가설**) → ② 원본마스크 혼합비 튜닝 → ③ GRAPPA FFT prior 입력 → ④ acc4/acc8 커리큘럼 → ⑤ k-space 위상 → ⑥ translation/지터 → ⑦ consistency(후순위, **학습 2× 비용**). 상세 순서·측정법은 §4.1/§4.2.
+**실험 우선순위(먼저 켤 것)**: ① ~~mask-aug +~~ 좌우 flip(**§0 이후 flip 단독. 순효과 미측정**) → ~~② 원본마스크 혼합비 튜닝~~ → ③ GRAPPA FFT prior 입력 → ④ acc4/acc8 커리큘럼 → ⑤ k-space 위상 → ⑥ translation/지터 → ⑦ consistency(후순위, **학습 2× 비용**). 상세 순서·측정법은 §4.1/§4.2.
 
 > ✅ **구현 상태(2026-07-03; 스위치 배선 2026-07-26 완료)**: 위 증강은 `utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`)와 `utils/data/load_data.py`에 **구현 완료**.
-> **스위치 배선도 완료** — `train.py`의 `--aug-*` 플래그(`--aug-on` 등 11개)와 `train_part.py`의 매 epoch `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일. 확률 스케줄은 MRAugment **공식 구현**(`mraugment/data_augment.py`)의 `schedule_p` 형태 — 논문 식(`p(t)=p_max/(1−e^{−c})·(1−e^{−tc/T})`, c=5, p_max=0.55) + 공식 repo가 얹은 delay D 정규화 — 와 같은 형태로 재구현됐다(코드 주석도 `transforms.py:181,234`에서 그렇게 적는다; delay D 자체는 논문 식엔 없다). 참고로 배선 전 기본값이던 `warmup_epochs=10`은 10-epoch 런에서 매 epoch `p=0`을 내는 값이라, 증강이 조용히 한 번도 발동하지 않는 문제가 있었다.
+> **스위치 배선도 완료** — `train.py`의 `--aug-*` 플래그(§0 이후 5개)와 `train_part.py`의 매 epoch `set_epoch` 호출까지 배선됨(상세: [`implementation.md`](implementation.md) §6). 기본값은 전부 off/no-op이라 `--aug-on` 없이 돌리면 기존 학습과 100% 동일. 확률 스케줄은 MRAugment **공식 구현**(`mraugment/data_augment.py`)의 `schedule_p` 형태 — 논문 식(`p(t)=p_max/(1−e^{−c})·(1−e^{−tc/T})`, c=5, p_max=0.55) + 공식 repo가 얹은 delay D 정규화 — 와 같은 형태로 재구현됐다(코드 주석도 `transforms.py`의 `AugmentConfig`/`prob()`에서 그렇게 적는다; delay D 자체는 논문 식엔 없다). 참고로 배선 전 기본값이던 `warmup_epochs=10`은 10-epoch 런에서 매 epoch `p=0`을 내는 값이라, 증강이 조용히 한 번도 발동하지 않는 문제가 있었다.
 > bbox는 `return_bbox=True`일 때 `DataTransform`이 `annotations`를 파싱해 flip과 동기 반환(가변 길이용 `_bbox_collate` 포함). **손실 소비부 배선 완료**(`--bbox-loss-lambda` / `train_part.py` / `loss_function.py`의 `bbox_ssim_loss`) — run12에서 λ=0.5 시도 → 퇴행으로 기본 0.0(off) 유지.
 
 ---
@@ -239,7 +294,7 @@
   lesion-aware loss / 평가 정합이 유지됨. 현재 `DataTransform`은 attrs를 안 건드리므로 여기서 같이 처리.
 - **추론시간 축은 공짜 이득**: augmentation은 학습시 CPU dataloader에서만 동작 → GTX 1080 추론시간 점수에 영향 0.
   3축 중 하나를 안 건드리고 화질만 올리는 free lunch.
-- **acc4/acc8 둘 다 채점 — 한 모델로 양쪽 강건하게**: mask-aug 배율을 acc4~acc8 구간(그 밖 5~16×까지) 랜덤화해 두 가속률을 하나의 모델이 커버(가속률 조건부 입력이 없다면).
+- ~~**acc4/acc8 둘 다 채점 — 한 모델로 양쪽 강건하게**~~ (§0에서 폐기): mask-aug 배율을 acc4~acc8 구간(그 밖 5~16×까지) 랜덤화해 두 가속률을 하나의 모델이 커버(가속률 조건부 입력이 없다면).
   - ⚠️ **acc8은 언더샘플이 심해 저대비 bbox 병변이 더 쉽게 소실** → acc8의 SSIM_bbox를 별도 감시(acc4에서 안전한 강도가 acc8에선 병변을 지울 수 있음).
   - 파일이 acc4/acc8로 분리 제공되므로 **배치에 두 가속률을 균형 있게 섞어** 한쪽 편향 방지. A/B 리포트는 항상 acc4·acc8 분리(§4.2).
   - 커리큘럼(단일배율 pretrain → 혼합 fine-tune, §2 Mask aug의 UnifiedCS)도 acc4/acc8 양립 수단 중 하나.
@@ -278,7 +333,7 @@
 
 ### 4.1 실험 우선순위 (먼저 켤 것)
 
-1. **mask-aug + 좌우 flip** — 수상팀 공통·물리 유효·bbox 안전·해부학적 유효라 **최대 이득으로 예상(검증 전 가설)**. 이후 실험의 baseline.
+1. **좌우 flip**(§0 이후 mask-aug 제외) — 물리 유효·bbox 안전·해부학적 유효. 순효과는 여전히 미측정이고, 이후 실험의 baseline.
 2. **원본(고정)마스크 혼합비** 튜닝(예: 50/50 → 70/30) — test 분포 정합·OOD 방지, bbox 채점에 직결.
 3. **GRAPPA 영상 prior 채널 + residual**(fft 안 함): 크기/슬라이스/스케일 정규화를 고정한 뒤 영상 prior로 A/B. data consistency에는 직접 섞지 않음.
 4. **acc4/acc8 커리큘럼**: 단일배율 pretrain → 혼합 fine-tune(UnifiedCS) A/B.

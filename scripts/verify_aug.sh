@@ -5,8 +5,8 @@
 #   목적: 로컬(torch 없음)에서 작성한 증강 배선이 서버에서 실제로 동작하는지 한 번에 확인.
 #   실행: bash scripts/verify_aug.sh          # repo 어디서 실행해도 됨
 #
-#   검사 3종:
-#     [1] 단위 테스트 — flip 정확성·ACS 보존·bbox 동기·결정성·스케줄·가중치·배선 불변식
+#   검사 3종 (증강은 좌우 flip 하나뿐 — mask/위상/노이즈는 2026-07-28 제거):
+#     [1] 단위 테스트 — flip 정확성·ACS 보존·bbox 동기·결정성·스케줄·배선 불변식
 #     [2] CLI 도달성  — train.py의 --aug-* 인자가 AugmentConfig까지 전달되는지
 #     [3] off 동등성  — --aug-on 없이 만든 DataTransform이 기존과 같은 6-튜플인지
 #
@@ -31,7 +31,7 @@ echo
 echo "=== [2/3] CLI 인자가 AugmentConfig까지 도달하는지 ==="
 python - <<'PY'
 import sys
-sys.argv = ["train.py", "--aug-on", "--aug-delay", "2", "--no-aug-flip", "-e", "10"]
+sys.argv = ["train.py", "--aug-on", "--aug-delay", "2", "-e", "10"]
 from train import parse
 from utils.data.transforms import AugmentConfig, MRIAugmentor
 
@@ -39,17 +39,19 @@ a = parse()
 cfg = AugmentConfig(
     on=a.aug_on, schedule=a.aug_schedule, delay=a.aug_delay,
     total_epochs=a.num_epochs, exp_decay=a.aug_exp_decay,
-    max_prob=a.aug_max_prob, flip=a.aug_flip, mask=a.aug_mask,
-    weight_flip=a.aug_weight_flip, weight_mask=a.aug_weight_mask,
-    orig_mask_prob=a.aug_orig_mask_prob,
+    max_prob=a.aug_max_prob,
 )
 m = MRIAugmentor(cfg)
 m.set_epoch(9)
-p, p_flip, p_mask = m.probs()
-print(f"  flip={cfg.flip} (기대 False) | p={p:.4f} p_flip={p_flip:.4f} p_mask={p_mask:.4f}")
-assert cfg.flip is False, "--no-aug-flip이 반영되지 않았다"
+p = m.prob()
+print(f"  on={cfg.on} delay={cfg.delay} | p_flip={p:.4f}")
+assert cfg.on is True, "--aug-on이 반영되지 않았다"
+assert cfg.delay == 2, f"--aug-delay가 전달되지 않았다: {cfg.delay}"
 assert p > 0.5, f"10ep 런의 마지막 epoch인데 p가 너무 낮다: {p}"
-assert p_flip == 0.0, f"flip이 꺼졌는데 p_flip이 0이 아니다: {p_flip}"
+
+off = MRIAugmentor(AugmentConfig(on=False, schedule="constant", max_prob=1.0))
+off.set_epoch(9)
+assert off.prob() == 0.0, "--aug-on 없이도 증강이 걸린다"
 print("  OK")
 PY
 if [ $? -ne 0 ]; then echo "[FAIL] CLI 도달성"; FAILED=1; else echo "[ok] CLI 도달성"; fi

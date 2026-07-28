@@ -61,11 +61,11 @@
 ### 6. ✅ 증강 스케줄 배선 (mask/flip 로직은 이미 구현됨)
 > 증강 몸통은 `transforms.py`(`MRIAugmentor`)에 있음. epoch 스케줄도 배선 완료.
 
-- **6a. ✅ [`train.py`](../train.py) `parse()`**: `--aug-*` 인자 신설(`--aug-on`, `--aug-schedule`, `--aug-max-prob`, `--aug-delay`, `--aug-exp-decay`, `--aug-flip`/`--no-aug-flip`, `--aug-mask`/`--no-aug-mask`, `--aug-weight-flip`, `--aug-weight-mask`, `--aug-mask-thin-max`, `--aug-orig-mask-prob`). 기본 전부 off/no-op(기존 동작 보존). `args`로 `create_data_loaders`→`DataTransform` 전달.
+- **6a. ✅ [`train.py`](../train.py) `parse()`**: `--aug-*` 인자 신설(`--aug-on`, `--aug-schedule`, `--aug-max-prob`, `--aug-delay`, `--aug-exp-decay`) — **2026-07-28에 mask/flip선택/가중치 인자 6개 삭제**, 증강이 좌우 flip 하나로 정리됐다(augmentation.md §0). 기본 전부 off/no-op(기존 동작 보존). `args`로 `create_data_loaders`→`DataTransform` 전달.
 - **6b. ✅ [`train_part.py`](../utils/learning/train_part.py) `train()`**: 매 epoch `train_loader.dataset.transform.set_epoch(epoch)` 호출. **val_loader는 증강 off 보장**(검증=진짜 실력).
 - 근거: 상세 맥락은 이 파일 하단 "증강 스케줄 배선 상세" 참조.
 
-> ✅ **구현 완료 (2026-07-26)**: `train.py` `parse()`(`--aug-*` 11개 플래그) · `utils/data/load_data.py`의 `AugmentConfig(...)` 전달 · `utils/data/transforms.py`의 `_prob`/`probs`(MRAugment `schedule_p` 형태로 재구현) · `utils/learning/train_part.py`의 epoch 루프(매 epoch `set_epoch` 호출 + `[aug]` 로그 + `--aug-on`인데 미배선이면 `RuntimeError`) 모두 배선 완료. 테스트: `scripts/tests/test_augment.py`(16개). 서버 검증: `scripts/verify_aug.sh`(전항목 통과).
+> ✅ **구현 완료 (2026-07-26)**: `train.py` `parse()`(`--aug-*` 5개 플래그) · `utils/data/load_data.py`의 `AugmentConfig(...)` 전달 · `utils/data/transforms.py`의 `prob()`(MRAugment `schedule_p` 형태로 재구현) · `utils/learning/train_part.py`의 epoch 루프(매 epoch `set_epoch` 호출 + `[aug]` 로그 + `--aug-on`인데 미배선이면 `RuntimeError`) 모두 배선 완료. 테스트: `scripts/tests/test_augment.py`(14개). 서버 검증: `scripts/verify_aug.sh`(전항목 통과).
 
 ### 7. ✅ bbox 손실 소비부 (배선 완료 · run12 롤백)
 - `DataTransform`은 `return_bbox=True`로 bbox 파싱·flip 동기까지 됨(`_bbox_collate` 포함). **손실 소비부 배선 완료**: `train.py:48 --bbox-loss-lambda` · `train_part.py:29,69,90` · `loss_function.py:74 bbox_ssim_loss`. run12에서 λ=0.5로 실학습 → 퇴행 확인 후 기본값 0.0(off)으로 롤백([`training_anal/2026-07-18-run12-bbox-uc-analysis.md`](../training_anal/2026-07-18-run12-bbox-uc-analysis.md)).

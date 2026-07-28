@@ -24,7 +24,9 @@
 #     3 epoch 내내 소수 4째 자리만 흔들려(0.07694→0.07690→0.07694) 미세조정을 했다고
 #     말할 수 없는 상태였다. lr 이 낮았던 건지 이미 수렴인지 가르려고 lr 을 올렸다.
 #
-#   [증강] 기본 ON (AUG=0 으로 끔). MRAugment 좌우 flip + ACS 보존 mask thinning.
+#   [증강] 기본 ON (AUG=0 으로 끔). 좌우 flip 하나뿐이다 — mask thinning 은 2026-07-28 코드에서
+#     제거됐다(대회 입력이 acc4/acc8 고정이라 없는 가속률을 학습하고, MoE 라우터 기준으로는
+#     acc4 샘플이 acc8 쪽 입력으로 바뀌어 이 슬롯의 전문가 분리 판정까지 흐렸다).
 #     ⚠️ 증강 이득은 아직 A/B 로 확인된 적이 없다. 그래도 켜는 건 남은 시간에 "MoE + 증강"을
 #        한꺼번에 노리는 선택이고, 대신 **결과가 나빠도 둘 중 뭐 때문인지 이 런만으론 못 가린다.**
 #        증강을 격리하려면 AUG=0 으로 pretrain 을 한 번 더 돌려 ①끼리 비교해야 한다.
@@ -71,7 +73,7 @@ SMOKE="${SMOKE:-0}"
 PRE_EPOCHS=10        # 공유 사전학습
 FT_EPOCHS=5          # 미세조정 (lr 은 BASE_ARGS 의 2e-4 를 그대로 물려받는다)
 
-# --- 증강(MRAugment): 기본 ON. AUG=0 으로 끌 수 있다 ---
+# --- 증강(좌우 flip): 기본 ON. AUG=0 으로 끌 수 있다 ---
 #   ⚠️ 증강 이득은 아직 A/B 로 확인 안 됐다(shell22 는 OFF arm 이 구파티션이라 무효). 그래도 켜는 건
 #      "MoE 이득 + 증강 이득"을 한 번에 노리는 선택이다 — 시간이 없어 변수 분리를 포기한 것이니,
 #      결과가 나쁘면 둘 중 뭐 때문인지 이 런만으로는 못 가린다는 걸 알고 읽을 것.
@@ -80,8 +82,7 @@ FT_EPOCHS=5          # 미세조정 (lr 은 BASE_ARGS 의 2e-4 를 그대로 물
 AUG="${AUG:-1}"
 AUG_DELAY_PRE="${AUG_DELAY_PRE:-3}"    # T=10 → 3 (30%)
 AUG_DELAY_FT="${AUG_DELAY_FT:-1}"      # T=5  → 1 (20%)
-AUG_COMMON=( --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0
-             --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 )
+AUG_COMMON=( --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0 )
 
 LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
@@ -260,8 +261,8 @@ echo "=========================================================="
 echo "[DONE ] $SLOT (fold $FOLD)  STAGE=$STAGE  $(date '+%F %T')  exit=$STATUS"
 if [ "$SMOKE" = "1" ]; then
     echo "[SMOKE] 확인할 것:"
-    echo "        (0) ⚠️ 증강이 실제로 걸렸는가 — 로그에 '[aug] epoch=0 p=0.5500' 처럼 p>0 이 찍혀야 한다."
-    echo "            (AUG=1 인데 p=0.0000 이거나 [aug] 줄 자체가 없으면 배선이 안 된 것이다.)"
+    echo "        (0) ⚠️ 증강이 실제로 걸렸는가 — 로그에 '[aug] epoch=0 p_flip=0.5500' 처럼 p_flip>0 이 찍혀야 한다."
+    echo "            (AUG=1 인데 p_flip=0.0000 이거나 [aug] 줄 자체가 없으면 배선이 안 된 것이다.)"
     echo "        (1) 세 단계 다 OOM 없이 exit 0 인가"
     echo "        (2) [K-Fold] 로그의 val 구성이 **세 단계에서 일관적인가** — 이게 층화의 서명이다."
     echo "            ① --acc all 의 val (acc4 A · acc8 B) 에 대해 ② 는 acc4 A, ③ 은 acc8 B 여야 한다."

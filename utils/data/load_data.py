@@ -186,7 +186,8 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         is_train = bool(shuffle) and (not isforward)
 
     # ------------------------------------------------------------------
-    # augmentation 설정 — train.py args에서 읽음(없으면 getattr 기본값 = 전부 off).
+    # augmentation 설정 — train.py args에서 읽음(없으면 getattr 기본값 = off).
+    # 남은 증강은 좌우 flip 하나뿐이다(mask thinning·위상·노이즈는 2026-07-28 제거).
     # --aug-on 기본값이 off라, 안 넘기면 기존 학습과 100% 동일하게 동작한다.
     # (인자 정의는 train.py, 매 epoch set_epoch 배선은 train_part.py — 둘 다 완료.)
     # ------------------------------------------------------------------
@@ -198,15 +199,6 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         total_epochs=int(getattr(args, "num_epochs", 1)),   # T = 런 길이 → 스케줄이 자동 스케일
         exp_decay=getattr(args, "aug_exp_decay", 5.0),
         max_prob=getattr(args, "aug_max_prob", 0.55),
-        flip=getattr(args, "aug_flip", True),
-        mask=getattr(args, "aug_mask", True),
-        weight_flip=getattr(args, "aug_weight_flip", 1.0),
-        weight_mask=getattr(args, "aug_weight_mask", 1.0),
-        phase=getattr(args, "aug_phase", False),
-        noise=getattr(args, "aug_noise", False),
-        mask_thin_max=getattr(args, "aug_mask_thin_max", 4),
-        orig_mask_prob=getattr(args, "aug_orig_mask_prob", 0.5),
-        noise_sigma=getattr(args, "aug_noise_sigma", 0.0),
         seed=getattr(args, "seed", 430),
     )
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None

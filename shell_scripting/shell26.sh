@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # ============================================================
-# GPU 작업 큐 슬롯 — shell24(MoE) 결과 채점: recon_eval                     [shell26.sh]
+# GPU 작업 큐 슬롯 — shell25(MoE) 결과 채점: recon_eval                     [shell26.sh]
 #
-# 목적: shell24 가 만든 promptmr_moe_f<FOLD>(MoE 병합본)와 promptmr_moe_f<FOLD>_shared
-#   (공유 사전학습 = 단일 모델 baseline)를 leaderboard 로 채점한다. shell24 헤더대로
+# 목적: shell25 가 만든 promptmr_moe_f<FOLD>(MoE 병합본)와 promptmr_moe_f<FOLD>_shared
+#   (공유 사전학습 = 단일 모델 baseline)를 leaderboard 로 채점한다. shell25 헤더대로
 #   **판정의 정본은 채점**이다 — val 은 세 단계 구성이 달라 직접 비교가 안 되므로,
 #   MoE 와 단일 baseline 을 각각 채점해 SSIM_full·SSIM_bbox·시간 3축으로 비교한다.
-#   (체크포인트가 없는 net 은 건너뛴다 — shell24 미완이면 둘 다 SKIP 된다.)
+#   (체크포인트가 없는 net 은 건너뛴다 — shell25 미완이면 둘 다 SKIP 된다.)
 #
-#   ⚠️ 선행: shell24(STAGE=all 또는 merge)가 끝나 promptmr_moe_f<FOLD>/checkpoints/best_model.pt
+#   ⚠️ 선행: shell25(STAGE=all 또는 merge)가 끝나 promptmr_moe_f<FOLD>/checkpoints/best_model.pt
 #      가 생긴 뒤에 돌린다. 없으면 SKIP 만 하고 끝난다.
 #   ⚠️ 실행 순서: GPU 가 빈 뒤에 돌린다(아래 GPU 가드가 사용 중이면 멈춘다).
 #   ※ recon_eval 은 acc4·acc8 을 다 재구성한 뒤 점수를 한 번에 출력한다(중간이 조용한 건 정상).
@@ -31,9 +31,9 @@ LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
 # ===== [이번 run] 여기만 채운다 =====
 FOLD="${FOLD:-2}"
-# shell24 가 AUG=1(기본)이면 net 이름에 _aug 를 붙인다 — 채점 대상도 같은 규칙으로 맞춘다.
+# shell25 가 AUG=1(기본)이면 net 이름에 _aug 를 붙인다 — 채점 대상도 같은 규칙으로 맞춘다.
 AUG="${AUG:-1}"; ASUF=""; [ "$AUG" = "1" ] && ASUF="_aug"
-# MoE 먼저, 단일 baseline 다음 — 둘 다 채점해야 MoE 가 이득인지 판정된다(shell24 ⑤ 와 동일).
+# MoE 먼저, 단일 baseline 다음 — 둘 다 채점해야 MoE 가 이득인지 판정된다(shell25 ⑤ 와 동일).
 NETS="${NETS:-promptmr_moe_f${FOLD}${ASUF} promptmr_moe_f${FOLD}_shared${ASUF}}"
 
 # --- 로그 ---
@@ -76,7 +76,7 @@ for NET in $NETS; do
     echo ""
     echo "---------- $NET ----------"
     if [ ! -f "../result/$NET/checkpoints/best_model.pt" ]; then
-        echo "[SKIP ] $NET — ../result/$NET/checkpoints/best_model.pt 없음 (shell24 미완이거나 이 서버에 없음)"
+        echo "[SKIP ] $NET — ../result/$NET/checkpoints/best_model.pt 없음 (shell25 미완이거나 이 서버에 없음)"
         continue
     fi
     OUT="$OUT_DIR/recon_eval_${NET}_${TS}.txt"
@@ -95,4 +95,28 @@ echo "[공유] git add $OUT_DIR/recon_eval_*_${TS}.txt 커밋·푸시하면 전 
 echo "[비교] MoE(promptmr_moe_f${FOLD}) vs 단일(promptmr_moe_f${FOLD}_shared) 를 full·bbox·시간 3축으로."
 echo "       MoE 는 모델 2개라 디스크·로딩이 크다 — SSIM 이득이 시간/크기 손해를 넘는지까지 봐야 순위 판단이 된다."
 echo "=========================================================="
+
+# ==========================================================
+#  ↓↓↓  이메일 알림 (notify.sh 재사용) — shell25 종료 + 채점 결과  ↓↓↓
+#     이번 run 의 점수 사본(results/recon_eval_*_$TS.txt)에서 SSIM 요약만 뽑아 본문에 넣는다:
+#     Leaderboard SSIM_full·SSIM_bbox + acc4/acc8 각각의 SSIM_full·SSIM_bbox.
+# ==========================================================
+NOTIFY="$SCRIPT_DIR/notify.sh"
+MAIL_BODY="shell25 종료 — recon_eval 채점 결과"$'\n'"서버 $(date '+%F %T') · 한국 $(date -u -d '+9 hours' '+%F %T') KST · host $(hostname) · fold $FOLD"
+FOUND=0
+shopt -s nullglob
+for f in "$OUT_DIR"/recon_eval_*_"${TS}".txt; do
+    [ -s "$f" ] || continue                       # 빈 파일(SKIP·중단)은 건너뜀
+    net=$(basename "$f" .txt); net=${net#recon_eval_}; net=${net%_"$TS"}
+    MAIL_BODY+=$'\n\n'"■ $net"$'\n'"$(grep -E 'SSIM_(full|bbox)' "$f")"
+    FOUND=1
+done
+shopt -u nullglob
+[ "$FOUND" = 0 ] && MAIL_BODY+=$'\n\n'"(채점된 net 없음 — 체크포인트 미존재로 전부 SKIP)"
+if [ -f "$NOTIFY" ]; then
+    bash "$NOTIFY" "shell25 채점 완료 (fold $FOLD)" "$MAIL_BODY" || echo "[NOTIFY] 메일 발송 실패 — 무시하고 종료(exit=$STATUS)"
+else
+    echo "[NOTIFY] $NOTIFY 없음 — 이메일 생략"
+fi
+
 exit "$STATUS"

@@ -1,0 +1,24 @@
+==========================================================
+[START] shell1   2026-07-15 17:21:12
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell1_20260715_172112.log
+==========================================================
++ python recon_eval.py -n sdum_run11 -p /root/Data/leaderboard
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+Leaderboard SSIM_full : 0.9161
+Leaderboard SSIM_bbox : 0.9095
+Leaderboard Recon Time : 3351.17s (1514.3 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9390   SSIM_full (acc8): 0.8933
+SSIM_bbox (acc4): 0.9361   SSIM_bbox (acc8): 0.8828
+Recon Time (acc4): 1740.78s (1527.0 ms/slice)   (acc8): 1610.39s (1500.8 ms/slice)
+Recon Time (total): 3351.17s
+[WARNING] 1 volume(s) exceeded 60s of forward time (acc4: 1, acc8: 0) - reconstruction is too slow, consider optimizing.
+==========================================================
+[DONE ] shell1   2026-07-15 18:29:00   exit=0
+[다음] 위 run11 3축을 run10(full 0.9118/bbox 0.9021)과 비교 →
+       shell3(run12) 의 BASELINE= 을 run10/run11 로 채운 뒤 → shell2(smoke) → shell3(run12).
+==========================================================

@@ -1,0 +1,42 @@
+==========================================================
+[START] shell17   2026-07-23 11:17:56   SMOKE=0  NET=promptmr_run4
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell17_20260723_111756.log
+[CONF ] full coil(압축 없음) · nc10 · nf48 · sens24 · lr 2e-4 상수 · 10 epoch
+==========================================================
+[GPU ] used=2MiB
+[WARN] SMOKE 산출물(../result/promptmr_run4_smoke)이 없다.
+       full coil·nc10 의 최악폭 VRAM peak는 아직 실측된 적이 없다.
+       중단하려면 지금 Ctrl-C. 10초 후 그대로 진행한다.
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 2e-4 -e 10 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run4 --run-tag pmr_run4 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... promptmr_run4 ...............
+Epoch = [  0/ 10] Iter = [   0/4651] Loss = 0.3341 Time = 5.5636s
+Epoch = [  0/ 10] Iter = [ 100/4651] Loss = 0.09945 Time = 457.7367s
+Epoch = [  0/ 10] Iter = [ 200/4651] Loss = 0.09681 Time = 464.2415s
+Epoch = [  0/ 10] Iter = [ 300/4651] Loss = 0.07364 Time = 467.7912s
+Epoch = [  0/ 10] Iter = [ 400/4651] Loss = 0.06573 Time = 466.3891s
+Epoch = [  0/ 10] Iter = [ 500/4651] Loss = 0.05289 Time = 467.4948s
+Epoch = [  0/ 10] Iter = [ 600/4651] Loss = 0.1511 Time = 468.2789s
+Epoch = [  0/ 10] Iter = [ 700/4651] Loss = 0.05615 Time = 466.9501s
+Epoch = [  0/ 10] Iter = [ 800/4651] Loss = 0.1174 Time = 466.0363s
+Epoch = [  0/ 10] Iter = [ 900/4651] Loss = 0.03183 Time = 466.7669s
+Epoch = [  0/ 10] Iter = [1000/4651] Loss = 0.05419 Time = 475.0437s
+Epoch = [  0/ 10] Iter = [1100/4651] Loss = 0.07427 Time = 465.4054s
+Epoch = [  0/ 10] Iter = [1200/4651] Loss = 0.06517 Time = 468.9336s
+Epoch = [  0/ 10] Iter = [1300/4651] Loss = 0.09035 Time = 467.8924s
+Epoch = [  0/ 10] Iter = [1400/4651] Loss = 0.05903 Time = 464.7094s
+Epoch = [  0/ 10] Iter = [1500/4651] Loss = 0.09182 Time = 472.3500s
+Epoch = [  0/ 10] Iter = [1600/4651] Loss = 0.1026 Time = 468.3126s
+Epoch = [  0/ 10] Iter = [1700/4651] Loss = 0.06666 Time = 468.3507s
+Epoch = [  0/ 10] Iter = [1800/4651] Loss = 0.09169 Time = 466.7614s
+Epoch = [  0/ 10] Iter = [1900/4651] Loss = 0.0928 Time = 465.8279s
+Epoch = [  0/ 10] Iter = [2000/4651] Loss = 0.07474 Time = 472.6195s
+Epoch = [  0/ 10] Iter = [2100/4651] Loss = 0.1401 Time = 468.5326s
+Epoch = [  0/ 10] Iter = [2200/4651] Loss = 0.1085 Time = 466.5213s
+Epoch = [  0/ 10] Iter = [2300/4651] Loss = 0.04465 Time = 466.4155s
+Epoch = [  0/ 10] Iter = [2400/4651] Loss = 0.03948 Time = 467.8407s
+Epoch = [  0/ 10] Iter = [2500/4651] Loss = 0.1039 Time = 473.6783s
+Epoch = [  0/ 10] Iter = [2600/4651] Loss = 0.1007 Time = 468.2922s
+Epoch = [  0/ 10] Iter = [2700/4651] Loss = 0.1023 Time = 466.9868s
+Epoch = [  0/ 10] Iter = [2800/4651] Loss = 0.03635 Time = 467.7221s

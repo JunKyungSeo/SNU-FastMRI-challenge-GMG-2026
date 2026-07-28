@@ -1,0 +1,33 @@
+==========================================================
+[START] shell4_restart   2026-07-19 14:17:01
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell4_restart_20260719_141701.log
+==========================================================
+[KILL] 실행 중인 train.py 없음 (건너뜀).
+[GPU ] VRAM 반환 대기...
+  used=2MiB
++ python train.py --model sdum --num-cascades 4 --channels 16 32 -b 1 -l 2.4e-4 -e 10 -r 100 --num-workers 4 --readout-crop --warmup-iters 200 --fg-loss --uc -n sdum_run13 --run-tag run13 -t /root/Data/train/ -v /root/Data/val/ --resume
+Current cuda device:  0
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+[resume] ../result/sdum_run13/checkpoints/model.pt → start_epoch=6 best_val=0.0971
+[scheduler] warmup=200 → cosine, total_iters=46510, base_lr=0.00024
+/usr/local/lib/python3.10/dist-packages/torch/optim/lr_scheduler.py:143: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+[resume] scheduler fast-forward 6ep, lr=8.354e-05
+Epoch # 6 ............... sdum_run13 ...............
+Epoch = [  6/ 10] Iter = [   0/4651] Loss = 0.1322 Time = 4.6908s
+Epoch = [  6/ 10] Iter = [ 100/4651] Loss = 0.04272 Time = 402.2358s
+Epoch = [  6/ 10] Iter = [ 200/4651] Loss = 0.1024 Time = 406.7442s
+Epoch = [  6/ 10] Iter = [ 300/4651] Loss = 0.04615 Time = 409.0881s
+Epoch = [  6/ 10] Iter = [ 400/4651] Loss = 0.1132 Time = 406.7858s
+Epoch = [  6/ 10] Iter = [ 500/4651] Loss = 0.08217 Time = 412.4118s
+shell_scripting/shell4_restart.sh: line 81: 1408266 Killed                  python train.py --model sdum --num-cascades 4 --channels 16 32 -b 1 -l 2.4e-4 -e 10 -r 100 --num-workers 4 --readout-crop --warmup-iters 200 --fg-loss --uc -n sdum_run13 --run-tag run13 -t /root/Data/train/ -v /root/Data/val/ --resume
+[TRAIN] run13 학습 종료   exit=137
+[RECON] 학습이 exit=137 로 끝나 채점 건너뜀.
+==========================================================
+[DONE ] shell4_restart   2026-07-19 14:52:14   train=137 recon/exit=137
+[저장] 점수: ../result/sdum_run13/recon_eval_run13.txt (+ 이 슬롯 로그).
+==========================================================

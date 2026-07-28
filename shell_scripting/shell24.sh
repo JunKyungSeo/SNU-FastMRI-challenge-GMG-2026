@@ -30,8 +30,7 @@
 #     ⚠️ 증강 이득은 아직 A/B 로 확인된 적이 없다. 그래도 켜는 건 남은 시간에 "MoE + 증강"을
 #        한꺼번에 노리는 선택이고, 대신 **결과가 나빠도 둘 중 뭐 때문인지 이 런만으론 못 가린다.**
 #        증강을 격리하려면 AUG=0 으로 pretrain 을 한 번 더 돌려 ①끼리 비교해야 한다.
-#     확률 스케줄은 총 epoch(T)로 정규화되므로 delay 를 단계별로 준다(T의 20~30% 권장):
-#        pretrain T=10 → AUG_DELAY_PRE=3 / 미세조정 T=5 → AUG_DELAY_FT=1
+#     스케줄은 constant 0.5 · delay 0 — 첫 epoch부터 매 샘플 절반이 뒤집힌다(2026-07-29).
 #
 #   ⚠️ 실행 전 서버에서 층화 테스트를 먼저 통과시킬 것 (31시간 태우고 분할이 틀리면 손해가 크다):
 #        python -m pytest scripts/tests/test_kfold_stratify.py -v
@@ -78,11 +77,13 @@ FT_EPOCHS=5          # 미세조정 (lr 은 BASE_ARGS 의 2e-4 를 그대로 물
 #      "MoE 이득 + 증강 이득"을 한 번에 노리는 선택이다 — 시간이 없어 변수 분리를 포기한 것이니,
 #      결과가 나쁘면 둘 중 뭐 때문인지 이 런만으로는 못 가린다는 걸 알고 읽을 것.
 #      (증강만 격리하려면 AUG=0 으로 한 번 더 돌려 pretrain 끼리 비교해야 한다.)
-#   확률 스케줄은 총 epoch(T)로 정규화되므로 delay 는 단계별로 따로 준다(권장 T의 20~30%).
+#   [스케줄] constant 0.5 · delay 0 — 첫 epoch부터 끝까지 매 샘플을 절반 확률로 뒤집는다.
+#     exp+delay 램프는 MRAugment 가 회전·스케일·shear 의 보간 아티팩트 때문에 두는 장치다.
+#     우리한테 남은 flip 은 closed form 이라 픽셀 정확하고 결과도 물리적으로 유효한
+#     (반대쪽 무릎) 획득이라 미룰 이유가 없다. 램프를 쓰면 런 평균 노출이 28% 로 깎인다
+#     (exp·D=3·T=10 을 epoch 에 대해 적분한 값). constant 0.5 는 같은 시간에 50%.
 AUG="${AUG:-1}"
-AUG_DELAY_PRE="${AUG_DELAY_PRE:-3}"    # T=10 → 3 (30%)
-AUG_DELAY_FT="${AUG_DELAY_FT:-1}"      # T=5  → 1 (20%)
-AUG_COMMON=( --aug-on --aug-max-prob 0.55 --aug-exp-decay 5.0 )
+AUG_COMMON=( --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 )
 
 LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
@@ -102,19 +103,10 @@ else
     EXTRA=""
 fi
 
-# 단계별 증강 인자를 만든다(AUG=0 이면 빈 배열 → 증강 off).
-#   스모크는 schedule=constant·delay=0 으로 강제한다. exp 스케줄은 1 epoch 런에서 p(epoch=0)=0 이
-#   나와 증강이 한 번도 안 걸리고, 그러면 "배선됐는지"를 확인하려는 스모크가 아무것도 검증 못 한다.
+# 증강 인자(AUG=0 이면 빈 배열 → 증강 off). 스케줄이 constant·delay 0 이라 단계별로 다를 게
+#   없다 — 스모크(1 epoch)에서도 epoch 0 부터 p=0.5 라 "배선됐는지" 확인이 그대로 된다.
 AUG_ARGS=()
-aug_args_for() {   # $1=delay → 전역 AUG_ARGS 갱신
-    AUG_ARGS=()
-    [ "$AUG" = "1" ] || return 0
-    if [ "$SMOKE" = "1" ]; then
-        AUG_ARGS=( "${AUG_COMMON[@]}" --aug-schedule constant --aug-delay 0 )
-    else
-        AUG_ARGS=( "${AUG_COMMON[@]}" --aug-schedule exp --aug-delay "$1" )
-    fi
-}
+[ "$AUG" = "1" ] && AUG_ARGS=( "${AUG_COMMON[@]}" )
 
 # --- 로그 ---
 SLOT="$(basename "$0" .sh)"
@@ -178,7 +170,6 @@ do_pretrain() {
     gpu_guard || return 2
     overwrite_guard "$NET_SHARED" || return 2
     local R; R="$(resume_flag "$NET_SHARED")"
-    aug_args_for "$AUG_DELAY_PRE"
     echo "[① pretrain] $NET_SHARED  (--acc all, fold $FOLD hold-out) ${R:+[resume]}"
     echo "[① aug] ${AUG_ARGS[*]:-(off)}"
     set -x
@@ -198,7 +189,6 @@ do_ft() {   # $1=acc(4|8)  $2=net_name
     fi
     overwrite_guard "$2" || return 2
     local R; R="$(resume_flag "$2")"
-    aug_args_for "$AUG_DELAY_FT"
     # --resume 과 --init-from 은 배타적이고 resume 이 우선이다(train.py). 재개면 init-from 은 무시된다.
     echo "[② ft$1] $2  (--acc $1 --init-from shared) ${R:+[resume]}"
     echo "[② aug] ${AUG_ARGS[*]:-(off)}"
@@ -261,7 +251,7 @@ echo "=========================================================="
 echo "[DONE ] $SLOT (fold $FOLD)  STAGE=$STAGE  $(date '+%F %T')  exit=$STATUS"
 if [ "$SMOKE" = "1" ]; then
     echo "[SMOKE] 확인할 것:"
-    echo "        (0) ⚠️ 증강이 실제로 걸렸는가 — 로그에 '[aug] epoch=0 p_flip=0.5500' 처럼 p_flip>0 이 찍혀야 한다."
+    echo "        (0) ⚠️ 증강이 실제로 걸렸는가 — 로그에 '[aug] epoch=0 p_flip=0.5000' 처럼 p_flip>0 이 찍혀야 한다."
     echo "            (AUG=1 인데 p_flip=0.0000 이거나 [aug] 줄 자체가 없으면 배선이 안 된 것이다.)"
     echo "        (1) 세 단계 다 OOM 없이 exit 0 인가"
     echo "        (2) [K-Fold] 로그의 val 구성이 **세 단계에서 일관적인가** — 이게 층화의 서명이다."

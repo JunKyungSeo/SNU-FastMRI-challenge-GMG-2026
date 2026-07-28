@@ -65,6 +65,14 @@
 
 이 repo에서 증강을 켜고 돌린 런은 **아직 0회**다(`--aug-on`이 들어간 로그 없음). 위 판단은 마스크 기하·노출량·라우터 임계의 계산에 근거한 것이지 A/B 결과가 아니다. flip의 순효과는 shell22(ON arm)가 재도록 남겨뒀고, 그보다 싼 선행 탐침이 하나 있다 — **기존 체크포인트로 val을 원본/좌우반전 두 번 돌려 SSIM 차이를 보는 것**(val 1회 356초). 그 차이가 flip 증강이 회수할 수 있는 최대치다.
 
+### 후속 (2026-07-29) — 스케줄도 constant 0.5로
+
+flip 하나만 남기고 나니 `exp` 램프 + `delay`를 유지할 이유가 없어졌다. 그 램프는 MRAugment가 **회전·스케일·shear의 보간 아티팩트** 때문에 두는 장치인데, 우리 flip은 closed form이라 픽셀 정확하고 결과도 물리적으로 유효한 획득이다. 램프를 쓰면 런 평균 노출이 **28%**(exp·D=3·T=10을 epoch에 대해 적분)로 깎여, 같은 21시간에 증강을 절반밖에 못 쓴다.
+
+→ shell22·shell24를 `--aug-schedule constant --aug-max-prob 0.5 --aug-delay 0`으로 바꿨다. **첫 epoch부터 끝까지 매 샘플 50%**, 학습 시간·iter 수는 그대로다. 덤으로 1-epoch 스모크에서 `p(epoch=0)=0`이 나와 증강이 0회 걸린 채 통과하던 함정과, shell22가 `AUG_DELAY`를 사람한테 받아내던 게이트가 함께 사라졌다.
+
+⚠️ `train.py`의 CLI 기본값은 여전히 MRAugment 원형(`exp` · `p_max 0.55` · `delay 0`)이다 — 슬롯이 명시적으로 덮어쓴다. 위 §0 본문의 "10.5%" 같은 노출량 숫자는 **바뀌기 전 exp 스케줄** 기준으로 계산한 값이다.
+
 ### 코드 영향
 
 - `AugmentConfig`: `mask` · `phase` · `noise` · `weight_flip` · `weight_mask` · `mask_thin_max` · `orig_mask_prob` · `noise_sigma` · `flip` 필드 삭제 (on/off는 `on` 하나).

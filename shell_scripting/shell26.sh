@@ -98,8 +98,8 @@ echo "=========================================================="
 
 # ==========================================================
 #  ↓↓↓  이메일 알림 (notify.sh 재사용) — shell25 종료 + 채점 결과  ↓↓↓
-#     이번 run 의 점수 사본(results/recon_eval_*_$TS.txt)에서 SSIM 요약만 뽑아 본문에 넣는다:
-#     Leaderboard SSIM_full·SSIM_bbox + acc4/acc8 각각의 SSIM_full·SSIM_bbox.
+#     이번 run 의 점수 사본(results/recon_eval_*_$TS.txt)에서 SSIM·추론시간 요약을 뽑아 본문에 넣는다:
+#     Leaderboard SSIM_full·SSIM_bbox·Recon Time + acc4/acc8 각각의 SSIM_full·SSIM_bbox·Recon Time.
 # ==========================================================
 NOTIFY="$SCRIPT_DIR/notify.sh"
 MAIL_BODY="shell25 종료 — recon_eval 채점 결과"$'\n'"서버 $(date '+%F %T') · 한국 $(date -u -d '+9 hours' '+%F %T') KST · host $(hostname) · fold $FOLD"
@@ -108,7 +108,7 @@ shopt -s nullglob
 for f in "$OUT_DIR"/recon_eval_*_"${TS}".txt; do
     [ -s "$f" ] || continue                       # 빈 파일(SKIP·중단)은 건너뜀
     net=$(basename "$f" .txt); net=${net#recon_eval_}; net=${net%_"$TS"}
-    MAIL_BODY+=$'\n\n'"■ $net"$'\n'"$(grep -E 'SSIM_(full|bbox)' "$f")"
+    MAIL_BODY+=$'\n\n'"■ $net"$'\n'"$(grep -E 'SSIM_(full|bbox)|Recon Time' "$f")"
     FOUND=1
 done
 shopt -u nullglob

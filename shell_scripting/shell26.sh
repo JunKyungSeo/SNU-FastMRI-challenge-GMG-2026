@@ -45,6 +45,10 @@
 #     분포를 안 건드리고 볼륨 풀만 2배로 늘릴 수도 있다).
 #     ⚠️ val 은 그대로다 — 딸려온 마스크 + 그 전문가의 acc 볼륨(과거 ft4/ft8 val 곡선과 비교 가능).
 #     ⚠️ ① 은 안 건드린다 → NET_SHARED 에 접미사가 안 붙어 **기존 21h 체크포인트를 그대로 재사용**한다.
+#        ①이 이 이름으로 없더라도 INIT_NET 으로 다른 슬롯 결과를 가리키면 된다 — shell22 의
+#        promptmr_kfold_f<FOLD>_aug 는 이 슬롯 ①과 train.py 인자가 사실상 같다(--num-workers 만 다름).
+#        init_compat_guard 가 그 체크포인트의 k-fold/fold/seed/acc 를 대조해 hold-out 이 어긋나면 막는다
+#        (--init-from 은 check_resume_compat 을 안 타므로 이게 유일한 방어선이다).
 #     ⚠️ ②③ 이 각 5.3h → 10.3h 가 된다(데이터 2배). 상수 LR·epoch 고정이라 optimizer 스텝도 2배라서,
 #        이득이 나와도 "마스크 다양성" 인지 "스텝 2배" 인지 이 런만으로는 못 가린다.
 #        스텝을 지금 수준으로 고정하려면 FT_CAP=<그 fold train slice 의 절반> (fold2 는 2179).
@@ -64,6 +68,7 @@
 #   REMASK=1 STAGE=ft4 bash ...                         # 마스크 재생성 ON (~10.3h, ① 재사용)
 #   REMASK=1 REMASK_OFFSET=canonical STAGE=ft8 bash ... # 분포 그대로 두고 볼륨 풀만 2배
 #   REMASK=1 FT_CAP=2179 STAGE=ft4 bash ...             # 스텝을 현행에 고정 (fold2 기준, ~5.3h)
+#   INIT_NET=promptmr_kfold_f2_aug REMASK=1 STAGE=ft8 bash ...   # ①을 다른 슬롯 결과로 대체(21h 절약)
 #   FORCE=1 ...                                         # 기존 결과를 덮어쓸 때만
 # ============================================================
 set -uo pipefail
@@ -125,7 +130,18 @@ NET_SHARED="promptmr_moe_f${FOLD}_shared${SUF}"
 NET_ACC4="promptmr_moe_f${FOLD}_acc4${FTSUF}"
 NET_ACC8="promptmr_moe_f${FOLD}_acc8${FTSUF}"
 NET_MOE="promptmr_moe_f${FOLD}${FTSUF}"
-SHARED_BEST="../result/${NET_SHARED}/checkpoints/best_model.pt"
+
+# --- ① 재사용: 다른 슬롯이 만든 pretrain 을 그대로 초기값으로 쓴다 (21h 절약) ---
+#   shell22(promptmr_kfold_f<FOLD>_aug) 는 이 슬롯의 ①과 train.py 인자가 사실상 같다 —
+#   아키텍처·k-fold/fold/seed·--acc all(기본값)·10 epoch·lr·accum·grad-clip·fg-loss·
+#   area-weight·증강(constant 0.5·delay 0) 전부 동일하고, --num-workers(6 vs 4)만 다른데
+#   그건 dataloader 병렬도라 학습 궤적에 영향이 없다(flip 은 (seed,epoch,fname,slice) crc32,
+#   셔플은 seed+epoch generator → 워커 수와 무관).
+#   ⚠️ INIT_NET 은 **읽기 전용 소스**다. ①의 출력 이름(NET_SHARED)은 안 바뀌므로
+#      남의 결과 폴더에 덮어쓸 일이 없다. 대신 do_pretrain 이 INIT_NET 지정 시 거부한다.
+#   예: INIT_NET=promptmr_kfold_f2_aug REMASK=1 STAGE=ft8 bash shell_scripting/shell26.sh
+INIT_NET="${INIT_NET:-$NET_SHARED}"
+SHARED_BEST="../result/${INIT_NET}/checkpoints/best_model.pt"
 
 # --max-iters 는 여기 한 곳에서만 정한다 — 같은 명령에 두 번 붙이면 argparse 가 뒤엣것을 이겨
 #   SMOKE 가 120 이 아니라 FT_CAP 으로 돌아버린다. pretrain 은 EXTRA, 미세조정은 FT_EXTRA.
@@ -167,7 +183,7 @@ echo "[BR   ] $(git branch --show-current 2>/dev/null) ($(git rev-parse --short 
 echo "[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=$KFOLD_SEED · pretrain ${PRE_EPOCHS}ep · ft ${FT_EPOCHS}ep"
 if [ "$REMASK" = "1" ]; then
     echo "[REMASK] ON (offset=$REMASK_OFFSET) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume."
-    echo "         ① 은 불변이라 $NET_SHARED 를 재사용한다. ft 이름에 _rm 이 붙는다."
+    echo "         ① 은 불변이다. init 소스: $INIT_NET$([ \"$INIT_NET\" != \"$NET_SHARED\" ] && echo \" (다른 슬롯 재사용)\"). ft 이름에 _rm 이 붙는다."
     echo "         ft 시간 ≈ 5.3h → 10.3h. FT_EXTRA=[${FT_EXTRA}] ${FT_EXTRA:+(스텝 고정 arm)}"
 else
     echo "[REMASK] OFF (REMASK=1 로 켬) — ②③ 이 딸려온 마스크·acc 필터 그대로."
@@ -216,7 +232,38 @@ overwrite_guard() {   # $1=net_name
 # ==========================================================
 #  ↓↓↓  단계 함수 — BASE_ARGS 뒤가 각 단계의 델타 전부다  ↓↓↓
 # ==========================================================
+# --init-from 은 check_resume_compat 을 안 탄다 → fold 가 다른 체크포인트를 물려도 조용히 통과하고,
+#   그러면 이 슬롯의 hold-out 볼륨을 이미 학습한 가중치로 미세조정하게 된다(로그만 봐선 못 잡는 누수).
+#   다른 슬롯의 pretrain 을 재사용할 때 이 검사가 유일한 방어선이다.
+init_compat_guard() {
+    [ -f "$SHARED_BEST" ] || return 0    # 없으면 do_ft 의 [STOP] 이 먼저 잡는다
+    python - "$SHARED_BEST" "$K_FOLD" "$FOLD" "$KFOLD_SEED" <<'PY'
+import sys, torch
+p, k, vf, sd = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
+a = torch.load(p, map_location="cpu", weights_only=False)["args"]
+g = lambda f, d=None: getattr(a, f, d)
+# 분할(=hold-out)만 검사한다. 아키텍처가 어긋나면 --init-from 의 state_dict 로드가 알아서 죽는다.
+want = {"k_fold": k, "val_fold": vf, "kfold_seed": sd, "acc": "all"}
+bad = {f: (g(f), v) for f, v in want.items() if g(f) != v}
+print(f"[init ] 소스 config: model={g('model')} nc={g('num_cascades')} nf={g('n_feat0')} "
+      f"sens={g('sens_n_feat0')} nh={g('n_history')} readout_crop={g('readout_crop')} "
+      f"coil_compress={g('coil_compress')} | k-fold={g('k_fold')} fold={g('val_fold')} "
+      f"seed={g('kfold_seed')} acc={g('acc')} epochs={g('num_epochs')} aug_on={g('aug_on')}")
+if bad:
+    print("[STOP ] --init-from 소스의 분할이 이 슬롯과 다르다 → hold-out 이 샌다:")
+    for f, (got, exp) in bad.items():
+        print(f"          {f}: 소스={got!r} 이 슬롯={exp!r}")
+    sys.exit(2)
+print("[init ] 분할 일치 — 같은 hold-out 이다.")
+PY
+}
+
 do_pretrain() {
+    if [ "$INIT_NET" != "$NET_SHARED" ]; then
+        echo "[STOP] INIT_NET=$INIT_NET 로 ①을 재사용하도록 지정해놓고 STAGE=pretrain 을 돌리려 한다."
+        echo "       21시간을 헛되이 태우는 것이다 — STAGE=ft8 / ft4 / merge 만 돌려라."
+        return 2
+    fi
     gpu_guard || return 2
     overwrite_guard "$NET_SHARED" || return 2
     local R; R="$(resume_flag "$NET_SHARED")"
@@ -249,8 +296,11 @@ do_ft() {   # $1=acc(4|8)  $2=net_name
         fi
         echo "       → ①부터 돌리려면:  REMASK=$REMASK STAGE=all bash shell_scripting/$(basename "$0")"
         echo "         (①은 재생성 없이 ~21h, 이어서 ②③이 remask 로 돈다)"
+        echo "       → 다른 슬롯의 pretrain 을 재사용하려면 INIT_NET=<net 이름> 을 주면 된다"
+        echo "         (예: INIT_NET=promptmr_kfold_f${FOLD}_aug — shell22 의 ON arm)"
         return 2
     fi
+    init_compat_guard || return 2
     overwrite_guard "$2" || return 2
     local R; R="$(resume_flag "$2")"
     # 마스크 재생성: --acc 는 "어떤 **파일**을 읽을지", --remask 는 "그 k-space 에 어떤 **마스크**를
@@ -344,13 +394,13 @@ else
     if [ "$REMASK" = "1" ]; then
         # ①(shared)에는 _rm 이 안 붙으므로, ④−① 델타에는 **전문가 분리 + 마스크 재생성 + 스텝 2배**가
         #   전부 섞여 있다. 이걸 "MoE 이득"이라고 읽으면 다음 슬롯 설계가 그 위에 쌓인다.
-        echo "[판정] ⚠️ 이 런은 REMASK=1 이라 ${NET_MOE} 와 ${NET_SHARED} 의 차이가"
+        echo "[판정] ⚠️ 이 런은 REMASK=1 이라 ${NET_MOE} 와 ${INIT_NET} 의 차이가"
         echo "       '전문가 분리 + 마스크 재생성 + (FT_CAP 없으면) 스텝 2배' **합산**이다. MoE 이득이 아니다."
-        echo "       · MoE 이득만  : promptmr_moe_f${FOLD}${SUF}(REMASK=0 병합본) 대 ${NET_SHARED}"
+        echo "       · MoE 이득만  : promptmr_moe_f${FOLD}${SUF}(REMASK=0 병합본) 대 ${INIT_NET}"
         echo "       · 재생성 이득만: promptmr_moe_f${FOLD}${SUF} 대 ${NET_MOE}"
         echo "       두 번째 비교에 쓸 promptmr_moe_f${FOLD}${SUF} 가 없으면 REMASK=0 으로 ②③④를 한 번 더 돌려야 한다(~10.6h)."
     else
-        echo "[판정] 정본은 채점이다 — ${NET_MOE}(MoE) 와 ${NET_SHARED}(단일) 를 각각 채점해"
+        echo "[판정] 정본은 채점이다 — ${NET_MOE}(MoE) 와 ${INIT_NET}(단일) 를 각각 채점해"
         echo "       SSIM_full·SSIM_bbox·시간 3축으로 비교할 것. val 은 계기판일 뿐이다."
     fi
 fi

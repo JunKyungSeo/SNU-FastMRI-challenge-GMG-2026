@@ -1,0 +1,33 @@
+==========================================================
+[START] shell24 (fold 2)   2026-07-28 21:39:13
+[CWD  ] /root/FastMRI_SNU_2026_GMG   [LOG] shell_scripting/logs/shell24_f2_20260728_213913.log
+[BR   ] jkMRplus (a927214)
+[대상 ] promptmr_kfold_f2_aug promptmr_kfold_f2
+[채점 ] /root/Data/leaderboard   (점수 = 0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간)
+==========================================================
+[GPU  ] used=2MiB
+
+---------- promptmr_kfold_f2_aug ----------
++ python -u recon_eval.py -n promptmr_kfold_f2_aug -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmr_kfold_f2_aug_20260728_213913.txt
+Leaderboard SSIM_full : 0.9303
+Leaderboard SSIM_bbox : 0.9279
+Leaderboard Recon Time : 1586.53s (716.9 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9483   SSIM_full (acc8): 0.9122
+SSIM_bbox (acc4): 0.9490   SSIM_bbox (acc8): 0.9068
+Recon Time (acc4): 830.39s (728.4 ms/slice)   (acc8): 756.13s (704.7 ms/slice)
+Recon Time (total): 1586.53s
+[promptmr_kfold_f2_aug] exit=0   점수: shell_scripting/results/recon_eval_promptmr_kfold_f2_aug_20260728_213913.txt
+
+---------- promptmr_kfold_f2 ----------
+[SKIP ] promptmr_kfold_f2 — ../result/promptmr_kfold_f2/checkpoints/best_model.pt 없음 (미학습이거나 이 서버에 없음)
+
+==========================================================
+[DONE ] shell24 (fold 2)   2026-07-28 22:11:54   exit=0
+[저장] 점수 사본: shell_scripting/results/recon_eval_*_20260728_213913.txt   (+ 재구성 h5: ../result/<net>/reconstructions_leaderboard/)
+[공유] git add shell_scripting/results/recon_eval_*_20260728_213913.txt 커밋·푸시하면 전 환경에서 점수가 보인다.
+[비교] ON(promptmr_kfold_f2_aug) vs OFF(promptmr_kfold_f2) 를 full·bbox·시간 3축으로 나란히 볼 것.
+       ⚠️ 두 arm 의 hold-out 분할이 같은지 먼저 확인 — 다르면(층화 교체 전후) A/B 비교가 무효다.
+==========================================================
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (shell22 채점 완료 (fold 2))

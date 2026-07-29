@@ -27,3 +27,52 @@ Epoch = [  9/ 10] Iter = [ 500/4358] Loss = 0.01077 Time = 5.3157s
 Epoch = [  9/ 10] Iter = [ 600/4358] Loss = 0.04347 Time = 453.8620s
 Epoch = [  9/ 10] Iter = [ 700/4358] Loss = 0.08669 Time = 461.7295s
 Epoch = [  9/ 10] Iter = [ 800/4358] Loss = 0.04558 Time = 461.6923s
+Epoch = [  9/ 10] Iter = [ 900/4358] Loss = 0.07311 Time = 460.6520s
+Epoch = [  9/ 10] Iter = [1000/4358] Loss = 0.1932 Time = 468.7528s
+Epoch = [  9/ 10] Iter = [1100/4358] Loss = 0.09498 Time = 460.8686s
+Epoch = [  9/ 10] Iter = [1200/4358] Loss = 0.06674 Time = 461.4661s
+Epoch = [  9/ 10] Iter = [1300/4358] Loss = 0.05452 Time = 460.3462s
+Epoch = [  9/ 10] Iter = [1400/4358] Loss = 0.05299 Time = 459.2484s
+Epoch = [  9/ 10] Iter = [1500/4358] Loss = 0.09497 Time = 466.5448s
+Epoch = [  9/ 10] Iter = [1600/4358] Loss = 0.05224 Time = 460.9284s
+Epoch = [  9/ 10] Iter = [1700/4358] Loss = 0.08906 Time = 460.9186s
+Epoch = [  9/ 10] Iter = [1800/4358] Loss = 0.04237 Time = 461.0542s
+Epoch = [  9/ 10] Iter = [1900/4358] Loss = 0.06877 Time = 461.5010s
+Epoch = [  9/ 10] Iter = [2000/4358] Loss = 0.04348 Time = 467.0594s
+Epoch = [  9/ 10] Iter = [2100/4358] Loss = 0.05252 Time = 457.6782s
+Epoch = [  9/ 10] Iter = [2200/4358] Loss = 0.07668 Time = 462.1089s
+Epoch = [  9/ 10] Iter = [2300/4358] Loss = 0.0374 Time = 461.6896s
+Epoch = [  9/ 10] Iter = [2400/4358] Loss = 0.06832 Time = 460.3382s
+Epoch = [  9/ 10] Iter = [2500/4358] Loss = 0.0657 Time = 466.3591s
+Epoch = [  9/ 10] Iter = [2600/4358] Loss = 0.1315 Time = 460.5763s
+Epoch = [  9/ 10] Iter = [2700/4358] Loss = 0.09772 Time = 462.8654s
+Epoch = [  9/ 10] Iter = [2800/4358] Loss = 0.08192 Time = 459.2115s
+Epoch = [  9/ 10] Iter = [2900/4358] Loss = 0.05714 Time = 457.2988s
+Epoch = [  9/ 10] Iter = [3000/4358] Loss = 0.1023 Time = 467.4542s
+Epoch = [  9/ 10] Iter = [3100/4358] Loss = 0.06052 Time = 459.9130s
+Epoch = [  9/ 10] Iter = [3200/4358] Loss = 0.06472 Time = 460.5126s
+Epoch = [  9/ 10] Iter = [3300/4358] Loss = 0.143 Time = 458.2335s
+Epoch = [  9/ 10] Iter = [3400/4358] Loss = 0.1217 Time = 461.5415s
+Epoch = [  9/ 10] Iter = [3500/4358] Loss = 0.1122 Time = 466.0393s
+Epoch = [  9/ 10] Iter = [3600/4358] Loss = 0.0527 Time = 459.0753s
+Epoch = [  9/ 10] Iter = [3700/4358] Loss = 0.1444 Time = 459.7967s
+Epoch = [  9/ 10] Iter = [3800/4358] Loss = 0.06737 Time = 459.4862s
+Epoch = [  9/ 10] Iter = [3900/4358] Loss = 0.03136 Time = 459.4921s
+Epoch = [  9/ 10] Iter = [4000/4358] Loss = 0.06013 Time = 465.0740s
+Epoch = [  9/ 10] Iter = [4100/4358] Loss = 0.06652 Time = 457.6059s
+Epoch = [  9/ 10] Iter = [4200/4358] Loss = 0.08999 Time = 459.2838s
+Epoch = [  9/ 10] Iter = [4300/4358] Loss = 0.03916 Time = 459.1401s
+[mem] epoch 9 peak allocated = 3.32GB / reserved = 4.37GB
+loss file saved! ../result/promptmr_kfold_f2_aug/val_loss_log_pmr_kf_f2_aug
+Epoch = [   9/  10] TrainLoss = 0.07063 ValLoss = 0.08295 TrainTime = 17829.6019s ValTime = 696.5467s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 1.9872s
+[TRAIN] promptmr_kfold_f2_aug (fold 2) 종료   exit=0
+==========================================================
+[DONE ] shell22 (fold 2)   2026-07-28 21:39:13   train=0
+[저장] val loss: ../result/promptmr_kfold_f2_aug/val_loss_log_pmr_kf_f2_aug.npy
+       가중치  : ../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt   ← 채점은 이걸 다른 환경으로 옮겨서
+[비교] OFF arm = ../result/promptmr_kfold_f2/val_loss_log_pmr_kf_f2.npy (재학습 안 함)
+       ⚠️ f1(promptmr_kfold_f1)은 병합 전 '이름 그룹' 분할이라 hold-out이 다르다 — f1과는
+       나란히 비교하지 말 것. f2 이후 슬롯끼리(이 ON arm 포함)만 비교 가능.
+==========================================================

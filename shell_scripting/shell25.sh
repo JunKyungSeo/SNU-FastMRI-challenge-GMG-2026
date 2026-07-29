@@ -32,8 +32,25 @@
 #        증강을 격리하려면 AUG=0 으로 pretrain 을 한 번 더 돌려 ①끼리 비교해야 한다.
 #     스케줄은 constant 0.5 · delay 0 — 첫 epoch부터 매 샘플 절반이 뒤집힌다(2026-07-29).
 #
+#   [마스크 재생성] REMASK=1 로 켠다 (기본 0). ②③ 의 --acc 4|8 을 --acc all --remask 4|8 로 바꾼다.
+#     학습풀 h5 의 kspace 는 마스크 곱 이전 full k-space 라(train 170/170·val 30/30 실측),
+#     딸려온 마스크를 버리고 대회 생성기로 만든 마스크를 곱하면 **같은 볼륨을 반대 가속률로** 쓸 수 있다.
+#     정답 image_label 은 fully-sampled 복원이라 마스크를 바꿔도 그대로 유효하다.
+#     → acc4 전문가는 acc8 파일에서 뽑은 acc4 를, acc8 전문가는 acc4 파일에서 뽑은 acc8 을 함께 본다.
+#        전문가당 학습 볼륨 80 → 160 (2195/2163 → 4358 slice, 정확히 2배).
+#     생성기는 학습풀 200 + leaderboard 80 전수에서 center_fraction 후보 완전탐색 결과
+#     네 셀 모두 cf=0.08 만 유일하게 비트정확 재현(실패 0) — 우리 마스크와 채점 마스크가 같은 물건이다.
+#     offset 은 기본 uniform: 학습풀은 offset==(W//2)%acc 로 결정론인데 **채점은 무작위 0~acc-1** 이라,
+#     지금 acc8 전문가는 채점 볼륨의 65% 를 학습에서 본 적 없는 offset 으로 만난다(REMASK_OFFSET=canonical 로
+#     분포를 안 건드리고 볼륨 풀만 2배로 늘릴 수도 있다).
+#     ⚠️ val 은 그대로다 — 딸려온 마스크 + 그 전문가의 acc 볼륨(과거 ft4/ft8 val 곡선과 비교 가능).
+#     ⚠️ ① 은 안 건드린다 → NET_SHARED 에 접미사가 안 붙어 **기존 21h 체크포인트를 그대로 재사용**한다.
+#     ⚠️ ②③ 이 각 5.3h → 10.3h 가 된다(데이터 2배). 상수 LR·epoch 고정이라 optimizer 스텝도 2배라서,
+#        이득이 나와도 "마스크 다양성" 인지 "스텝 2배" 인지 이 런만으로는 못 가린다.
+#        스텝을 지금 수준으로 고정하려면 FT_CAP=<그 fold train slice 의 절반> (fold2 는 2179).
+#
 #   ⚠️ 실행 전 서버에서 층화 테스트를 먼저 통과시킬 것 (31시간 태우고 분할이 틀리면 손해가 크다):
-#        python -m pytest scripts/tests/test_kfold_stratify.py -v
+#        python -m pytest scripts/tests/test_kfold_stratify.py scripts/tests/test_remask.py -v
 #
 # 실행:
 #   SMOKE=1 STAGE=all bash shell_scripting/shell25.sh   # 각 단계 120 iter (먼저 이것)
@@ -44,6 +61,9 @@
 #   STAGE=all      bash shell_scripting/shell25.sh      # ①→⑤ 순차 (기본값, ~31h)
 #   FOLD=3 STAGE=all bash ...                           # 다른 fold
 #   AUG=0 STAGE=pretrain bash ...                       # 증강 끄고 (증강 격리 비교용)
+#   REMASK=1 STAGE=ft4 bash ...                         # 마스크 재생성 ON (~10.3h, ① 재사용)
+#   REMASK=1 REMASK_OFFSET=canonical STAGE=ft8 bash ... # 분포 그대로 두고 볼륨 풀만 2배
+#   REMASK=1 FT_CAP=2179 STAGE=ft4 bash ...             # 스텝을 현행에 고정 (fold2 기준, ~5.3h)
 #   FORCE=1 ...                                         # 기존 결과를 덮어쓸 때만
 # ============================================================
 set -uo pipefail
@@ -87,22 +107,43 @@ FT_EPOCHS=5          # 미세조정 (lr 은 BASE_ARGS 의 2e-4 를 그대로 물
 AUG="${AUG:-1}"
 AUG_COMMON=( --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 )
 
+# --- 마스크 재생성: 기본 OFF. REMASK=1 로 켠다 (②③ 에만 적용, ① pretrain 은 불변) ---
+REMASK="${REMASK:-0}"
+REMASK_OFFSET="${REMASK_OFFSET:-uniform}"
+
 LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
 # --- net_name: fold 를 이름에 넣는다. 안 넣으면 옛 promptmr_moe_shared(고정분할)와 섞인다 ---
+#   ①(shared)에는 _rm 을 안 붙인다 — 재생성은 ②③ 만 바꾸므로 **기존 pretrain 체크포인트를 재사용**하고,
+#   두 arm(_rm 유무)이 같은 초기값에서 갈라져야 비교가 성립한다.
 SUF=""
 [ "${AUG:-1}" = "1" ] && SUF="${SUF}_aug"     # 증강 런은 이름을 달리한다(비증강 런과 섞이면 비교가 깨진다)
-[ "$SMOKE" = "1" ] && SUF="${SUF}_smoke"
+FTSUF="$SUF"
+[ "$REMASK" = "1" ] && FTSUF="${FTSUF}_rm"
+[ "$SMOKE" = "1" ] && { SUF="${SUF}_smoke"; FTSUF="${FTSUF}_smoke"; }
 NET_SHARED="promptmr_moe_f${FOLD}_shared${SUF}"
-NET_ACC4="promptmr_moe_f${FOLD}_acc4${SUF}"
-NET_ACC8="promptmr_moe_f${FOLD}_acc8${SUF}"
-NET_MOE="promptmr_moe_f${FOLD}${SUF}"
+NET_ACC4="promptmr_moe_f${FOLD}_acc4${FTSUF}"
+NET_ACC8="promptmr_moe_f${FOLD}_acc8${FTSUF}"
+NET_MOE="promptmr_moe_f${FOLD}${FTSUF}"
 SHARED_BEST="../result/${NET_SHARED}/checkpoints/best_model.pt"
 
+# --max-iters 는 여기 한 곳에서만 정한다 — 같은 명령에 두 번 붙이면 argparse 가 뒤엣것을 이겨
+#   SMOKE 가 120 이 아니라 FT_CAP 으로 돌아버린다. pretrain 은 EXTRA, 미세조정은 FT_EXTRA.
 if [ "$SMOKE" = "1" ]; then
     EXTRA="--max-iters 120"; PRE_EPOCHS=1; FT_EPOCHS=1
+    FT_EXTRA="$EXTRA"
 else
     EXTRA=""
+    FT_EXTRA=""
+    # FT_CAP: 데이터는 2배로 늘리되 optimizer 스텝은 현행에 고정하는 arm(미세조정에만 적용).
+    #   매 epoch 셔플된 4358 중 다른 절반을 뽑으므로 5 epoch 누적 커버리지 1−(1/2)^5 ≈ 96.9%.
+    #   ⚠️ 정수 검증을 먼저 한다. `[ "$FT_CAP" -gt 0 ]` 만 쓰면 "2,179" 같은 오타에서 bash 가
+    #      integer expression 오류를 뱉고 -e 가 없어 그냥 진행 → 캡이 조용히 사라진 채
+    #      10.3h 짜리 무캡 런이 돈다. 게다가 그 오류는 로그 리다이렉트(아래 exec) 전이라 로그에 안 남는다.
+    case "${FT_CAP:-0}" in
+        ''|*[!0-9]*) echo "[STOP] FT_CAP 은 0 이상의 정수여야 한다 (받은 값: '${FT_CAP}')"; exit 2 ;;
+    esac
+    [ "${FT_CAP:-0}" -gt 0 ] && FT_EXTRA="--max-iters ${FT_CAP}"
 fi
 
 # 증강 인자(AUG=0 이면 빈 배열 → 증강 off). 스케줄이 constant·delay 0 이라 단계별로 다를 게
@@ -124,6 +165,13 @@ echo "[CWD  ] $(pwd)"
 echo "[LOG  ] $LOG"
 echo "[BR   ] $(git branch --show-current 2>/dev/null) ($(git rev-parse --short HEAD 2>/dev/null))"
 echo "[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=$KFOLD_SEED · pretrain ${PRE_EPOCHS}ep · ft ${FT_EPOCHS}ep"
+if [ "$REMASK" = "1" ]; then
+    echo "[REMASK] ON (offset=$REMASK_OFFSET) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume."
+    echo "         ① 은 불변이라 $NET_SHARED 를 재사용한다. ft 이름에 _rm 이 붙는다."
+    echo "         ft 시간 ≈ 5.3h → 10.3h. FT_EXTRA=[${FT_EXTRA}] ${FT_EXTRA:+(스텝 고정 arm)}"
+else
+    echo "[REMASK] OFF (REMASK=1 로 켬) — ②③ 이 딸려온 마스크·acc 필터 그대로."
+fi
 echo "=========================================================="
 
 # --- 가드: 층화 코드가 있는가 (이 슬롯의 전제. 없으면 --acc 가 fold 경계를 움직인다) ---
@@ -191,13 +239,21 @@ do_ft() {   # $1=acc(4|8)  $2=net_name
     fi
     overwrite_guard "$2" || return 2
     local R; R="$(resume_flag "$2")"
+    # 마스크 재생성: --acc 는 "어떤 **파일**을 읽을지", --remask 는 "그 k-space 에 어떤 **마스크**를
+    #   씌울지"라 축이 직교한다. 그래서 --acc all 로 볼륨 풀을 열고(160) 마스크만 이 전문가의
+    #   가속률로 만든다. val 은 load_data 가 --remask 에서 파생해 acc$1 볼륨 + 딸려온 마스크로 되돌린다.
+    local ACC_ARGS=( --acc "$1" ) RMNOTE=""
+    if [ "$REMASK" = "1" ]; then
+        ACC_ARGS=( --acc all --remask "$1" --remask-offset "$REMASK_OFFSET" )
+        RMNOTE="  [remask: 160vol → acc$1 마스크 재생성 (offset=$REMASK_OFFSET)]"
+    fi
     # --resume 과 --init-from 은 배타적이고 resume 이 우선이다(train.py). 재개면 init-from 은 무시된다.
-    echo "[② ft$1] $2  (--acc $1 --init-from shared) ${R:+[resume]}"
+    echo "[② ft$1] $2  (${ACC_ARGS[*]} --init-from shared) ${R:+[resume]}${RMNOTE}"
     echo "[② aug] ${AUG_ARGS[*]:-(off)}"
     set -x
     python train.py "${BASE_ARGS[@]}" \
         --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" \
-        --acc "$1" -e "$FT_EPOCHS" $EXTRA $R "${AUG_ARGS[@]}" \
+        "${ACC_ARGS[@]}" -e "$FT_EPOCHS" $FT_EXTRA $R "${AUG_ARGS[@]}" \
         --init-from "$SHARED_BEST" \
         -n "$2" --run-tag "pmr_moe_f${FOLD}_acc$1"
     { local st=$?; set +x; } 2>/dev/null
@@ -260,11 +316,29 @@ if [ "$SMOKE" = "1" ]; then
     echo "            ① --acc all 의 val (acc4 A · acc8 B) 에 대해 ② 는 acc4 A, ③ 은 acc8 B 여야 한다."
     echo "            어긋나면 층화가 안 먹은 것이니 본 학습을 돌리지 말 것."
     echo "        (3) merge 가 config 불일치로 거부되지 않았는가"
+    if [ "$REMASK" = "1" ]; then
+        echo "        (4) ②③ 에 '[remask] 전제 검증 통과 — N volume' 과"
+        echo "            '[remask] train 로더: accN 마스크 재생성' 두 줄이 찍혔는가."
+        echo "            (전제 검증이 실패하면 학습 시작 전에 죽는다 — 그게 정상 동작이다.)"
+        echo "        (5) ②③ 의 [K-Fold] **train** 이 160 vol (acc4 80 · acc8 80) 로 2배가 됐는가."
+        echo "            **val** 은 그대로 20 vol (한쪽 acc 만) 이어야 한다 — 늘어났으면 배선이 틀린 것이다."
+        echo "        (6) val 로더 쪽엔 '[remask] val/forward 로더: 재생성 안 함' 이 찍혀야 한다."
+    fi
 else
     echo "[저장] val loss: ../result/promptmr_moe_f${FOLD}_*/val_loss_log_pmr_moe_f${FOLD}_*.npy"
     echo "       병합본  : ../result/${NET_MOE}/checkpoints/best_model.pt"
-    echo "[판정] 정본은 채점이다 — ${NET_MOE}(MoE) 와 ${NET_SHARED}(단일) 를 각각 채점해"
-    echo "       SSIM_full·SSIM_bbox·시간 3축으로 비교할 것. val 은 계기판일 뿐이다."
+    if [ "$REMASK" = "1" ]; then
+        # ①(shared)에는 _rm 이 안 붙으므로, ④−① 델타에는 **전문가 분리 + 마스크 재생성 + 스텝 2배**가
+        #   전부 섞여 있다. 이걸 "MoE 이득"이라고 읽으면 다음 슬롯 설계가 그 위에 쌓인다.
+        echo "[판정] ⚠️ 이 런은 REMASK=1 이라 ${NET_MOE} 와 ${NET_SHARED} 의 차이가"
+        echo "       '전문가 분리 + 마스크 재생성 + (FT_CAP 없으면) 스텝 2배' **합산**이다. MoE 이득이 아니다."
+        echo "       · MoE 이득만  : promptmr_moe_f${FOLD}${SUF}(REMASK=0 병합본) 대 ${NET_SHARED}"
+        echo "       · 재생성 이득만: promptmr_moe_f${FOLD}${SUF} 대 ${NET_MOE}"
+        echo "       두 번째 비교에 쓸 promptmr_moe_f${FOLD}${SUF} 가 없으면 REMASK=0 으로 ②③④를 한 번 더 돌려야 한다(~10.6h)."
+    else
+        echo "[판정] 정본은 채점이다 — ${NET_MOE}(MoE) 와 ${NET_SHARED}(단일) 를 각각 채점해"
+        echo "       SSIM_full·SSIM_bbox·시간 3축으로 비교할 것. val 은 계기판일 뿐이다."
+    fi
 fi
 echo "=========================================================="
 exit "$STATUS"

@@ -235,7 +235,21 @@ do_pretrain() {
 do_ft() {   # $1=acc(4|8)  $2=net_name
     gpu_guard || return 2
     if [ ! -f "$SHARED_BEST" ]; then
-        echo "[STOP] 공유 사전학습 결과가 없다: $SHARED_BEST  (먼저 STAGE=pretrain)"; return 2
+        echo "[STOP] 공유 사전학습 결과가 없다: $SHARED_BEST"
+        # 이름이 안 맞아서 못 찾는 건지, 아예 없는 건지를 사람이 바로 판단할 수 있게 후보를 보여준다.
+        #   net 이름은 FOLD 와 AUG 로 갈린다(_aug 유무) — 다른 조합으로 돌린 pretrain 이 있으면 여기 뜬다.
+        local cands
+        cands="$(ls -1d ../result/*_shared*/checkpoints/best_model.pt 2>/dev/null)"
+        if [ -n "$cands" ]; then
+            echo "       이 서버에 있는 pretrain 체크포인트:"
+            echo "$cands" | sed 's|^|         |'
+            echo "       → 이름이 다르면 FOLD/AUG 를 맞춰서 다시 실행할 것 (AUG=0 이면 _aug 가 안 붙는다)."
+        else
+            echo "       이 서버엔 pretrain 체크포인트가 하나도 없다."
+        fi
+        echo "       → ①부터 돌리려면:  REMASK=$REMASK STAGE=all bash shell_scripting/$(basename "$0")"
+        echo "         (①은 재생성 없이 ~21h, 이어서 ②③이 remask 로 돈다)"
+        return 2
     fi
     overwrite_guard "$2" || return 2
     local R; R="$(resume_flag "$2")"

@@ -126,3 +126,92 @@ def test_acc_filter_no_match_raises(tmp_path):
     _make_data(tmp_path, n8=0)   # acc8 파일 없음
     with pytest.raises(ValueError):
         kfold_split(_args(tmp_path, acc="8"))
+
+
+# ---------- 마스크 재생성(--remask)과 val 필터 파생 (작은 실 h5 필요) ----------
+#   --remask 는 train 만 --acc all 로 넓히고 **val 은 그 전문가의 가속률로 되돌려야** 한다.
+#   안 되돌리면 acc4 전문가가 acc8 이 섞인 val 로 best_model 을 고른다.
+#   여기서 쓰는 h5 는 touch 가 아니라 실제 배열이다 — create_data_loaders 가 슬라이스 수를 읽고,
+#   verify_remaskable 이 마스크·k-space 를 실제로 검사하기 때문.
+
+def _make_real_data(tmp_path, n4=5, n8=5, S=2, C=1, H=8, W=32):
+    import h5py
+    from utils.data.transforms import equispaced_mask, canonical_offset
+    rng = np.random.default_rng(0)
+    for root in ("train", "val"):
+        kd = tmp_path / root / "kspace"; kd.mkdir(parents=True)
+        idd = tmp_path / root / "image"; idd.mkdir(parents=True)
+        for acc, n in ((4, n4), (8, n8)):
+            for i in range(n):
+                name = f"knee_acc{acc}_{i}.h5"
+                ks = (rng.standard_normal((S, C, H, W))
+                      + 1j * rng.standard_normal((S, C, H, W))).astype(np.complex64)
+                with h5py.File(kd / name, "w") as hf:
+                    hf.create_dataset("kspace", data=ks)
+                    hf.create_dataset("mask", data=equispaced_mask(W, acc, canonical_offset(W, acc)))
+                with h5py.File(idd / name, "w") as hf:
+                    hf.create_dataset("image_label", data=np.zeros((S, 8, 8), np.float32))
+                    hf.attrs["max"] = np.float32(1.0)
+    return tmp_path
+
+
+def _loader_args(tmp_path, acc="all", remask="off", fold=0):
+    return SimpleNamespace(
+        data_path_train=tmp_path / "train", data_path_val=tmp_path / "val",
+        k_fold=5, val_fold=fold, kfold_seed=430, acc=acc, remask=remask,
+        remask_offset="uniform", batch_size=1, input_key="kspace",
+        target_key="image_label", max_key="max", seed=430, num_workers=0)
+
+
+def _vol_ids(loader):
+    return {e[3] for e in loader.dataset.examples}
+
+
+def test_remask_widens_train_but_keeps_val_per_expert(tmp_path):
+    """--acc all --remask 4 → train 은 전체 볼륨, val 은 acc4 볼륨만."""
+    from utils.data.load_data import create_kfold_data_loaders
+    _make_real_data(tmp_path)
+
+    tr, va = create_kfold_data_loaders(_loader_args(tmp_path, acc="all", remask="4"))
+    tr_v, va_v = _vol_ids(tr), _vol_ids(va)
+
+    assert any("acc4" in v for v in tr_v) and any("acc8" in v for v in tr_v), "train 은 두 풀 다 본다"
+    assert all("acc4" in v for v in va_v), f"val 에 acc8 이 섞였다: {sorted(va_v)}"
+    assert tr_v.isdisjoint(va_v)
+
+
+def test_remask_val_matches_plain_acc_filter_run(tmp_path):
+    """--remask 로 파생한 val 집합이 --acc 4 로 그냥 돌렸을 때의 val 과 정확히 같은가.
+    같아야 과거 ft4/ft8 val 곡선과 나란히 읽을 수 있다(층화 불변식의 실사용 형태)."""
+    from utils.data.load_data import create_kfold_data_loaders
+    _make_real_data(tmp_path)
+
+    for acc in ("4", "8"):
+        _, va_rm = create_kfold_data_loaders(_loader_args(tmp_path, acc="all", remask=acc))
+        _, va_plain = create_kfold_data_loaders(_loader_args(tmp_path, acc=acc, remask="off"))
+        assert _vol_ids(va_rm) == _vol_ids(va_plain), acc
+
+
+def test_remask_train_pool_is_double_the_plain_run(tmp_path):
+    """전문가당 학습 볼륨이 정확히 2배가 되는가 (이 기능의 목적 그 자체)."""
+    from utils.data.load_data import create_kfold_data_loaders
+    _make_real_data(tmp_path)
+
+    tr_rm, _ = create_kfold_data_loaders(_loader_args(tmp_path, acc="all", remask="8"))
+    tr_plain, _ = create_kfold_data_loaders(_loader_args(tmp_path, acc="8", remask="off"))
+    assert len(_vol_ids(tr_rm)) == 2 * len(_vol_ids(tr_plain))
+    assert len(tr_rm.dataset) == 2 * len(tr_plain.dataset)
+
+
+def test_remask_train_masks_are_all_target_acc(tmp_path):
+    """train 로더가 실제로 내보내는 마스크가 전부 그 전문가의 가속률인가(라우터 기준)."""
+    import torch
+    from utils.data.load_data import create_kfold_data_loaders
+    from utils.model.moe import extract_acc_from_mask
+    _make_real_data(tmp_path)
+
+    tr, va = create_kfold_data_loaders(_loader_args(tmp_path, acc="all", remask="8"))
+    for i in range(len(tr.dataset)):
+        assert extract_acc_from_mask(tr.dataset[i][0]) == 8, i
+    for i in range(len(va.dataset)):
+        assert extract_acc_from_mask(va.dataset[i][0]) == 8, i     # val 은 원래 acc8 볼륨

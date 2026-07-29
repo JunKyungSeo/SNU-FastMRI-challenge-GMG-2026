@@ -2,7 +2,9 @@ import h5py
 import random
 import re
 import torch
-from utils.data.transforms import DataTransform, MRIAugmentor, AugmentConfig
+from utils.data.transforms import (
+    DataTransform, MRIAugmentor, AugmentConfig, equispaced_mask, canonical_offset,
+)
 from torch.utils.data import Dataset, DataLoader
 from torch.utils.data._utils.collate import default_collate
 from pathlib import Path
@@ -172,7 +174,65 @@ class SliceData(Dataset):
         return self.transform(mask, input, target, attrs, vol_id, dataslice, grappa)
 
 
-def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, volumes=None):
+def verify_remaskable(dataset):
+    """--remask 로더를 만들 때 1회. 재생성이 성립하는 두 전제를 데이터에서 직접 확인한다.
+
+      (1) 생성기 동일성 — 딸려온 마스크가 equispaced_mask(W, 파일acc, o) 로 **어떤 offset o 에서든**
+          비트 재현되는가. 재현되면 우리 생성기와 주최측 생성기가 같은 물건이라는 뜻이고,
+          그게 "우리가 만든 마스크도 채점에 나올 법한 마스크"라는 이 기능의 근거다.
+          (o 가 canonical=(W//2)%acc 와 다른 볼륨은 오류가 아니라 정보로만 센다 — 학습풀 200개는
+           전부 canonical 이었지만 leaderboard 는 무작위라, 규칙이 아니라 관측일 뿐이다.)
+      (2) full k-space — 마스크가 0인 열에 에너지가 남아 있는가(=마스크 곱 이전 저장).
+          이미 언더샘플된 파일(leaderboard 형식)을 학습에 물리면 재생성이 "없는 라인을 켜는"
+          꼴이 되어 입력이 조용히 망가진다.
+
+    어느 하나라도 깨지면 10시간짜리 학습을 시작하기 전에 죽인다. 볼륨당 mask(W,) + 코일 1개
+    슬라이스 1장만 읽으므로 160볼륨에 수 초다(슬라이스마다가 아니라 로더 구성 시 1회).
+    ⚠️ PE 양끝은 full k-space 에서도 값이 0에 가까워, 에너지 검사는 중앙 절반으로 한정한다."""
+    kfiles, seen = [], set()
+    for _, kspace_fname, _, _ in dataset.examples:
+        if kspace_fname not in seen:
+            seen.add(kspace_fname)
+            kfiles.append(kspace_fname)
+
+    bad_gen, bad_full, noncanon = [], [], 0
+    for kf in kfiles:
+        acc = _file_acc(Path(kf).name)
+        if acc is None:
+            bad_gen.append(f"{Path(kf).name}: 파일명에 accN 토큰이 없어 가속률을 못 정함")
+            continue
+        acc = int(acc)
+        with h5py.File(kf, "r") as hf:
+            mask = np.asarray(hf["mask"])
+            W = mask.shape[0]
+            S = hf["kspace"].shape[0]
+            line = np.asarray(hf["kspace"][S // 2, 0])       # 코일 1개·슬라이스 1장 (≈1.9MB)
+        m = (mask >= 1)
+        fit = next((o for o in range(acc)
+                    if np.array_equal(equispaced_mask(W, acc, o) >= 1, m)), None)
+        if fit is None:
+            bad_gen.append(f"{Path(kf).name}: W={W} acc={acc} — 어떤 offset 으로도 재현 불가")
+        elif fit != canonical_offset(W, acc):
+            noncanon += 1
+        lo, hi = W // 4, W - W // 4
+        unsampled = ~m[lo:hi]
+        if unsampled.any() and float(np.abs(line[:, lo:hi][:, unsampled]).max()) <= 0.0:
+            bad_full.append(f"{Path(kf).name}: 마스크 밖 열 에너지 0 — 이미 언더샘플된 파일")
+
+    if bad_gen or bad_full:
+        msg = ["--remask 전제 검증 실패 — 재생성한 입력이 물리적으로 틀린 물건이 된다."]
+        if bad_gen:
+            msg += [f"  [생성기 재현 불가 {len(bad_gen)}건]"] + [f"    {s}" for s in bad_gen[:10]]
+        if bad_full:
+            msg += [f"  [full k-space 아님 {len(bad_full)}건]"] + [f"    {s}" for s in bad_full[:10]]
+        raise ValueError("\n".join(msg))
+
+    print(f"[remask] 전제 검증 통과 — {len(kfiles)} volume "
+          f"(생성기 비트 재현 · full k-space" + (f" · non-canonical offset {noncanon}개)" if noncanon else ")"))
+
+
+def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, volumes=None,
+                        acc_override=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -222,6 +282,33 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     #     (forward는 target 없어 DataTransform이 내부적으로 미포함) → 소비부 train_epoch/validate 확장.
     fg_loss = getattr(args, "fg_loss", False)
 
+    # ---- 마스크 재생성 (기본 off = 기존과 비트 동일) ----
+    #   --acc 는 "어떤 **파일**을 읽을지", --remask 는 "그 k-space 에 어떤 **마스크**를 씌울지"라
+    #   축이 직교한다. 그래서 ft 는 --acc all --remask 4|8 로 준다: 볼륨 풀은 160개 전부,
+    #   마스크는 그 전문가의 가속률. 필터를 좁히면 절반만 학습하므로 오조합을 막는다.
+    #   val/forward 로더에는 절대 안 붙인다 — 검증은 딸려온 마스크(=자연 분포)로 해야
+    #   과거 런과 비교되고 채점 분포와도 맞는다.
+    remask = str(getattr(args, "remask", "off"))
+    remask_acc = None if remask in ("off", "") else int(remask)
+    if remask_acc is not None and not is_train and not isforward and acc_override is None:
+        # **val 로더만** 그 전문가의 acc 볼륨으로 되돌린다(재생성은 안 한다).
+        #   호출부가 안 정해줬으면 여기서 --remask 로부터 파생한다 — 고정분할 경로(비-K-Fold)에서
+        #   빠뜨리면 acc4 전문가가 acc8 섞인 val 로 best_model 을 고르게 된다.
+        #   forward(추론)는 제외한다: 채점은 주어진 파일을 전부 복원해야 하므로 여기서 걸러버리면
+        #   볼륨이 통째로 빠진다. 지금은 reconstruct.py 에 --remask 플래그가 없어 도달 불가지만,
+        #   나중에 체크포인트 args 를 그대로 물려주는 경로가 생기면 조용히 터질 자리다.
+        acc_override = remask
+    if remask_acc is not None and is_train:
+        if _norm_acc(getattr(args, "acc", "all")) is not None:
+            raise ValueError(
+                f"--remask {remask} 는 --acc all 과만 쓴다 (지금 --acc={getattr(args, 'acc', 'all')}). "
+                "필터를 좁히면 볼륨 풀이 절반으로 줄어 이 기능의 목적(80→160 volume)이 사라진다.")
+        if return_grappa:
+            raise ValueError(
+                "--remask 와 GRAPPA 는 배타적이다. image_grappa/image_input 은 **딸려온 마스크** "
+                "기준 산출물이라, 재생성한 입력과 짝지으면 제거한 라인의 정보가 옆문으로 새어 "
+                "실제 추론엔 없는 지름길을 학습한다.")
+
     data_storage = SliceData(
         root=data_path,
         transform=DataTransform(
@@ -231,13 +318,23 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
             norm_percentile=norm_percentile, return_grappa=return_grappa,
             coil_compress=coil_compress, n_virtual_coils=n_virtual_coils,
             return_fg_mask=fg_loss,
+            remask_acc=(remask_acc if is_train else None),
+            remask_offset=getattr(args, "remask_offset", "uniform"),
+            remask_seed=getattr(args, "seed", 430),
         ),
         input_key=args.input_key,
         target_key=target_key_,
         forward=isforward,
         volumes=volumes,
-        acc=getattr(args, "acc", "all"),
+        acc=(acc_override if acc_override is not None else getattr(args, "acc", "all")),
     )
+
+    if remask_acc is not None and is_train:
+        verify_remaskable(data_storage)
+        print(f"[remask] train 로더: acc{remask_acc} 마스크 재생성 "
+              f"(offset={getattr(args, 'remask_offset', 'uniform')}) · 볼륨 풀 --acc all")
+    elif remask_acc is not None:
+        print(f"[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터={acc_override})")
 
     # 재현성: 증강/결정적 로더를 쓸 때 generator·worker seed 부착.
     # shuffle=True(train)에도 항상 부착한다 — iter 단위 재개가 "epoch E의 순열"을 재현할 수 있어야
@@ -361,18 +458,34 @@ def create_kfold_data_loaders(args):
     train_ids, val_ids = kfold_split(args)
     roots = kfold_roots(args)
 
+    # --remask 를 쓰면 train 은 --acc all(160 vol) 로 넓히지만, **val 은 그 전문가의 가속률로 되돌린다.**
+    #   안 되돌리면 acc4 전문가가 acc8 이 섞인 val 로 best_model 을 고르게 된다.
+    #   층화 불변식(kfold_split 이 fold 를 조립한 **뒤** 필터) 덕분에 여기서 거른 val 집합은
+    #   --acc 4 로 돌렸을 때의 val_ids 와 정확히 같다 → 과거 ft4/ft8 val 곡선과 비교 가능.
+    remask = str(getattr(args, "remask", "off"))
+    val_acc = None if remask in ("off", "") else remask
+
     train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, volumes=train_ids)
-    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, volumes=val_ids)
+    val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, volumes=val_ids,
+                                     acc_override=val_acc)
+
+    def _vols(loader):
+        """로그를 분할집합이 아니라 **로더의 실제 구성**에서 뽑는다 — acc_override 로 val 이
+        걸러지면 train_ids/val_ids 는 더 이상 로더 내용과 같지 않다."""
+        return {e[3] for e in loader.dataset.examples}
 
     def _n(ids, tok):
         return sum(1 for v in ids if tok in v)
 
+    tr_v, va_v = _vols(train_loader), _vols(val_loader)
     acc = getattr(args, "acc", "all")
     print(f"[K-Fold] K={args.k_fold} · val-fold={args.val_fold} · seed={getattr(args, 'kfold_seed', 430)} "
-          f"· 분할 단위=volume · acc={acc} (전체 {len(train_ids) + len(val_ids)} volume)")
-    print(f"[K-Fold] train {len(train_ids):3d} vol (acc4 {_n(train_ids, 'acc4')} · acc8 {_n(train_ids, 'acc8')}) "
+          f"· 분할 단위=volume · acc={acc}"
+          + (f" · remask={remask}(val 은 acc{val_acc})" if val_acc else "")
+          + f" (전체 {len(train_ids) + len(val_ids)} volume)")
+    print(f"[K-Fold] train {len(tr_v):3d} vol (acc4 {_n(tr_v, 'acc4')} · acc8 {_n(tr_v, 'acc8')}) "
           f"· {len(train_loader.dataset)} slice")
-    print(f"[K-Fold] val   {len(val_ids):3d} vol (acc4 {_n(val_ids, 'acc4')} · acc8 {_n(val_ids, 'acc8')}) "
+    print(f"[K-Fold] val   {len(va_v):3d} vol (acc4 {_n(va_v, 'acc4')} · acc8 {_n(va_v, 'acc8')}) "
           f"· {len(val_loader.dataset)} slice")
 
     return train_loader, val_loader

@@ -207,9 +207,13 @@ def check_resume_compat(saved_args, args):
     # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8,
-                      "k_fold": 0, "val_fold": 0, "kfold_seed": 430}
+                      "k_fold": 0, "val_fold": 0, "kfold_seed": 430,
+                      "remask": "off", "remask_offset": "uniform"}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
-              "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold"]
+              "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold",
+              "remask"]
+    # ⚠️ 위 필드명은 argparse dest 와 **글자 그대로 같아야** 한다. 어긋나면 getattr 이 양쪽 다
+    #    ABSENT_DEFAULT 를 집어 항상 일치 → 가드가 영구 no-op 이 된다(조용히 학습셋이 바뀐 채 재개).
     # K-Fold에서 분할이 달라지면 train/val 경계가 바뀐다 → 재개하는 순간 이전 val 볼륨으로 학습하게 된다
     # (조용히 새는 leakage라 로그만 봐선 못 잡는다). 분할에 영향을 주는 값은 k-fold일 때만 확인한다.
     if int(getattr(saved_args, "k_fold", 0)) > 0 or int(getattr(args, "k_fold", 0)) > 0:
@@ -220,6 +224,10 @@ def check_resume_compat(saved_args, args):
     # 죽은 값이 다르다고 막으면 헛돈다(코일 전부 사용이 기본이 된 뒤로는 이 경우가 정상 경로다).
     if getattr(saved_args, "coil_compress", False) or getattr(args, "coil_compress", False):
         fields.append("n_virtual_coils")
+    # remask_offset·seed 는 재생성이 켜져 있을 때만 입력을 바꾼다(off 끼리 재개는 막지 않는다).
+    if (str(getattr(saved_args, "remask", "off")) != "off"
+            or str(getattr(args, "remask", "off")) != "off"):
+        fields += ["remask_offset", "seed"]
     for f in fields:
         fallback = ABSENT_DEFAULT.get(f, None)
         s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)

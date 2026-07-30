@@ -1,9 +1,0 @@
-[AUTO 2026-07-18 04:06:24] start. train_log=shell_scripting/logs/shell4_20260718_012551.log  best=/root/result/sdum_run13/checkpoints/best_model.pt  (run13 이후 다운스트림: 실행 안 함)
-[AUTO 2026-07-18 04:06:24] waiting for epoch0 completion ...
-[AUTO 2026-07-18 06:54:24] epoch0 DONE.
-[AUTO]   -rw-r--r-- 1 root root 90619615 Jul 18 06:54 /root/result/sdum_run13/checkpoints/best_model.pt
-[AUTO]   -rw-r--r-- 1 root root 90619615 Jul 18 06:54 /root/result/sdum_run13/checkpoints/model.pt
-[AUTO 2026-07-18 06:54:30] best_model.pt size 90619615 -> 90619615
-[AUTO 2026-07-18 06:54:30] SIGTERM run13 training (train.py --model sdum --num-cascades 4 --channels 16 32)
-[AUTO 2026-07-18 06:54:30] run13 training stopped.
-[AUTO 2026-07-18 06:54:30] waiting VRAM free before recon ...

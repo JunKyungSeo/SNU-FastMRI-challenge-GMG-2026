@@ -31,10 +31,14 @@ LEADERBOARD="${LEADERBOARD:-/root/Data/leaderboard}"
 
 # ===== [이번 run] 여기만 채운다 =====
 FOLD="${FOLD:-2}"
-# shell26 가 AUG=1(기본)이면 net 이름에 _aug 를 붙인다 — 채점 대상도 같은 규칙으로 맞춘다.
+# shell26 의 net 이름 규칙을 그대로 따라간다 — 하나라도 어긋나면 여기서 조용히 SKIP 만 하고 끝난다.
+#   AUG=1(기본) → _aug, REMASK=1 → 병합본에 _rm 이 더 붙는다(전문가만 재생성하므로 ①엔 안 붙는다).
 AUG="${AUG:-1}"; ASUF=""; [ "$AUG" = "1" ] && ASUF="_aug"
+REMASK="${REMASK:-0}"; RSUF=""; [ "$REMASK" = "1" ] && RSUF="_rm"
+# 단일 baseline = ②③ 의 초기값이 된 체크포인트. shell26 에 INIT_NET 을 줬다면 여기도 같은 값을 준다.
+INIT_NET="${INIT_NET:-promptmr_moe_f${FOLD}_shared${ASUF}}"
 # MoE 먼저, 단일 baseline 다음 — 둘 다 채점해야 MoE 가 이득인지 판정된다(shell26 ⑤ 와 동일).
-NETS="${NETS:-promptmr_moe_f${FOLD}${ASUF} promptmr_moe_f${FOLD}_shared${ASUF}}"
+NETS="${NETS:-promptmr_moe_f${FOLD}${ASUF}${RSUF} ${INIT_NET}}"
 
 # --- 로그 ---
 SLOT="$(basename "$0" .sh)"
@@ -92,7 +96,7 @@ echo "=========================================================="
 echo "[DONE ] $SLOT (fold $FOLD)   $(date '+%F %T')   exit=$STATUS"
 echo "[저장] 점수 사본: $OUT_DIR/recon_eval_*_${TS}.txt   (+ 재구성 h5: ../result/<net>/reconstructions_leaderboard/)"
 echo "[공유] git add $OUT_DIR/recon_eval_*_${TS}.txt 커밋·푸시하면 전 환경에서 점수가 보인다."
-echo "[비교] MoE(promptmr_moe_f${FOLD}) vs 단일(promptmr_moe_f${FOLD}_shared) 를 full·bbox·시간 3축으로."
+echo "[비교] MoE(promptmr_moe_f${FOLD}${ASUF}${RSUF}) vs 단일(${INIT_NET}) 를 full·bbox·시간 3축으로."
 echo "       MoE 는 모델 2개라 디스크·로딩이 크다 — SSIM 이득이 시간/크기 손해를 넘는지까지 봐야 순위 판단이 된다."
 echo "=========================================================="
 

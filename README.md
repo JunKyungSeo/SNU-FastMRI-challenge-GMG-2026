@@ -30,6 +30,8 @@ MoE를 가속률로 쪼개면 acc4가 0.9497 / 0.9505, acc8이 0.9145 / 0.9094�
 
 따로 돌린 K-fold f2 + flip 증강 run은 0.9303 / 0.9279 / 716.9ms입니다. 점수는 조금 낮은데 17ms 빠릅니다.
 
+아래 "바꾼 것" 일곱 가지가 이 표에 다 들어간 건 아닙니다. 표의 두 모델은 1~4번(백본·손실·readout crop·MoE)까지만 쓴 상태입니다. K-fold와 증강은 방금 말한 f2 run 쪽이고, remask는 그보다 뒤에 붙었습니다.
+
 점수 사본은 [shell_scripting/results/](shell_scripting/results/), 실행 로그는 [shell_scripting/logs/](shell_scripting/logs/)에 있습니다.
 
 ## 베이스라인에서 바꾼 것
@@ -62,7 +64,9 @@ readout 방향은 완전샘플이라 잘라도 정보가 안 없어집니다. �
 
 ### 5. 마스크를 다시 씌워 학습 볼륨 2배
 
-학습 h5에는 full k-space가 그대로 들어 있습니다. 대회 마스크 생성기를 재현해 같은 볼륨에 반대 가속률 마스크를 새로 씌웠습니다([`equispaced_mask()`](utils/data/transforms.py), `--remask`). acc4 볼륨을 acc8 학습에 쓸 수 있으니 전문가당 볼륨이 80개에서 160개가 됩니다. center_fraction 0.08로 만든 마스크가 원본과 bit 단위로 같은 걸 확인하고 넣었습니다.
+학습 h5에는 full k-space가 그대로 들어 있습니다. 대회 마스크 생성기를 재현해 같은 볼륨에 반대 가속률 마스크를 새로 씌웠습니다([`equispaced_mask()`](utils/data/transforms.py), `--remask`). acc4 볼륨을 acc8 학습에 쓸 수 있으니 전문가당 볼륨이 80개에서 160개가 됩니다. center_fraction 0.08로 만든 마스크가 원본과 bit 단위로 같은 걸 확인하고 넣었습니다. 로더를 만들 때 [`verify_remaskable()`](utils/data/load_data.py)이 학습 볼륨 전수로 두 전제를 다시 재고, 어긋나면 학습을 시작하지 않습니다.
+
+07-29에 들어간 기능이라 위 표의 07-26 점수에는 없습니다. 켜고 돌린 런은 아직 채점 전이고, 근거는 offset 분포 대조와 데이터량이지 A/B 결과가 아닙니다.
 
 ### 6. 층화 K-fold
 

@@ -252,3 +252,6 @@ Epoch = [  4/  5] Iter = [2400/4358] Loss = 0.07698 Time = 468.9868s
 Epoch = [  4/  5] Iter = [2500/4358] Loss = 0.04745 Time = 476.0822s
 Epoch = [  4/  5] Iter = [2600/4358] Loss = 0.0541 Time = 469.4325s
 Epoch = [  4/  5] Iter = [2700/4358] Loss = 0.0677 Time = 469.6816s
+Epoch = [  4/  5] Iter = [2800/4358] Loss = 0.03621 Time = 466.6828s
+Epoch = [  4/  5] Iter = [2900/4358] Loss = 0.03807 Time = 469.7030s
+Epoch = [  4/  5] Iter = [3000/4358] Loss = 0.1122 Time = 475.4077s

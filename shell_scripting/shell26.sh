@@ -183,10 +183,17 @@ echo "[BR   ] $(git branch --show-current 2>/dev/null) ($(git rev-parse --short 
 echo "[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=$KFOLD_SEED · pretrain ${PRE_EPOCHS}ep · ft ${FT_EPOCHS}ep"
 if [ "$REMASK" = "1" ]; then
     echo "[REMASK] ON (offset=$REMASK_OFFSET) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume."
-    echo "         ① 은 불변이다. init 소스: $INIT_NET$([ \"$INIT_NET\" != \"$NET_SHARED\" ] && echo \" (다른 슬롯 재사용)\"). ft 이름에 _rm 이 붙는다."
+    echo "         ① 은 불변이다. ft 이름에 _rm 이 붙는다."
     echo "         ft 시간 ≈ 5.3h → 10.3h. FT_EXTRA=[${FT_EXTRA}] ${FT_EXTRA:+(스텝 고정 arm)}"
 else
     echo "[REMASK] OFF (REMASK=1 로 켬) — ②③ 이 딸려온 마스크·acc 필터 그대로."
+fi
+# ①이 어느 체크포인트인지는 REMASK 와 무관하게 항상 찍는다 — INIT_NET 을 빠뜨린 채 돌리면
+#   ②③ 이 "공유 사전학습 결과가 없다"로 멈추는데, 그때 원인을 로그에서 바로 읽으려면 이 줄이 필요하다.
+if [ "$INIT_NET" != "$NET_SHARED" ]; then
+    echo "[INIT ] ① 소스 = $INIT_NET (다른 슬롯 재사용 — 이 슬롯의 $NET_SHARED 는 안 쓴다)"
+else
+    echo "[INIT ] ① 소스 = $INIT_NET (이 슬롯 자체 pretrain. 남의 걸 쓰려면 INIT_NET=<net 이름>)"
 fi
 echo "=========================================================="
 
@@ -285,12 +292,17 @@ do_ft() {   # $1=acc(4|8)  $2=net_name
         echo "[STOP] 공유 사전학습 결과가 없다: $SHARED_BEST"
         # 이름이 안 맞아서 못 찾는 건지, 아예 없는 건지를 사람이 바로 판단할 수 있게 후보를 보여준다.
         #   net 이름은 FOLD 와 AUG 로 갈린다(_aug 유무) — 다른 조합으로 돌린 pretrain 이 있으면 여기 뜬다.
+        #   *_shared* 만 훑으면 다른 슬롯의 --acc all 10ep 런(promptmr_kfold_f<FOLD>_*)이 안 보인다.
+        #   그게 INIT_NET 으로 쓸 수 있는 유일한 후보인 경우가 많으므로 같이 보여준다.
         local cands
-        cands="$(ls -1d ../result/*_shared*/checkpoints/best_model.pt 2>/dev/null)"
+        cands="$(ls -1d ../result/*_shared*/checkpoints/best_model.pt \
+                        ../result/promptmr_kfold_f${FOLD}*/checkpoints/best_model.pt 2>/dev/null \
+                 | grep -v _smoke)"   # 스모크(120 iter)는 후보가 아니다 — 분할은 맞아서 가드를 통과해버린다
         if [ -n "$cands" ]; then
-            echo "       이 서버에 있는 pretrain 체크포인트:"
+            echo "       이 서버에 있는 ① 후보 체크포인트:"
             echo "$cands" | sed 's|^|         |'
-            echo "       → 이름이 다르면 FOLD/AUG 를 맞춰서 다시 실행할 것 (AUG=0 이면 _aug 가 안 붙는다)."
+            echo "       → 이름이 다르면 FOLD/AUG 를 맞추거나, 위 후보를 INIT_NET=<net 이름> 으로 지정할 것"
+            echo "         (AUG=0 이면 _aug 가 안 붙는다. 분할이 어긋나면 init_compat_guard 가 막는다)."
         else
             echo "       이 서버엔 pretrain 체크포인트가 하나도 없다."
         fi
@@ -338,8 +350,8 @@ do_merge() {
     if [ ! -d "$LEADERBOARD/acc4" ] || [ ! -d "$LEADERBOARD/acc8" ]; then
         echo "[⑤ score] leaderboard 없음($LEADERBOARD) — 채점 건너뜀."
         echo "          채점은 데이터가 있는 환경에서: 아래 두 net 을 각각 돌려 3축 비교."
-        echo "            python recon_eval.py -n $NET_MOE    -p <leaderboard>   # MoE"
-        echo "            python recon_eval.py -n $NET_SHARED -p <leaderboard>   # 단일 baseline"
+        echo "            python recon_eval.py -n $NET_MOE   -p <leaderboard>   # MoE"
+        echo "            python recon_eval.py -n $INIT_NET  -p <leaderboard>   # 단일 baseline"
         return 0
     fi
     gpu_guard || return 2
@@ -350,9 +362,12 @@ do_merge() {
         | tee "$OUT_DIR/recon_eval_${NET_MOE}_${TS}.txt"
     { local st=${PIPESTATUS[0]}; set +x; } 2>/dev/null
     [ "$st" -ne 0 ] && { echo "[⑤ score] MoE 채점 실패 exit=$st"; return $st; }
+    # 단일 baseline 은 **실제로 ②③의 초기값이 된 체크포인트**($INIT_NET)여야 한다.
+    #   NET_SHARED 로 박아두면 INIT_NET 으로 남의 pretrain 을 빌려 쓴 런에서 없는 net 을 채점하려다 죽는다.
+    #   이미 채점해둔 net 이면 shell_scripting/results/ 에 사본이 있으니 이 단계를 건너뛰어도 된다.
     set -x
-    python -u recon_eval.py -n "$NET_SHARED" -p "$LEADERBOARD" \
-        | tee "$OUT_DIR/recon_eval_${NET_SHARED}_${TS}.txt"
+    python -u recon_eval.py -n "$INIT_NET" -p "$LEADERBOARD" \
+        | tee "$OUT_DIR/recon_eval_${INIT_NET}_${TS}.txt"
     { st=${PIPESTATUS[0]}; set +x; } 2>/dev/null
     echo "[⑤ score] exit=$st  점수 사본: $OUT_DIR/ (git add 해서 공유)"
     return $st

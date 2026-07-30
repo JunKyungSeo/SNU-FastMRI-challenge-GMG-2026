@@ -1,0 +1,10 @@
+==========================================================
+[START] shell20  STAGE=all  2026-07-30 06:45:34
+[CWD  ] /root/FastMRI_SNU_2026_GMG   [DATA] /root/Data   [LOG] shell_scripting/logs/shell20_all_20260730_064534.log
+==========================================================
+[① pretrain] promptmr_moe_shared (전체 데이터, --acc all)
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --acc all -l 2e-4 -e 10 -n promptmr_moe_shared --run-tag moe_shared -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... promptmr_moe_shared ...............
+Epoch = [  0/ 10] Iter = [   0/4651] Loss = 0.3341 Time = 5.7162s
+Epoch = [  0/ 10] Iter = [ 100/4651] Loss = 0.09914 Time = 462.3946s

@@ -1,0 +1,88 @@
+==========================================================
+[START] shell26 (fold 2 / 5)  STAGE=ft8  SMOKE=0  2026-07-30 08:44:48
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell26_f2_ft8_20260730_084448.log
+[BR   ] jkMRplus (42341cb)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+[REMASK] ON (offset=uniform) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume.
+         ① 은 불변이다. ft 이름에 _rm 이 붙는다.
+         ft 시간 ≈ 5.3h → 10.3h. FT_EXTRA=[] 
+[INIT ] ① 소스 = promptmr_kfold_f2_aug (다른 슬롯 재사용 — 이 슬롯의 promptmr_moe_f2_shared_aug 는 안 쓴다)
+==========================================================
+[GPU  ] used=2MiB
+[init ] 소스 config: model=promptmr nc=10 nf=48 sens=24 nh=3 readout_crop=True coil_compress=False | k-fold=5 fold=2 seed=430 acc=all epochs=10 aug_on=True
+[init ] 분할 일치 — 같은 hold-out 이다.
+[② ft8] promptmr_moe_f2_acc8_aug_rm  (--acc all --remask 8 --remask-offset uniform --init-from shared) [resume]  [remask: 160vol → acc8 마스크 재생성 (offset=uniform)]
+[② aug] --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all --remask 8 --remask-offset uniform -e 5 --resume --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 --init-from ../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt -n promptmr_moe_f2_acc8_aug_rm --run-tag pmr_moe_f2_acc8
+Current cuda device:  0
+[resume] 후보 {'model.pt': (4, 0), 'latest.pt': (4, 3000)} → latest.pt 선택
+[resume] start_epoch=4 start_iter=3000 best_val=0.0968
+[remask] 전제 검증 통과 — 160 volume (생성기 비트 재현 · full k-space)
+[remask] train 로더: acc8 마스크 재생성 (offset=uniform) · 볼륨 풀 --acc all
+[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터=8)
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all · remask=8(val 은 acc8) (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 4 ............... promptmr_moe_f2_acc8_aug_rm ...............
+[aug] epoch=4 p_flip=0.5000
+[resume] epoch 4: iter 0~2999 건너뛰는 중 (가중치는 iter 3000 시점 것) ...
+[resume] skip 100/3000 (8s)
+[resume] skip 200/3000 (16s)
+[resume] skip 300/3000 (23s)
+[resume] skip 400/3000 (30s)
+[resume] skip 500/3000 (37s)
+[resume] skip 600/3000 (45s)
+[resume] skip 700/3000 (52s)
+[resume] skip 800/3000 (59s)
+[resume] skip 900/3000 (66s)
+[resume] skip 1000/3000 (73s)
+[resume] skip 1100/3000 (81s)
+[resume] skip 1200/3000 (88s)
+[resume] skip 1300/3000 (96s)
+[resume] skip 1400/3000 (103s)
+[resume] skip 1500/3000 (110s)
+[resume] skip 1600/3000 (118s)
+[resume] skip 1700/3000 (125s)
+[resume] skip 1800/3000 (132s)
+[resume] skip 1900/3000 (139s)
+[resume] skip 2000/3000 (147s)
+[resume] skip 2100/3000 (154s)
+[resume] skip 2200/3000 (161s)
+[resume] skip 2300/3000 (168s)
+[resume] skip 2400/3000 (176s)
+[resume] skip 2500/3000 (183s)
+[resume] skip 2600/3000 (191s)
+[resume] skip 2700/3000 (198s)
+[resume] skip 2800/3000 (205s)
+[resume] skip 2900/3000 (213s)
+[resume] skip 3000/3000 (220s)
+[resume] 건너뛰기 완료 (220s) → iter 3000부터 학습 재개
+Epoch = [  4/  5] Iter = [3000/4358] Loss = 0.1122 Time = 4.9375s
+Epoch = [  4/  5] Iter = [3100/4358] Loss = 0.07499 Time = 455.6717s
+Epoch = [  4/  5] Iter = [3200/4358] Loss = 0.1137 Time = 461.3482s
+Epoch = [  4/  5] Iter = [3300/4358] Loss = 0.1464 Time = 462.5025s
+Epoch = [  4/  5] Iter = [3400/4358] Loss = 0.0481 Time = 461.7886s
+Epoch = [  4/  5] Iter = [3500/4358] Loss = 0.1069 Time = 466.2449s
+Epoch = [  4/  5] Iter = [3600/4358] Loss = 0.08253 Time = 461.2453s
+Epoch = [  4/  5] Iter = [3700/4358] Loss = 0.07314 Time = 460.7114s
+Epoch = [  4/  5] Iter = [3800/4358] Loss = 0.04239 Time = 460.9419s
+Epoch = [  4/  5] Iter = [3900/4358] Loss = 0.1224 Time = 461.9860s
+Epoch = [  4/  5] Iter = [4000/4358] Loss = 0.05386 Time = 465.4867s
+Epoch = [  4/  5] Iter = [4100/4358] Loss = 0.05678 Time = 461.8035s
+Epoch = [  4/  5] Iter = [4200/4358] Loss = 0.0333 Time = 461.1884s
+Epoch = [  4/  5] Iter = [4300/4358] Loss = 0.1135 Time = 460.0464s
+[mem] epoch 4 peak allocated = 3.32GB / reserved = 4.78GB
+loss file saved! ../result/promptmr_moe_f2_acc8_aug_rm/val_loss_log_pmr_moe_f2_acc8
+Epoch = [   4/   5] TrainLoss = 0.07296 ValLoss = 0.09685 TrainTime = 6488.5896s ValTime = 343.7057s
+[② ft8] exit=0
+==========================================================
+[DONE ] shell26 (fold 2)  STAGE=ft8  2026-07-30 10:39:01  exit=0
+[저장] val loss: ../result/promptmr_moe_f2_*/val_loss_log_pmr_moe_f2_*.npy
+       병합본  : ../result/promptmr_moe_f2_aug_rm/checkpoints/best_model.pt
+[판정] ⚠️ 이 런은 REMASK=1 이라 promptmr_moe_f2_aug_rm 와 promptmr_kfold_f2_aug 의 차이가
+       '전문가 분리 + 마스크 재생성 + (FT_CAP 없으면) 스텝 2배' **합산**이다. MoE 이득이 아니다.
+       · MoE 이득만  : promptmr_moe_f2_aug(REMASK=0 병합본) 대 promptmr_kfold_f2_aug
+       · 재생성 이득만: promptmr_moe_f2_aug 대 promptmr_moe_f2_aug_rm
+       두 번째 비교에 쓸 promptmr_moe_f2_aug 가 없으면 REMASK=0 으로 ②③④를 한 번 더 돌려야 한다(~10.6h).
+==========================================================

@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# ============================================================
+# GPU 작업 큐 슬롯 — 증강 A/B 실험, 증강 ON arm (promptmr_kfold_f2_aug)   [shell22.sh]
+#
+#   [실험 목적] 데이터 증강(좌우 flip)이 val loss 과적합 구간을 늦추는지 보는 A/B 실험이다.
+#     ⚠️ (2026-07-28) mask thinning 이 코드에서 제거되어 증강 = 좌우 flip 하나뿐이다.
+#        따라서 이 A/B가 재는 것도 "flip 의 순효과" 하나다(strategy/augmentation.md §0).
+#     - OFF arm = 이미 완료된 shell21.sh 런(net_name=promptmr_kfold_f${FOLD}). 여기서 다시
+#       돌리지 않는다 — 21시간짜리 런을 또 태울 이유가 없다.
+#       ⚠️ 이 런의 완주·과적합 여부는 repo에 기록 없음 — 재사용 전 config 대조 필수.
+#       ⚠️ (2026-07-26) kfold_split이 acc 층화로 교체되어 지금 코드로 ON arm을 돌리면
+#          OFF arm(교체 전 파티션의 f2)과 hold-out이 달라진다 — 이대로 비교하면 A/B 무효.
+#          이 A/B를 살리려면 OFF arm(baseline)을 층화 파티션에서 재학습한 뒤 진행할 것.
+#     - ON  arm = 이 슬롯(shell22.sh). train.py 호출은 shell21.sh와 **증강 인자 4개와
+#       -n/--run-tag(NET/TAG) 이름만 다르다.** FOLD·K_FOLD·KFOLD_SEED·num-cascades·n-feat0·
+#       sens-n-feat0·n-history·lr·fg-loss·area-weight·grad-clip·accum-steps·데이터 경로는
+#       baseline과 완전히 동일하게 유지한다 — 변경점을 1개(증강 유무)로 좁혀야 A/B가
+#       과학적으로 의미가 있다.
+#
+#   [판정 방법] ON arm 학습 후 baseline과 비교할 것:
+#     ① best-epoch val loss 값 자체(더 낮으면 증강이 도움) — val_loss_log_pmr_kf_f${FOLD}_aug.npy
+#     ② val loss가 꺾이는(과적합으로 도는) epoch 인덱스가 baseline보다 뒤로 밀렸는가
+#        (증강이 과적합 시점을 늦추는 게 이 실험의 핵심 가설)
+#     ③ 두 로그를 나란히 그려서 곡선 모양 비교(초반 수렴 속도가 크게 나빠지지 않았는가)
+#     ※ recon_eval(리더보드 채점)은 여기서 하지 않는다 — leaderboard 데이터가 있는 다른
+#       환경에서 best_model.pt를 옮겨 나중에 돌린다(GPU 시간·디스크 절약, shell21.sh와 동일 방침).
+#
+#   [스케줄] constant 0.5 · delay 0 (2026-07-29) — 첫 epoch부터 끝까지 매 샘플 절반을 뒤집는다.
+#     예전엔 exp 램프 + AUG_DELAY(= baseline 최저 epoch − 1)를 사람이 넣어야 했다. 그 램프는
+#     MRAugment가 회전·스케일의 보간 아티팩트 때문에 두는 장치인데, 남은 flip은 closed form이라
+#     픽셀 정확하고 결과도 물리적으로 유효한 획득이라 미룰 이유가 없다. 램프를 쓰면 런 평균
+#     노출이 28%로 깎여서(exp·D=3·T=10 적분) 같은 21시간에 증강을 절반밖에 안 쓴다.
+#
+#   ⚠️ f1(promptmr_kfold_f1)은 병합 전 '이름 그룹' 분할로 학습되어 지금(volume 단위) 분할과
+#      hold-out이 다르다. f1과는 val loss를 나란히 비교하지 말 것 — f2 이후 슬롯끼리만
+#      (즉 이 ON arm은 f2 이후의 baseline과만) 비교 가능하다. shell21.sh 하단 주석과 동일 취지.
+#
+# 실행:
+#   SMOKE=1 bash shell_scripting/shell22.sh              # 120 iter — 먼저 이것. p>0 확인 전엔 본 학습 금지.
+#   bash shell_scripting/shell22.sh                      # 본 학습 10 epoch (baseline 기준 ~21시간)
+#   FOLD=3 bash shell_scripting/shell22.sh               # 다른 fold를 돌릴 때
+#   FORCE=1 ...                                          # 기존 결과 폴더를 덮어쓸 때만 (기본은 거부)
+# ============================================================
+set -uo pipefail
+export PYTHONUNBUFFERED=1
+
+# --- repo 루트로 이동 ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR/.." || exit 1
+
+# --- K-Fold 설정 (train.py --kfold-seed 기본값 430과 맞출 것 — baseline과 동일해야 한다) ---
+FOLD="${FOLD:-2}"
+K_FOLD="${K_FOLD:-5}"
+KFOLD_SEED="${KFOLD_SEED:-430}"
+
+# --- 로그 파일 ---
+SLOT="$(basename "$0" .sh)"
+TS="$(date +%Y%m%d_%H%M%S)"
+LOG_DIR="shell_scripting/logs"
+mkdir -p "$LOG_DIR"
+LOG="$LOG_DIR/${SLOT}_f${FOLD}_${TS}.log"
+exec > >(tee -a "$LOG") 2>&1
+
+SMOKE="${SMOKE:-0}"
+if [ "$SMOKE" = "1" ]; then
+    NET="promptmr_kfold_f${FOLD}_aug_smoke"; TAG="pmr_kf_f${FOLD}_aug_smoke"; EXTRA="--max-iters 120"; EPOCHS=1
+else
+    NET="promptmr_kfold_f${FOLD}_aug";       TAG="pmr_kf_f${FOLD}_aug";       EXTRA="";                EPOCHS=10
+fi
+# 스케줄은 스모크·본 학습이 같다(constant 0.5 · delay 0). 예전엔 exp 램프라 1-epoch 스모크에서
+#   p(epoch=0)=0 이 나와 증강이 0회 걸린 채 "성공"하는 함정이 있었는데, constant 는 epoch 0 부터
+#   p=0.5 라 스모크가 배선을 실제로 검증한다.
+AUG_SCHEDULE="constant"; AUG_DELAY=0
+
+echo "=========================================================="
+echo "[START] $SLOT (fold $FOLD / $K_FOLD)   $(date '+%F %T')   SMOKE=$SMOKE  NET=$NET"
+echo "[CWD  ] $(pwd)"
+echo "[LOG  ] $LOG"
+echo "[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=$K_FOLD · fold=$FOLD · seed=$KFOLD_SEED · ${EPOCHS} epoch"
+echo "[AUG  ] 좌우 flip · schedule=$AUG_SCHEDULE delay=$AUG_DELAY max-prob=0.5"
+echo "=========================================================="
+
+# --- 가드: GPU 비었는지 (used < 500MiB) ---
+USED=$(nvidia-smi --query-gpu=memory.used --format=csv,noheader,nounits 2>/dev/null | head -1)
+echo "[GPU  ] used=${USED}MiB"
+if [ -n "$USED" ] && [ "$USED" -ge 500 ]; then
+    echo "[STOP] GPU가 사용 중(${USED}MiB)이다. 실학습은 GPU가 빈 상태에서 실행할 것."
+    exit 2
+fi
+
+# --- cv2 보장 (--fg-loss 의 foreground mask가 cv2 import) ---
+python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
+
+# --- 재개/덮어쓰기 판단: 체크포인트 있으면 이어학습(--resume 자동), FORCE=1 은 처음부터 덮어쓰기 ---
+#   ⚠️ train.py 에 --resume 을 항상 박으면 첫 실행이 FileNotFoundError 로 죽는다(load_resume_checkpoint).
+#      그래서 체크포인트 유무로 RESUME 을 정한다(shell24 와 동일 방침). 예전엔 여기 guard 가
+#      model.pt 있으면 무조건 STOP 이라, --resume 을 넣어도 재개가 막혀 있었다.
+RESUME=""
+if [ -e "../result/$NET/checkpoints/model.pt" ] || [ -e "../result/$NET/checkpoints/latest.pt" ]; then
+    if [ "${FORCE:-0}" = "1" ]; then
+        echo "[WARN] FORCE=1 — 기존 체크포인트를 무시하고 처음부터 학습한다(이전 결과 덮어씀)."
+    else
+        RESUME="--resume"
+        echo "[RESUME] ../result/$NET/checkpoints/ 체크포인트 발견 → --resume 으로 이어학습한다."
+    fi
+fi
+
+# ==========================================================
+#  ↓↓↓  PromptMR+ K-Fold 학습 + 증강(좌우 flip) ON (fold $FOLD)  ↓↓↓
+#     baseline(shell21.sh)과 train.py 인자는 --aug-* 4개와 -n/--run-tag(NET/TAG)만 다르다.
+#     이 슬롯도 학습 + hold-out 검증까지만 한다. 채점(recon_eval)은 leaderboard 데이터가
+#     있는 다른 환경에서 하므로 여기서 GPU를 더 쓰지 않는다.
+# ==========================================================
+set -x
+python train.py --model promptmr --readout-crop \
+    --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 \
+    -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 6 --use-checkpoint \
+    --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 $RESUME \
+    --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
+    --aug-on --aug-schedule "$AUG_SCHEDULE" --aug-max-prob 0.5 --aug-delay "$AUG_DELAY" \
+    -n "$NET" --run-tag "$TAG" \
+    -t /root/Data/train/ -v /root/Data/val/
+{ TRAIN_STATUS=$?; set +x; } 2>/dev/null
+echo "[TRAIN] $NET (fold $FOLD) 종료   exit=$TRAIN_STATUS"
+
+if [ "$SMOKE" = "1" ]; then
+    echo "=========================================================="
+    echo "[SMOKE] 확인할 것 (fold $FOLD, 증강 ON arm):"
+    echo "        (0) ⚠️ 가장 중요 — 로그에 '[aug] epoch=0 p_flip=0.5000' (또는 p_flip>0인 값)이 찍혔는가."
+    echo "            p=0.0000 이면 STOP — 본 학습(21시간)을 시작하지 말 것. 증강이 조용히"
+    echo "            0회 수행되고 있다는 뜻이고, 그 상태로 21시간을 태우면 아무것도 검증하지 못한다."
+    echo "        (1) OOM 없이 exit 0 인가"
+    echo "        (2) iter 0 대비 Loss 가 내려가는가"
+    echo "        (3) 'Loss = ... Time = ...' per-iter 시간을 baseline(promptmr_kfold_f${FOLD}) 로그와"
+    echo "            비교할 것. 증강은 샘플당 FFT 2회를 dataloader에 추가한다 — --num-workers 4에서"
+    echo "            CPU 병목이면 21시간이 더 늘어난다. 증가폭이 크면 --num-workers 상향 후 재측정."
+    echo "        (0)이 실패하면 본 학습을 시작하지 말 것. 통과하면:"
+    echo "        bash shell_scripting/shell22.sh  로 본 학습."
+    echo "=========================================================="
+fi
+
+echo "=========================================================="
+echo "[DONE ] $SLOT (fold $FOLD)   $(date '+%F %T')   train=$TRAIN_STATUS"
+echo "[저장] val loss: ../result/$NET/val_loss_log_${TAG}.npy"
+echo "       가중치  : ../result/$NET/checkpoints/best_model.pt   ← 채점은 이걸 다른 환경으로 옮겨서"
+echo "[비교] OFF arm = ../result/promptmr_kfold_f${FOLD}/val_loss_log_pmr_kf_f${FOLD}.npy (재학습 안 함)"
+echo "       ⚠️ f1(promptmr_kfold_f1)은 병합 전 '이름 그룹' 분할이라 hold-out이 다르다 — f1과는"
+echo "       나란히 비교하지 말 것. f2 이후 슬롯끼리(이 ON arm 포함)만 비교 가능."
+echo "=========================================================="
+exit "$TRAIN_STATUS"

@@ -14,7 +14,7 @@
 - **과제 범위:** knee 전용; Cartesian **acc4/acc8**; 출력 **384×384** center-crop magnitude; 순위축 **SSIM_bbox**(bbox 손실은 *별도 플랜*).
 - **사전학습 가중치·외부 데이터 금지**(대회 규정): NV HuggingFace 자동 다운로드 **반드시 비활성화**; `pretrained_csm=null`, `pretrained_recon=null`. 처음부터 학습.
 - **모델 계약(불변):** `forward(masked_kspace, mask) -> image`; `masked_kspace`는 float32 `(B,C,H,W,2)`, `mask`는 byte `(B,1,1,W,1)`, 출력은 real `(B,384,384)`.
-- **확정된 결정**(`strategy/backbone.md` 참고): gradient checkpointing ON; CSME 옵션 (c) 주기적 재추정; SWDC 유지; UC 제거; batch_size=1; 입력 해상도는 readout-crop 384 외 추가 축소 안 함; coil compression 보류(off); GRAPPA prior·bbox 손실은 **이 플랜 범위 밖**(다른 팀원/별도 작업).
+- **확정된 결정**(`strategy/model_decision_points.md` 참고): gradient checkpointing ON; CSME 옵션 (c) 주기적 재추정; SWDC 유지; UC 제거; batch_size=1; 입력 해상도는 readout-crop 384 외 추가 축소 안 함; coil compression 보류(off); GRAPPA prior·bbox 손실은 **이 플랜 범위 밖**(다른 팀원/별도 작업).
 - **로컬 개발 현실:** VRAM 충분한 로컬 GPU 없음 + 로컬 데이터 없음 → **이 플랜의 모든 테스트는 CPU 합성텐서 smoke/shape/param 테스트**. 실제 8GB 적재 여부·정확도는 이후 VESSL/더 큰 GPU에서 OOM 탐침 스크립트(Task 4) + 본 학습(범위 밖)으로 검증.
 - **라이선스 위생:** vendor한 파일은 Apache-2.0(라이선스 헤더 그대로 유지). 출처는 `utils/model/sdum/README.md`에 기록.
 
@@ -259,7 +259,7 @@ def build_cascaded(args: SdumArgs):
     return create_mri_recon_model(args)
 ```
 
-> CSME 옵션 (c) "주기적 재추정" 노트: NV는 `use_single_csm`(공유 vs per-cascade)와 `use_acs_region`(첫 cascade만 ACS)만 노출. 진짜 *k cascade마다 재추정*은 네이티브 플래그가 없음 → cascade 루프를 subclass하는 후속 태스크로 구현. 이 플랜에선 기본 `use_single_csm=False`(per-cascade CSME, 논문과 일치)로 두고, (c) 정교화는 `strategy/backbone.md`에 TODO로 기록.
+> CSME 옵션 (c) "주기적 재추정" 노트: NV는 `use_single_csm`(공유 vs per-cascade)와 `use_acs_region`(첫 cascade만 ACS)만 노출. 진짜 *k cascade마다 재추정*은 네이티브 플래그가 없음 → cascade 루프를 subclass하는 후속 태스크로 구현. 이 플랜에선 기본 `use_single_csm=False`(per-cascade CSME, 논문과 일치)로 두고, (c) 정교화는 `strategy/model_decision_points.md`에 TODO로 기록.
 
 - [ ] **스텝 4: 테스트 통과 확인**
 
@@ -287,7 +287,7 @@ git commit -m "feat: SdumArgs + tiny 8GB factory (UC off, temporal off, SWDC on)
 
 - [ ] **스텝 1: NV의 정확한 텐서 관례 확인(소스 정독)**
 
-`restormer_mri.forward`(`restormer.py:1238-1330`)와 NV `get_acs_image`, `sensitivity_map_reduce/expand`(Task 1 스텝 2)를 읽는다. 확인할 것: 모델 입력 `x`는 **언더샘플 영상** `(B,T,C,H,W,2)`; `ref_image`도 동일; `mask`는 `"b t c h w two -> (b t) c h w two"`로 rearrange되므로 coil축으로 broadcast 가능한 `(B,T,C,H,W,2)` boolean/byte여야 함; `soft_dc`는 FP32로 돌고 `dc_weight_map`을 `mask_type`으로 인덱싱. 우리 mask에서 acc 도출(frac ≤ 0.25 → acc8, else acc4)은 `strategy/decisions.md`와 동일.
+`restormer_mri.forward`(`restormer.py:1238-1330`)와 NV `get_acs_image`, `sensitivity_map_reduce/expand`(Task 1 스텝 2)를 읽는다. 확인할 것: 모델 입력 `x`는 **언더샘플 영상** `(B,T,C,H,W,2)`; `ref_image`도 동일; `mask`는 `"b t c h w two -> (b t) c h w two"`로 rearrange되므로 coil축으로 broadcast 가능한 `(B,T,C,H,W,2)` boolean/byte여야 함; `soft_dc`는 FP32로 돌고 `dc_weight_map`을 `mask_type`으로 인덱싱. 우리 mask에서 acc 도출(frac ≤ 0.25 → acc8, else acc4)은 `strategy/candidates.md`와 동일.
 
 - [ ] **스텝 2: 어댑터 실패 테스트 작성(CPU, 합성)**
 
@@ -340,7 +340,7 @@ from utils.model.sdum.config import build_cascaded
 
 
 def _extract_acc(mask_1d: torch.Tensor) -> int:
-    # mask_1d: (W,) of {0,1}. frac<=0.25 -> acc8 else acc4 (strategy/decisions.md)
+    # mask_1d: (W,) of {0,1}. frac<=0.25 -> acc8 else acc4 (strategy/candidates.md)
     frac = mask_1d.float().mean().item()
     return 8 if frac <= 0.25 else 4
 
@@ -560,7 +560,7 @@ git commit -m "feat: select SDUM backbone via --model sdum; AdamW FP32 wiring"
 
 ## 자기 검토(Self-Review)
 
-- **스펙 커버리지:** `backbone.md`의 확정 결정 → gradient checkpointing(NV cascade 루프로 유지, Task 3/4), CSME(Task 2, 옵션-c는 후속 표기), SWDC 유지(Task 2 `use_dc_weight_map`), UC 제거(Task 2 `time_cond/label_cond=False`), batch=1(픽스처/전역제약), coil-compression off(미활성), GRAPPA/bbox 범위 밖(명시). ✅
+- **스펙 커버리지:** `model_decision_points.md`의 확정 결정 → gradient checkpointing(NV cascade 루프로 유지, Task 3/4), CSME(Task 2, 옵션-c는 후속 표기), SWDC 유지(Task 2 `use_dc_weight_map`), UC 제거(Task 2 `time_cond/label_cond=False`), batch=1(픽스처/전역제약), coil-compression off(미활성), GRAPPA/bbox 범위 밖(명시). ✅
 - **Placeholder 점검:** 두 "소스 정독" 스텝(Task 1 스텝 2, Task 3 스텝 1)은 NV 헬퍼 시그니처를 확정하는 실제 확인 작업 — 로직 placeholder 아님; 모든 코드 스텝은 실행 가능한 코드를 담음. 유일한 의도적 유보(`num_reduced_coils`/출력-RSS shape)는 실패하면 즉시 드러나는 테스트로 게이트됨.
 - **타입 일관성:** `tiny_8gb_args`/`build_cascaded`/`build_sdum`/`SDUMReconModel.forward(masked_kspace, mask)` 이름이 Task 2-5에서 일관. 모델 계약이 `train_part.py`/`test_part.py`의 기존 `model(kspace, mask)` 호출과 일치.
 - **리스크 노트:** 최대 불확실성은 NV forward의 정확한 mask/`(B,T,C,H,W,2)` broadcasting·출력 도메인 — Task 3에 격리, shape+finite 테스트 통과가 배선(Task 5)의 게이트.

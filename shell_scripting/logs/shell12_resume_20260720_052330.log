@@ -1,0 +1,38 @@
+==========================================================
+[START] shell12_resume   2026-07-20 05:23:30
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell12_resume_20260720_052330.log
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --coil-compress --n-virtual-coils 8 --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 1e-6 -e 10 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run1 --run-tag pmr_run1 -t /root/Data/train/ -v /root/Data/val/ --resume
+Current cuda device:  0
+[resume] ../result/promptmr_run1/checkpoints/model.pt → start_epoch=5 best_val=0.1303
+Epoch # 5 ............... promptmr_run1 ...............
+Epoch = [  5/ 10] Iter = [   0/4651] Loss = 0.1119 Time = 4.8233s
+Epoch = [  5/ 10] Iter = [ 100/4651] Loss = 0.1124 Time = 185.5665s
+Epoch = [  5/ 10] Iter = [ 200/4651] Loss = 0.02431 Time = 188.2955s
+Epoch = [  5/ 10] Iter = [ 300/4651] Loss = 0.09087 Time = 189.2262s
+Epoch = [  5/ 10] Iter = [ 400/4651] Loss = 0.1019 Time = 189.7460s
+Epoch = [  5/ 10] Iter = [ 500/4651] Loss = 0.0504 Time = 188.5381s
+Epoch = [  5/ 10] Iter = [ 600/4651] Loss = 0.0681 Time = 188.8058s
+Epoch = [  5/ 10] Iter = [ 700/4651] Loss = 0.03655 Time = 189.8390s
+Epoch = [  5/ 10] Iter = [ 800/4651] Loss = 0.09499 Time = 188.6374s
+Epoch = [  5/ 10] Iter = [ 900/4651] Loss = 0.07314 Time = 188.3025s
+Epoch = [  5/ 10] Iter = [1000/4651] Loss = 0.1128 Time = 189.6561s
+Epoch = [  5/ 10] Iter = [1100/4651] Loss = 0.1448 Time = 189.3290s
+Epoch = [  5/ 10] Iter = [1200/4651] Loss = 0.06403 Time = 188.6478s
+Epoch = [  5/ 10] Iter = [1300/4651] Loss = 0.1374 Time = 188.7537s
+Epoch = [  5/ 10] Iter = [1400/4651] Loss = 0.08679 Time = 189.6202s
+Epoch = [  5/ 10] Iter = [1500/4651] Loss = 0.05882 Time = 188.9882s
+Epoch = [  5/ 10] Iter = [1600/4651] Loss = 0.1026 Time = 188.1765s
+Epoch = [  5/ 10] Iter = [1700/4651] Loss = 0.05056 Time = 189.1569s
+Epoch = [  5/ 10] Iter = [1800/4651] Loss = 0.1206 Time = 188.8736s
+Epoch = [  5/ 10] Iter = [1900/4651] Loss = 0.1438 Time = 190.0773s
+Epoch = [  5/ 10] Iter = [2000/4651] Loss = 0.07712 Time = 189.4101s
+Epoch = [  5/ 10] Iter = [2100/4651] Loss = 0.06762 Time = 189.4473s
+Epoch = [  5/ 10] Iter = [2200/4651] Loss = 0.1089 Time = 189.0370s
+Epoch = [  5/ 10] Iter = [2300/4651] Loss = 0.06474 Time = 189.0665s
+Epoch = [  5/ 10] Iter = [2400/4651] Loss = 0.1051 Time = 189.0183s
+Epoch = [  5/ 10] Iter = [2500/4651] Loss = 0.061 Time = 189.2696s
+Epoch = [  5/ 10] Iter = [2600/4651] Loss = 0.09706 Time = 188.3692s
+Epoch = [  5/ 10] Iter = [2700/4651] Loss = 0.1153 Time = 188.9001s

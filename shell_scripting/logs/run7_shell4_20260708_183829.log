@@ -1,0 +1,23 @@
+==========================================================
+[START] shell4   2026-07-08 18:38:29
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell4_20260708_183829.log
+==========================================================
++ python train.py --model sdum --num-cascades 4 --channels 16 32 -b 1 -l 2e-4 -e 1 -r 5 --max-iters 30 --num-workers 4 --readout-crop --warmup-iters 10 -n sdum_smoke --run-tag smoke -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+[scheduler] warmup=10 → cosine, total_iters=4651, base_lr=0.0002
+Epoch # 0 ............... sdum_smoke ...............
+Epoch = [  0/  1] Iter = [   0/4651] Loss = 0.1989 Time = 4.7174s
+Epoch = [  0/  1] Iter = [   5/4651] Loss = 0.2458 Time = 19.8987s
+Epoch = [  0/  1] Iter = [  10/4651] Loss = 0.1324 Time = 19.9549s
+Epoch = [  0/  1] Iter = [  15/4651] Loss = 0.1149 Time = 20.3659s
+Epoch = [  0/  1] Iter = [  20/4651] Loss = 0.1631 Time = 20.1133s
+Epoch = [  0/  1] Iter = [  25/4651] Loss = 0.1853 Time = 20.1710s
+Terminated
+==========================================================
+[DONE ] shell4   2026-07-08 18:49:45   exit=143
+==========================================================

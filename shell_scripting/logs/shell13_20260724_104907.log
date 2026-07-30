@@ -1,0 +1,19 @@
+==========================================================
+[START] shell13   2026-07-24 10:49:07
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell13_20260724_104907.log
+==========================================================
++ '[' -f ../result/promptmr_run1/checkpoints/best_model.pt ']'
++ python recon_eval.py -n hspromptmr_run1 -p /root/Data/leaderboard
+Leaderboard SSIM_full : 0.9267
+Leaderboard SSIM_bbox : 0.9230
+Leaderboard Recon Time : 717.48s (324.2 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9462   SSIM_full (acc8): 0.9072
+SSIM_bbox (acc4): 0.9463   SSIM_bbox (acc8): 0.8996
+Recon Time (acc4): 371.75s (326.1 ms/slice)   (acc8): 345.73s (322.2 ms/slice)
+Recon Time (total): 717.48s
+==========================================================
+[DONE ] shell13   2026-07-24 11:05:03   exit=0
+[다음] 위 3축(SSIM_full/bbox/time)을 training_anal 에 VarNet(run11 등) 대비 기록.
+==========================================================

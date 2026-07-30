@@ -1,0 +1,21 @@
+==========================================================
+[START] shell18   2026-07-22 11:55:13   NET=promptmr_run3
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell18_20260722_115513.log
+==========================================================
+[NOTE] recon_eval 은 acc4·acc8 을 다 처리한 뒤 점수를 한 번에 출력한다(진행 중엔 조용함 — 정상).
+[NOTE] 점수 사본 저장 위치: ../result/promptmr_run3/recon_eval_shell18_20260722_115513.txt
++ python -u recon_eval.py -n promptmr_run3 -p /root/Data/leaderboard
++ tee ../result/promptmr_run3/recon_eval_shell18_20260722_115513.txt
+Leaderboard SSIM_full : 0.9240
+Leaderboard SSIM_bbox : 0.9196
+Leaderboard Recon Time : 1060.16s (479.1 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9443   SSIM_full (acc8): 0.9037
+SSIM_bbox (acc4): 0.9435   SSIM_bbox (acc8): 0.8957
+Recon Time (acc4): 630.97s (553.5 ms/slice)   (acc8): 429.19s (400.0 ms/slice)
+Recon Time (total): 1060.16s
+==========================================================
+[DONE ] shell18   2026-07-22 12:17:56   recon_eval exit=0
+[저장] 점수: ../result/promptmr_run3/recon_eval_shell18_20260722_115513.txt   (+ 이 슬롯 로그: shell_scripting/logs/shell18_20260722_115513.log)
+==========================================================

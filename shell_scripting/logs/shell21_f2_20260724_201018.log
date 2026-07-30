@@ -1,0 +1,33 @@
+==========================================================
+[START] shell21 (fold 2 / 5)   2026-07-24 20:10:18   SMOKE=1  NET=promptmr_kfold_f2_smoke
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell21_f2_20260724_201018.log
+[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=5 · fold=2 · seed=430 · 1 epoch
+==========================================================
+[GPU  ] used=2MiB
++ python scripts/make_fold_eval_dir.py --k-fold 5 --val-fold 2 --kfold-seed 430 -o ../result/kfold_eval/f2 -t /workspace/Data/train/ -v /workspace/Data/val/
+[fold-eval] ../result/kfold_eval/f2  (fold 2/5, seed 430)
+[fold-eval] 이전 링크 80개 정리
+[fold-eval] hold-out volume 40개 링크: acc4 22 · acc8 18
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -e 1 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --max-iters 120 -n promptmr_kfold_f2_smoke --run-tag pmr_kf_f2_smoke -t /workspace/Data/train/ -v /workspace/Data/val/
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 78 · acc8 82) · 4343 slice
+[K-Fold] val    40 vol (acc4 22 · acc8 18) · 1099 slice
+Epoch # 0 ............... promptmr_kfold_f2_smoke ...............
+Epoch = [  0/  1] Iter = [   0/4343] Loss = 0.2351 Time = 3.4788s
+Epoch = [  0/  1] Iter = [ 100/4343] Loss = 0.1103 Time = 167.3148s
+[mem] epoch 0 peak allocated = 2.87GB / reserved = 3.56GB
+loss file saved! ../result/promptmr_kfold_f2_smoke/val_loss_log_pmr_kf_f2_smoke
+Epoch = [   0/   1] TrainLoss = 0.1091 ValLoss = 0.1295 TrainTime = 203.5218s ValTime = 356.4272s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.3449s
+[TRAIN] promptmr_kfold_f2_smoke (fold 2) 종료   exit=0
+==========================================================
+[SMOKE] 채점 생략 (fold 2). 확인할 것 세 가지:
+        (1) OOM 없이 exit 0 인가
+        (2) iter 0 대비 Loss 가 내려가는가
+        (3) fold2면 '[K-Fold] train 160 vol · 4343 slice / val 40 vol · 1099 slice' 로 찍혔는가
+            — 예전처럼 '136개/34개'(이름 수)가 나오면 코드가 옛 버전이다.
+        전부 OK면  bash shell_scripting/shell21.sh  로 본 학습.
+==========================================================

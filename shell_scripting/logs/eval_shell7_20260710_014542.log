@@ -1,0 +1,45 @@
+==========================================================
+[START] shell7   2026-07-10 01:45:42
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell7_20260710_014542.log
+==========================================================
++ DATA=/root/Data/leaderboard
++ '[' -f ../result/sdum_run5/checkpoints/best_model.pt ']'
++ echo '===== recon_eval: run7 (sdum_run5) ====='
+===== recon_eval: run7 (sdum_run5) =====
++ python recon_eval.py -n sdum_run5 -p /root/Data/leaderboard
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+Leaderboard SSIM_full : 0.9004
+Leaderboard SSIM_bbox : 0.8911
+Leaderboard Recon Time : 3351.90s (1514.6 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9275   SSIM_full (acc8): 0.8733
+SSIM_bbox (acc4): 0.9205   SSIM_bbox (acc8): 0.8616
+Recon Time (acc4): 1741.98s (1528.1 ms/slice)   (acc8): 1609.92s (1500.4 ms/slice)
+Recon Time (total): 3351.90s
+[WARNING] 1 volume(s) exceeded 60s of forward time (acc4: 1, acc8: 0) - reconstruction is too slow, consider optimizing.
++ '[' -f ../result/sdum_run8/checkpoints/best_model.pt ']'
++ echo '===== recon_eval: run8 (sdum_run8) ====='
+===== recon_eval: run8 (sdum_run8) =====
++ python recon_eval.py -n sdum_run8 -p /root/Data/leaderboard
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+Leaderboard SSIM_full : 0.9062
+Leaderboard SSIM_bbox : 0.8979
+Leaderboard Recon Time : 6241.01s (2820.2 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9313   SSIM_full (acc8): 0.8811
+SSIM_bbox (acc4): 0.9262   SSIM_bbox (acc8): 0.8696
+Recon Time (acc4): 3241.12s (2843.1 ms/slice)   (acc8): 2999.90s (2795.8 ms/slice)
+Recon Time (total): 6241.01s
+[WARNING] 79 volume(s) exceeded 60s of forward time (acc4: 40, acc8: 39) - reconstruction is too slow, consider optimizing.
+==========================================================
+[DONE ] shell7   2026-07-10 04:58:07   exit=0
+==========================================================

@@ -1,0 +1,121 @@
+==========================================================
+[START] shell18   2026-07-23 15:39:42   SMOKE=0  NET=promptmr_run5
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell18_20260723_153942.log
+[CONF ] full coil(압축 없음) · nc10 · nf48 · sens24 · lr 2e-4 상수 · 10 epoch
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --num-cascades 18 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -e 10 -r 100 --num-workers 4 --no-use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run5 --run-tag pmr_run5 -t /workspace/Data/train/ -v /workspace/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... promptmr_run5 ...............
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 83, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 384, in train
+    train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler,
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 82, in train_epoch
+    output = model(kspace, mask)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/adapter.py", line 32, in forward
+    out = self.net(
+          ^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 636, in forward
+    img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
+                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 505, in forward
+    model_term, latent, history_feat = self.model(current_img, history_feat, buffer)
+                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 466, in forward
+    x, history_feat = self.unet(x, history_feat)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 334, in forward
+    x, enc2 = self.enc_level2(x)
+              ^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 154, in forward
+    enc = self.encoder(x)
+          ^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/FastMRI_SNU_2026_GMG/utils/model/promptmr/promptmr_plus.py", line 107, in forward
+    res = self.body(x)
+          ^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/container.py", line 244, in forward
+    input = module(input)
+            ^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1773, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/module.py", line 1784, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.12/dist-packages/torch/nn/modules/activation.py", line 1524, in forward
+    return F.prelu(input, self.weight)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 20.00 MiB. GPU 0 has a total capacity of 19.67 GiB of which 2.31 MiB is free. Process 2614571 has 19.67 GiB memory in use. Of the allocated memory 19.28 GiB is allocated by PyTorch, and 186.64 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://pytorch.org/docs/stable/notes/cuda.html#environment-variables)
+[TRAIN] promptmr_run5 종료   exit=1
+[MEM  ] 위 로그의 '[mem] epoch N peak allocated' 줄을 training_anal/ 에 기록할 것 —
+        full coil·nc10 의 실측 peak는 이 repo에 아직 남은 적이 없다.
+[RECON] 학습이 exit=1 로 끝나 복원·채점 건너뜀.
+==========================================================
+[DONE ] shell18   2026-07-23 15:40:02   train=1 recon/exit=1
+[저장] 점수: ../result/promptmr_run5/recon_eval_run4.txt
+       복원: ../result/promptmr_run5/reconstructions_leaderboard/acc{4,8}
+[비교] run3(../result/promptmr_run3/recon_eval_run3.txt)와 3축 전부 비교할 것.
+       SSIM_bbox 차이가 핵심이다 — 추론시간은 +15% 예상이나 점수 기여는 ~0.00n 단위다.
+==========================================================

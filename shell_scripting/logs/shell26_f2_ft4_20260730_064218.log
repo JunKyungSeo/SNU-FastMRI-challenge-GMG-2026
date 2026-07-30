@@ -1,0 +1,18 @@
+==========================================================
+[START] shell26 (fold 2 / 5)  STAGE=ft4  SMOKE=0  2026-07-30 06:42:18
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell26_f2_ft4_20260730_064218.log
+[BR   ] jkMRplus (42341cb)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+[REMASK] ON (offset=uniform) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume.
+shell_scripting/shell26.sh: command substitution: line 187: syntax error near unexpected token `('
+shell_scripting/shell26.sh: command substitution: line 187: `[ \"$INIT_NET\" != \"$NET_SHARED\" ] && echo \" (다른 슬롯 재사용)\"). ft 이름에 _rm 이 붙는다."'
+==========================================================
+[GPU  ] used=2MiB
+[init ] 소스 config: model=promptmr nc=10 nf=48 sens=24 nh=3 readout_crop=True coil_compress=False | k-fold=5 fold=2 seed=430 acc=all epochs=10 aug_on=True
+[init ] 분할 일치 — 같은 hold-out 이다.
+[② ft4] promptmr_moe_f2_acc4_aug_rm  (--acc all --remask 4 --remask-offset uniform --init-from shared)   [remask: 160vol → acc4 마스크 재생성 (offset=uniform)]
+[② aug] --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all --remask 4 --remask-offset uniform -e 5 --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 --init-from ../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt -n promptmr_moe_f2_acc4_aug_rm --run-tag pmr_moe_f2_acc4
+Current cuda device:  0
+[init-from] '../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt' 의 model 가중치로 초기화 (미세조정 시작)

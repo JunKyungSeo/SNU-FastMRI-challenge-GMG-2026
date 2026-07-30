@@ -1,76 +1,46 @@
-# strategy/ — 전략 문서 모음
+# strategy/ — FastMRI 2026 전략 문서 인덱스
 
-**2026 SNU FastMRI Challenge** (무릎 MRI, annotation-guided reconstruction) 참가 전략을 정리한 폴더입니다.
-처음이면 아래 "어디부터 볼까"만 읽어도 충분합니다.
+> 2026 SNU FastMRI Challenge (Annotation-guided Knee Reconstruction) 참가 전략 모음.
+> 구조: **결정(SPEC) · 실행 · 후보 · 제외 · 근거**의 5역할로 분리. 결정은 `confirmed_model.md` 한 곳에서만 "정의", 나머지는 참조.
+>
+> 🔄 **작업 사이클(train→분석→코멘트→수정)은 [`collaboration_workflow.md`](collaboration_workflow.md).**
 
----
+## 파일 역할 (읽는 순서)
 
-## 어디부터 볼까?
-
-| 이럴 때 | 이 문서 |
-|---|---|
-| **"확정된 구조가 뭐야?"** — 데이터가 모델에 들어가기까지 고정된 흐름 | [pipeline.md](pipeline.md) |
-| **"지금 쓰는 모델이 뭐야?"** — 현재 백본과 그 결정들 | [backbone.md](backbone.md) |
-| **"코드 어디까지 됐어?"** — 무엇이 구현됐고 뭐가 남았나 | [implementation.md](implementation.md) |
-| **"다음에 뭘 실험하지?" / "그건 왜 안 써?"** | [decisions.md](decisions.md) |
-| **"우리가 놓친 건 없나?"** — 문서와 코드가 어긋난 지점 | [open_issues.md](open_issues.md) |
-| **"왜 이렇게 정했더라?" / "관련 논문?"** | [research/](research/) 폴더 |
-
-> 💡 핵심 원칙 하나: **확정 구조는 [pipeline.md](pipeline.md) 한 곳에서만 "정의"**하고, 나머지 문서는 그걸 참조만 합니다. 같은 내용을 두 곳에 적지 않습니다.
-
----
-
-## 각 문서가 뭔지 (자세히)
-
-각 문서는 "**여기 담는 것**"이 정해져 있습니다. 아무 데나 적지 말고 성격에 맞는 곳에 씁니다.
-
-- **[pipeline.md](pipeline.md)** — 확정된 **재구성 파이프라인**.
-  - 담는 것: 입력 자르기(crop)·정규화·증강·감도맵·GRAPPA prior·출력 등 **어떤 모델을 쓰든 안 바뀌는 뼈대**. 이게 유일한 기준(SPEC)입니다.
-  - 예: "k-space는 높이만 640→384로 crop한다", "전역 스칼라 하나로 정규화한다".
-  - 주의: **모델(백본) 얘기는 여기 안 적습니다** → backbone.md로.
-
-- **[backbone.md](backbone.md)** — **지금 쓰는 모델(백본)**과 그 세부 결정.
-  - 담는 것: 현재 백본이 뭔지(지금은 **SDUM**), 그 모델을 8GB에 맞추는 결정들, 그리고 **모델을 바꿔온 이력**(예전 VarNet → 지금 SDUM). 8GB 축소 참고 사례(PromptMR+)도 부록으로.
-  - 모델을 바꾸면 **이 파일만** 고칩니다.
-
-- **[implementation.md](implementation.md)** — pipeline.md를 **코드로 옮기는 체크리스트**.
-  - 담는 것: 무엇이 코드에 배선됐는지 ✅구현됨 / ⏳보류 / ⬜미구현, 그리고 배선 순서.
-  - 예: "GRAPPA 로딩은 train/val은 구현됨, 추론 경로는 보류".
-
-- **[decisions.md](decisions.md)** — 아직 안 정한 것과 안 쓰기로 한 것.
-  - 담는 것: **Part 1 = 해볼 만한 실험 후보**(아직 확정 아님), **Part 2 = 제외한 것 + 왜 제외했는지**.
-  - 예(후보): "bbox 가중 손실 실험". 예(제외): "위-아래 flip → 뼈 위치가 뒤바뀌어 제외".
-
-- **[open_issues.md](open_issues.md)** — 코드와 문서를 대조한 **감사 결과**.
-  - 담는 것: 문서엔 있는데 코드엔 없거나, 서로 어긋난 지점, 우리가 놓친 사각지대.
-
-- **[research/](research/)** — 위 결정들의 **근거·배경·참고 논문** 아카이브.
-  - 담는 것: model_strategy(모델·메모리 전략) / augmentation(증강) / preprocessing(전처리) / related_work(논문 선례).
-  - 평소엔 안 봐도 되고, "왜 그렇게 정했지?"가 궁금할 때 펼칩니다.
-
----
-
-## 🆕 새로운 게 생기면 어디에 적어?
-
-무언가 알게 되거나 정해지면, 아래 표에서 **성격에 맞는 파일 한 곳**을 찾아 적습니다.
-
-| 새로 생긴 것 | 적을 곳 | 어떻게 |
+| 파일 | 역할 | 언제 보나 |
 |---|---|---|
-| **확정된 파이프라인 사실** (모델과 무관) | [pipeline.md](pipeline.md) | 해당 섹션에 추가. 실측 수치면 근거 표에 날짜와 함께 |
-| **백본을 바꿨다 / 백본 관련 결정** | [backbone.md](backbone.md) | "현재 백본" 갱신 + 교체 이력 표에 한 줄 |
-| **해볼 만한 아이디어** (아직 확정 아님) | [decisions.md](decisions.md) Part 1 | 항목·판정 기준·근거를 한 줄로 |
-| **안 쓰기로 결정** | [decisions.md](decisions.md) Part 2 | **반드시 "왜"를 함께** (나중에 또 나와도 바로 거르게) |
-| **코드 배선 상태가 바뀜** | [implementation.md](implementation.md) | ✅/⏳/⬜ 표시 갱신 |
-| **코드와 문서가 어긋남 / 놓친 점** | [open_issues.md](open_issues.md) | 확인된 사실인지, 아직 가설인지 구분해서 |
-| **결정의 근거·배경·논문** | [research/](research/) 해당 파일 | 근거만 적기 (확정 스펙을 여기서 다시 정의하지 않기) |
+| **[promptmr_plus.md](promptmr_plus.md)** | ✅ **현재 백본 SPEC (PromptMR+, 2026-07-19~)** | 백본·손실·학습 설정 |
+| [confirmed_model.md](confirmed_model.md) | 📦 구 SDUM SPEC(superseded) — 모델 무관 요소는 유효 | 입력·정규화·GRAPPA 등 |
+| **[implementation.md](implementation.md)** | 🔧 코드 배선 체크리스트(의존성 순서) | 배선하는 중 |
+| **[candidates.md](candidates.md)** | 🔬 미결정 후보·열린 A/B | 다음에 뭘 실험할지 |
+| [augmentation_and_preprocessing.md](augmentation_and_preprocessing.md) | 🔖 증강·전처리 **결정 대기 항목**(사람 판단 필요, 일부 미반영) | 증강/전처리 켤지 정할 때 |
+| **[gaps_and_blindspots.md](gaps_and_blindspots.md)** | 🕳️ 구현 정합성 갭(코드 확인) + 전략 사각지대(가설) | "우리가 뭘 놓쳤지?" |
+| **[rejected.md](rejected.md)** | ❌ 제외된 것 + 이유 | 재논의 방지 |
+| [model_strategy.md](model_strategy.md) · [augmentation.md](augmentation.md) · [preprocessing.md](preprocessing.md) · [related_work.md](related_work.md) | 📚 근거(rationale)·출처 아카이브 | "왜 이렇게 정했지?"·"선례 논문?" |
 
-**세 가지 습관**
-1. **한 곳에만 적기.** 같은 내용을 여러 파일에 복붙하면 나중에 한 곳만 낡습니다. 정의는 한 곳, 나머지는 링크.
-2. **날짜와 이유를 남기기.** 특히 "제외"와 "확정"은 언제·왜인지 적어두면 나중에 재논의를 막습니다.
-3. **후보가 확정되면 옮기기.** decisions.md의 후보가 확정되면 → 거기서 빼고 pipeline.md(또는 backbone.md)에 정식으로 적습니다.
+> ⚠️ **confirmed_model = 재구성 forward 파이프라인 구조만 확정.** 손실 함수·효율 레버·추가 증강은 아직 **candidates.md**(미확정).
 
----
+## 상태 대시보드
 
-## 꼭 기억할 제약 (전 문서 공통)
-무릎(knee) 전용 · 채점 = **SSIM_full + SSIM_bbox(순위 결정축) + 추론시간** · **GTX 1080 8GB·FP32** · 외부데이터/사전학습 가중치 금지.
-자세한 대회 배경은 루트 [`../CLAUDE.md`](../CLAUDE.md), 이 폴더를 다룰 때의 규칙은 [`CLAUDE.md`](CLAUDE.md).
+### ✅ 확정 (→ [confirmed_model.md](confirmed_model.md))
+- 입력 2분기: **k-space readout(높이) 640→384 crop, 폭 native** + **GRAPPA 영상 도메인 유지(fft 안 함)**
+- **전역 스칼라 정규화 ÷s** (입력유도, acc 무관 단일, k-space·GRAPPA·target 동일), 출력 ×s
+- 증강: mask(k-space만)·flip(전부 동기), 스케줄 exp/ramp/constant (로직·CLI·epoch 배선 완료 2026-07-26, 기본 off — --aug-on으로 켠다. A/B는 shell22.sh ON arm 대기)
+- 감도맵 **1회 추정 후 재사용** (mask=그대로 / flip=flip)
+- main: VarNet cascade+DC, **GRAPPA 영상 prior 채널 + residual**
+
+### 🔬 열린 후보 (→ [candidates.md](candidates.md))
+- **구현됨(검증 전, off)**: **foreground 마스크 손실·검증 정합**(`--fg-loss`, 채점 SSIM_full 영역만; 2026-07-11) — A/B로 이득 확인 대기. [implementation §3c](implementation.md)
+- **1순위 손실**: bbox 가중 손실 · 병변 슬라이스 오버샘플링
+- **효율 A군(택1 A/B, SME비용)**: 배치 SME(잠정채택) / **coil compression(SVD, 데이터측 구현됨)** / progressive / FLAT
+- **효율 B군(직교·조합가능)**: knowledge distillation(teacher→student) / TensorRT(배포, Pascal 이득 제한)
+- **즉시 A/B**: 입력crop vs 출력crop · GRAPPA 상보융합(input⊕grappa)
+- **대기**: TGVN(PD/PDFS 확인)  *(SSIM_full 배경 마스크는 eval code 공개로 정의 확정 → 위 "구현됨"으로 이동)*
+
+### ❌ 제외 (→ [rejected.md](rejected.md))
+- 기하: 위-아래 flip · 정수 translation · 회전/스케일/shear/elastic
+- 강도: image 노이즈/밝기/gamma · cutout · MixUp/CutMix · 합성병변 삽입
+- 구조: GRAPPA fft · 완전 384²(폭 pad) · x0 대체 · 2.5D 인접슬라이스 입력
+
+## 하드 제약 (전 문서 공통)
+knee 전용 · **`0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** 채점(full·bbox 5:5, 2026-07-09 규칙변경) · GTX 1080 8GB FP32 · external/pretrained 금지 · 세부는 [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).

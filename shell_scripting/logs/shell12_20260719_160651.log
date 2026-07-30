@@ -1,0 +1,10 @@
+==========================================================
+[START] shell12   2026-07-19 16:06:51
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell12_20260719_160651.log
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --coil-compress --n-virtual-coils 8 --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 1e-6 -e 5 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run1 --run-tag pmr_run1 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... promptmr_run1 ...............
+Epoch = [  0/  5] Iter = [   0/4651] Loss = 0.2367 Time = 4.9864s

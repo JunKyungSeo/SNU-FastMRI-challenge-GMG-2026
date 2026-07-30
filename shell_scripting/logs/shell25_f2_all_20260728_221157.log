@@ -1,0 +1,61 @@
+==========================================================
+[START] shell25 (fold 2 / 5)  STAGE=all  SMOKE=0  2026-07-28 22:11:57
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell25_f2_all_20260728_221157.log
+[BR   ] jkMRplus (e69ef40)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+==========================================================
+[GPU  ] used=2MiB
+[① pretrain] promptmr_moe_f2_shared_aug  (--acc all, fold 2 hold-out) 
+[① aug] --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all -e 10 --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 -n promptmr_moe_f2_shared_aug --run-tag pmr_moe_f2_shared
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 0 ............... promptmr_moe_f2_shared_aug ...............
+[aug] epoch=0 p_flip=0.5000
+Epoch = [  0/ 10] Iter = [   0/4358] Loss = 0.1764 Time = 5.5600s
+Epoch = [  0/ 10] Iter = [ 100/4358] Loss = 0.2011 Time = 457.2920s
+Epoch = [  0/ 10] Iter = [ 200/4358] Loss = 0.1227 Time = 458.3414s
+Epoch = [  0/ 10] Iter = [ 300/4358] Loss = 0.101 Time = 458.2876s
+Epoch = [  0/ 10] Iter = [ 400/4358] Loss = 0.1158 Time = 458.6962s
+Epoch = [  0/ 10] Iter = [ 500/4358] Loss = 0.1273 Time = 459.9765s
+Epoch = [  0/ 10] Iter = [ 600/4358] Loss = 0.07642 Time = 459.7036s
+Epoch = [  0/ 10] Iter = [ 700/4358] Loss = 0.08138 Time = 460.9319s
+Epoch = [  0/ 10] Iter = [ 800/4358] Loss = 0.07803 Time = 461.1915s
+Epoch = [  0/ 10] Iter = [ 900/4358] Loss = 0.0487 Time = 458.7457s
+Epoch = [  0/ 10] Iter = [1000/4358] Loss = 0.08814 Time = 462.9045s
+Epoch = [  0/ 10] Iter = [1100/4358] Loss = 0.06101 Time = 459.6747s
+Epoch = [  0/ 10] Iter = [1200/4358] Loss = 0.08236 Time = 459.3562s
+Epoch = [  0/ 10] Iter = [1300/4358] Loss = 0.05477 Time = 461.7228s
+Epoch = [  0/ 10] Iter = [1400/4358] Loss = 0.03914 Time = 459.9266s
+Epoch = [  0/ 10] Iter = [1500/4358] Loss = 0.07188 Time = 466.1878s
+Epoch = [  0/ 10] Iter = [1600/4358] Loss = 0.04583 Time = 460.1906s
+Epoch = [  0/ 10] Iter = [1700/4358] Loss = 0.04947 Time = 458.1269s
+Epoch = [  0/ 10] Iter = [1800/4358] Loss = 0.06889 Time = 461.7144s
+Epoch = [  0/ 10] Iter = [1900/4358] Loss = 0.07576 Time = 460.3915s
+Epoch = [  0/ 10] Iter = [2000/4358] Loss = 0.02095 Time = 465.6535s
+Epoch = [  0/ 10] Iter = [2100/4358] Loss = 0.07176 Time = 459.8233s
+Epoch = [  0/ 10] Iter = [2200/4358] Loss = 0.1307 Time = 461.3732s
+Epoch = [  0/ 10] Iter = [2300/4358] Loss = 0.05697 Time = 461.6368s
+Epoch = [  0/ 10] Iter = [2400/4358] Loss = 0.04671 Time = 461.6090s
+Epoch = [  0/ 10] Iter = [2500/4358] Loss = 0.04604 Time = 466.4038s
+Epoch = [  0/ 10] Iter = [2600/4358] Loss = 0.07833 Time = 461.4215s
+Epoch = [  0/ 10] Iter = [2700/4358] Loss = 0.165 Time = 460.3111s
+Epoch = [  0/ 10] Iter = [2800/4358] Loss = 0.02758 Time = 461.6464s
+Epoch = [  0/ 10] Iter = [2900/4358] Loss = 0.0447 Time = 462.9034s
+Epoch = [  0/ 10] Iter = [3000/4358] Loss = 0.0122 Time = 467.9633s
+Epoch = [  0/ 10] Iter = [3100/4358] Loss = 0.03178 Time = 462.4266s
+Epoch = [  0/ 10] Iter = [3200/4358] Loss = 0.03583 Time = 460.3608s
+Epoch = [  0/ 10] Iter = [3300/4358] Loss = 0.0735 Time = 462.9903s
+Epoch = [  0/ 10] Iter = [3400/4358] Loss = 0.08551 Time = 461.7390s
+Terminated
+[① pretrain] exit=143
+==========================================================
+[DONE ] shell25 (fold 2)  STAGE=all  2026-07-29 02:35:04  exit=143
+[저장] val loss: ../result/promptmr_moe_f2_*/val_loss_log_pmr_moe_f2_*.npy
+       병합본  : ../result/promptmr_moe_f2_aug/checkpoints/best_model.pt
+[판정] 정본은 채점이다 — promptmr_moe_f2_aug(MoE) 와 promptmr_moe_f2_shared_aug(단일) 를 각각 채점해
+       SSIM_full·SSIM_bbox·시간 3축으로 비교할 것. val 은 계기판일 뿐이다.
+==========================================================

@@ -50,7 +50,12 @@ class SdumArgs:
     pretrained_recon: object = None
 
 
-def tiny_8gb_args(**overrides) -> SdumArgs:
+def tiny_8gb_args(uc: bool = False, **overrides) -> SdumArgs:
+    # uc=True → UC 켬(time_cond+label_cond). time_cond는 emb_channels 할당 전제라 반드시 동반.
+    # 명시 override가 있으면 그 값이 우선(setdefault).
+    if uc:
+        overrides.setdefault("time_cond", True)
+        overrides.setdefault("label_cond", True)
     return replace(SdumArgs(), **overrides) if overrides else SdumArgs()
 
 

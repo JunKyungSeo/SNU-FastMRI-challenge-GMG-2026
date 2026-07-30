@@ -1,0 +1,16 @@
+==========================================================
+[START] shell22 (fold 2 / 5)   2026-07-26 10:31:10   SMOKE=0  NET=promptmr_kfold_f2_aug
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell22_f2_20260726_103110.log
+[CONF ] full coil · nc10 · nf48 · sens24 · lr 2e-4 · K=5 · fold=2 · seed=430 · 10 epoch
+[AUG  ] schedule=exp delay=7 max-prob=0.55 exp-decay=5.0 mask-thin-max=4 orig-mask-prob=0.5
+==========================================================
+[GPU  ] used=2MiB
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -e 10 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --aug-on --aug-schedule exp --aug-max-prob 0.55 --aug-delay 7 --aug-exp-decay 5.0 --aug-mask-thin-max 4 --aug-orig-mask-prob 0.5 -n promptmr_kfold_f2_aug --run-tag pmr_kf_f2_aug -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 78 · acc8 82) · 4343 slice
+[K-Fold] val    40 vol (acc4 22 · acc8 18) · 1099 slice
+Epoch # 0 ............... promptmr_kfold_f2_aug ...............
+[aug] epoch=0 p=0.0000 p_flip=0.0000 p_mask=0.0000
+Epoch = [  0/ 10] Iter = [   0/4343] Loss = 0.2351 Time = 5.4361s

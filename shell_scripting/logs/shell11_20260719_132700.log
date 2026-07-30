@@ -1,0 +1,22 @@
+==========================================================
+[START] shell11   2026-07-19 13:27:00
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell11_20260719_132700.log
+==========================================================
+[GPU ] used=2MiB
+[VAL ] tiny_val = knee_acc4_1.h5 (검증 1 볼륨으로 축소)
++ python train.py --model promptmr --readout-crop --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 1e-6 -e 1 --max-iters 3 -r 1 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_smoke --run-tag smoke -t /root/Data/train/ -v ../result/promptmr_smoke/tiny_val
+Current cuda device:  0
+Epoch # 0 ............... promptmr_smoke ...............
+Epoch = [  0/  1] Iter = [   0/4651] Loss = 0.2289 Time = 3.0972s
+Epoch = [  0/  1] Iter = [   1/4651] Loss = 0.229 Time = 2.5005s
+Epoch = [  0/  1] Iter = [   2/4651] Loss = 0.1947 Time = 2.5207s
+loss file saved! ../result/promptmr_smoke/val_loss_log_smoke
+Epoch = [   0/   1] TrainLoss = 0.2175 ValLoss = 0.3092 TrainTime = 8.2751s ValTime = 12.7786s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 0.0153s
+==========================================================
+[PASS] PromptMR+ 스모크 통과 — 크래시·OOM 없이 3-iter 학습 + 검증 완료.
+[DONE ] shell11   2026-07-19 13:27:25   exit=0
+[산출물] ../result/promptmr_smoke (디스포저블 — 확인 후 삭제 가능)
+==========================================================

@@ -1,0 +1,82 @@
+==========================================================
+[START] shell26 (fold 2 / 5)  STAGE=ft4  SMOKE=0  2026-07-30 10:39:01
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell26_f2_ft4_20260730_103901.log
+[BR   ] jkMRplus (42341cb)
+[CONF ] nc10 · nf48 · sens24 · lr 2e-4 · seed=430 · pretrain 10ep · ft 5ep
+[REMASK] ON (offset=uniform) — ②③ 만: --acc all --remask 4|8, 전문가당 80→160 volume.
+         ① 은 불변이다. ft 이름에 _rm 이 붙는다.
+         ft 시간 ≈ 5.3h → 10.3h. FT_EXTRA=[] 
+[INIT ] ① 소스 = promptmr_kfold_f2_aug (다른 슬롯 재사용 — 이 슬롯의 promptmr_moe_f2_shared_aug 는 안 쓴다)
+==========================================================
+[GPU  ] used=2MiB
+[init ] 소스 config: model=promptmr nc=10 nf=48 sens=24 nh=3 readout_crop=True coil_compress=False | k-fold=5 fold=2 seed=430 acc=all epochs=10 aug_on=True
+[init ] 분할 일치 — 같은 hold-out 이다.
+[② ft4] promptmr_moe_f2_acc4_aug_rm  (--acc all --remask 4 --remask-offset uniform --init-from shared)   [remask: 160vol → acc4 마스크 재생성 (offset=uniform)]
+[② aug] --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 100 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc all --remask 4 --remask-offset uniform -e 5 --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 --init-from ../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt -n promptmr_moe_f2_acc4_aug_rm --run-tag pmr_moe_f2_acc4
+Current cuda device:  0
+[init-from] '../result/promptmr_kfold_f2_aug/checkpoints/best_model.pt' 의 model 가중치로 초기화 (미세조정 시작)
+[remask] 전제 검증 통과 — 160 volume (생성기 비트 재현 · full k-space)
+[remask] train 로더: acc4 마스크 재생성 (offset=uniform) · 볼륨 풀 --acc all
+[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터=4)
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all · remask=4(val 은 acc4) (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    20 vol (acc4 20 · acc8 0) · 548 slice
+Epoch # 0 ............... promptmr_moe_f2_acc4_aug_rm ...............
+[aug] epoch=0 p_flip=0.5000
+Epoch = [  0/  5] Iter = [   0/4358] Loss = 0.03706 Time = 5.6308s
+Epoch = [  0/  5] Iter = [ 100/4358] Loss = 0.09945 Time = 458.0980s
+Epoch = [  0/  5] Iter = [ 200/4358] Loss = 0.083 Time = 459.8990s
+Epoch = [  0/  5] Iter = [ 300/4358] Loss = 0.05009 Time = 459.5166s
+Epoch = [  0/  5] Iter = [ 400/4358] Loss = 0.0902 Time = 460.3954s
+Epoch = [  0/  5] Iter = [ 500/4358] Loss = 0.09965 Time = 461.0498s
+Epoch = [  0/  5] Iter = [ 600/4358] Loss = 0.008688 Time = 460.2569s
+Epoch = [  0/  5] Iter = [ 700/4358] Loss = 0.03461 Time = 461.4637s
+Epoch = [  0/  5] Iter = [ 800/4358] Loss = 0.04344 Time = 461.8477s
+Epoch = [  0/  5] Iter = [ 900/4358] Loss = 0.01586 Time = 459.0058s
+Epoch = [  0/  5] Iter = [1000/4358] Loss = 0.06737 Time = 464.0117s
+Epoch = [  0/  5] Iter = [1100/4358] Loss = 0.05676 Time = 459.6420s
+Epoch = [  0/  5] Iter = [1200/4358] Loss = 0.05243 Time = 459.3720s
+Epoch = [  0/  5] Iter = [1300/4358] Loss = 0.02468 Time = 461.4543s
+Epoch = [  0/  5] Iter = [1400/4358] Loss = 0.03474 Time = 458.9168s
+Epoch = [  0/  5] Iter = [1500/4358] Loss = 0.06414 Time = 465.9077s
+Epoch = [  0/  5] Iter = [1600/4358] Loss = 0.03976 Time = 459.3796s
+Epoch = [  0/  5] Iter = [1700/4358] Loss = 0.04539 Time = 457.7380s
+Epoch = [  0/  5] Iter = [1800/4358] Loss = 0.02932 Time = 460.7171s
+Epoch = [  0/  5] Iter = [1900/4358] Loss = 0.06592 Time = 458.7559s
+Epoch = [  0/  5] Iter = [2000/4358] Loss = 0.01893 Time = 465.4011s
+Epoch = [  0/  5] Iter = [2100/4358] Loss = 0.03512 Time = 458.3164s
+Epoch = [  0/  5] Iter = [2200/4358] Loss = 0.08802 Time = 459.6367s
+Epoch = [  0/  5] Iter = [2300/4358] Loss = 0.05422 Time = 459.5384s
+Epoch = [  0/  5] Iter = [2400/4358] Loss = 0.04396 Time = 460.0775s
+Epoch = [  0/  5] Iter = [2500/4358] Loss = 0.042 Time = 465.0842s
+Epoch = [  0/  5] Iter = [2600/4358] Loss = 0.04698 Time = 459.0267s
+Epoch = [  0/  5] Iter = [2700/4358] Loss = 0.1121 Time = 457.8723s
+Epoch = [  0/  5] Iter = [2800/4358] Loss = 0.02485 Time = 459.0949s
+Epoch = [  0/  5] Iter = [2900/4358] Loss = 0.02897 Time = 460.1553s
+Epoch = [  0/  5] Iter = [3000/4358] Loss = 0.005867 Time = 466.0384s
+Epoch = [  0/  5] Iter = [3100/4358] Loss = 0.0173 Time = 459.7583s
+Epoch = [  0/  5] Iter = [3200/4358] Loss = 0.03179 Time = 458.1215s
+Epoch = [  0/  5] Iter = [3300/4358] Loss = 0.06689 Time = 460.6434s
+Epoch = [  0/  5] Iter = [3400/4358] Loss = 0.03969 Time = 459.2480s
+Epoch = [  0/  5] Iter = [3500/4358] Loss = 0.03287 Time = 466.8415s
+Epoch = [  0/  5] Iter = [3600/4358] Loss = 0.03213 Time = 459.1533s
+Epoch = [  0/  5] Iter = [3700/4358] Loss = 0.05331 Time = 458.2754s
+Epoch = [  0/  5] Iter = [3800/4358] Loss = 0.08173 Time = 459.6320s
+Epoch = [  0/  5] Iter = [3900/4358] Loss = 0.04623 Time = 457.8317s
+Epoch = [  0/  5] Iter = [4000/4358] Loss = 0.07281 Time = 465.9832s
+Epoch = [  0/  5] Iter = [4100/4358] Loss = 0.03545 Time = 459.2137s
+Epoch = [  0/  5] Iter = [4200/4358] Loss = 0.02517 Time = 457.6075s
+Epoch = [  0/  5] Iter = [4300/4358] Loss = 0.0452 Time = 458.4910s
+[mem] epoch 0 peak allocated = 3.33GB / reserved = 4.72GB
+loss file saved! ../result/promptmr_moe_f2_acc4_aug_rm/val_loss_log_pmr_moe_f2_acc4
+Epoch = [   0/   5] TrainLoss = 0.05408 ValLoss = 0.06813 TrainTime = 20066.8355s ValTime = 353.6884s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.2712s
+Epoch # 1 ............... promptmr_moe_f2_acc4_aug_rm ...............
+[aug] epoch=1 p_flip=0.5000
+Epoch = [  1/  5] Iter = [   0/4358] Loss = 0.1013 Time = 5.9081s
+Epoch = [  1/  5] Iter = [ 100/4358] Loss = 0.03814 Time = 458.7312s
+Epoch = [  1/  5] Iter = [ 200/4358] Loss = 0.05455 Time = 457.8228s
+Epoch = [  1/  5] Iter = [ 300/4358] Loss = 0.05739 Time = 458.3396s

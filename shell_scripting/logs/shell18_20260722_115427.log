@@ -1,0 +1,8 @@
+==========================================================
+[START] shell18   2026-07-22 11:54:27   NET=promptmr_run3
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell18_20260722_115427.log
+==========================================================
+[GPU ] used=765MiB
+[STOP] GPU 사용 중(765MiB) — 지금 promptmr_run3 학습이 돌고 있을 것이다.
+       recon_eval 은 GPU 가 빈 뒤(run3 완료/중지)에 실행할 것. 8GB 동시 로드는 OOM 위험.

@@ -1,0 +1,6 @@
+==========================================================
+[START] shell20  STAGE=all  SMOKE=0  2026-07-30 06:44:40
+[CWD  ] /root/FastMRI_SNU_2026_GMG   [DATA] /root/Data   [LOG] shell_scripting/logs/shell20_all_20260730_064440.log
+==========================================================
+[① pretrain] promptmr_moe_shared (전체 데이터, --acc all)
+shell_scripting/shell20.sh: line 46: SMOKE_EXTRA: unbound variable

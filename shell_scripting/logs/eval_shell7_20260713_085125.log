@@ -1,0 +1,26 @@
+==========================================================
+[START] shell7   2026-07-13 08:51:25
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell7_20260713_085125.log
+==========================================================
++ DATA=/root/Data/leaderboard
++ '[' -f ../result/sdum_run5/checkpoints/best_model.pt ']'
++ echo '===== recon_eval: run7 (sdum_run5) ====='
+===== recon_eval: run7 (sdum_run5) =====
++ python recon_eval.py -n sdum_run10 -p /root/Data/leaderboard
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+BasicUNet features: (12, 24, 48, 96, 192, 12).
+Leaderboard SSIM_full : 0.9118
+Leaderboard SSIM_bbox : 0.9021
+Leaderboard Recon Time : 3370.18s (1522.9 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9361   SSIM_full (acc8): 0.8875
+SSIM_bbox (acc4): 0.9305   SSIM_bbox (acc8): 0.8738
+Recon Time (acc4): 1750.93s (1535.9 ms/slice)   (acc8): 1619.25s (1509.1 ms/slice)
+Recon Time (total): 3370.18s
+[WARNING] 1 volume(s) exceeded 60s of forward time (acc4: 1, acc8: 0) - reconstruction is too slow, consider optimizing.
+==========================================================
+[DONE ] shell7   2026-07-13 09:59:34   exit=0
+==========================================================

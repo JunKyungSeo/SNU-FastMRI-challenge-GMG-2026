@@ -1,0 +1,23 @@
+==========================================================
+[START] shell20_moe_reconstruct   2026-07-26 06:08:14   NET=promptmr_moe
+[BR   ] jkMRplus (2966dbd)
+[LOG  ] shell_scripting/logs/shell20_moe_reconstruct_20260726_060814.log
+==========================================================
+[OK] MoE 검증 통과: experts=['acc4', 'acc8']  router.threshold=0.25 (fix됨)
+[GPU ] used=2MiB
+[NOTE] recon_eval 은 끝에 점수를 한 번에 출력(진행 중엔 조용함=정상). 점수 사본: ../result/promptmr_moe/recon_eval_moe_20260726_060814.txt
++ python -u recon_eval.py -n promptmr_moe -p /root/Data/leaderboard
++ tee ../result/promptmr_moe/recon_eval_moe_20260726_060814.txt
+Leaderboard SSIM_full : 0.9321
+Leaderboard SSIM_bbox : 0.9300
+Leaderboard Recon Time : 1624.91s (734.3 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9497   SSIM_full (acc8): 0.9145
+SSIM_bbox (acc4): 0.9505   SSIM_bbox (acc8): 0.9094
+Recon Time (acc4): 847.86s (743.7 ms/slice)   (acc8): 777.05s (724.2 ms/slice)
+Recon Time (total): 1624.91s
+==========================================================
+[DONE ] shell20_moe_reconstruct   2026-07-26 06:41:48   recon_eval exit=0
+[저장] 점수: ../result/promptmr_moe/recon_eval_moe_20260726_060814.txt   (+ 로그: shell_scripting/logs/shell20_moe_reconstruct_20260726_060814.log)
+[비교] shared baseline: full 0.9309 / bbox 0.9284 (acc8 0.9131/0.9074) — MoE 가 이걸 넘어야 의미.
+==========================================================

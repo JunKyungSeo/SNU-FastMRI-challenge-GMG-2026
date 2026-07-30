@@ -1,0 +1,39 @@
+==========================================================
+[START] shell12   2026-07-19 13:48:39
+[CWD  ] /root/FastMRI_SNU_2026_GMG
+[LOG  ] shell_scripting/logs/shell12_20260719_134839.log
+==========================================================
+[GPU ] used=2MiB
++ python train.py --model promptmr --readout-crop --num-cascades 4 --n-feat0 48 --sens-n-feat0 24 --n-history 3 --use-checkpoint -b 1 -l 1e-6 -e 5 -r 100 --num-workers 4 --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -n promptmr_run1 --run-tag pmr_run1 -t /root/Data/train/ -v /root/Data/val/
+Current cuda device:  0
+Epoch # 0 ............... promptmr_run1 ...............
+Epoch = [  0/  5] Iter = [   0/4651] Loss = 0.2289 Time = 3.0373s
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/train.py", line 79, in <module>
+    train(args)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 269, in train
+    train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler)
+  File "/root/FastMRI_SNU_2026_GMG/utils/learning/train_part.py", line 69, in train_epoch
+    (loss / accum).backward()   # accum 평균이 batch=accum 평균과 일치하도록 스케일
+  File "/usr/local/lib/python3.10/dist-packages/torch/_tensor.py", line 525, in backward
+    torch.autograd.backward(
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/__init__.py", line 267, in backward
+    _engine_run_backward(
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/graph.py", line 744, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/function.py", line 301, in apply
+    return user_fn(self, *args)
+  File "/usr/local/lib/python3.10/dist-packages/torch/utils/checkpoint.py", line 320, in backward
+    torch.autograd.backward(outputs_with_grad, args_with_grad)
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/__init__.py", line 267, in backward
+    _engine_run_backward(
+  File "/usr/local/lib/python3.10/dist-packages/torch/autograd/graph.py", line 744, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 18.00 MiB. GPU 
+[TRAIN] promptmr_run1 5 epoch 종료   exit=1
+[RECON] 학습이 exit=1 로 끝나 채점 건너뜀.
+==========================================================
+[DONE ] shell12   2026-07-19 13:49:01   train=1 recon/exit=1
+[저장] 점수: ../result/promptmr_run1/recon_eval_run1.txt (+ 이 슬롯 로그).
+[다음] epoch 6부터 이어학습: bash shell_scripting/shell12_resume.sh
+==========================================================

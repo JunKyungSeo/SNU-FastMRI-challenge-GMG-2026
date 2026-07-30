@@ -28,8 +28,6 @@
 #         각각 독립적인 hold-out 성적으로 읽을 것.
 #
 #   [fold2 구성]  train 160 vol (4343 slice)  /  val 40 vol (acc4 22 · acc8 18, 1099 slice)
-#                 ⚠️ 교체 전(비층화) 기준이다. 층화 이후엔 acc 구성도 슬라이스 수도 달라진다
-#                    (층화는 fold마다 acc4/acc8 비율을 같게 맞춘다).
 #   [config]      f1과 동일: full coil · nc10 · nf48 · sens24 · n-history3 · lr 2e-4 상수 ·
 #                 fg-loss + area-weight · grad-clip 0.1 · accum 2 · checkpointing on · 10 epoch
 #
@@ -37,10 +35,9 @@
 #           데이터가 있는 다른 환경에서 하므로 여기선 안 돌린다(GPU 시간·디스크 절약).
 #           산출물은 val_loss_log(.npy)와 checkpoints/best_model.pt 두 개다.
 #
-#   ⚠️ (2026-07-26 갱신) kfold_split이 acc 층화로 교체되어 --acc 4/8 을 줘도 fold 경계가
-#      안 바뀐다(MoE 다단계 파이프라인 안전). 단, 이 슬롯으로 이미 완주한 f2 런은
-#      **교체 전(비층화) 파티션** 산출물이라, 층화 이후 새로 도는 런과 val 숫자를
-#      나란히 비교하면 안 된다 — load_data.kfold_split docstring 참고.
+#   ⚠️ --acc 4/8 을 여기에 추가하지 말 것. --acc 를 주면 그 가속률만 모아 다시 5등분하므로
+#      fold 경계가 달라진다(단독 실험이면 정상, 다단계로 섞으면 채점셋 오염).
+#      MoE를 k-fold로 검증하려면 층화 분할을 먼저 구현해야 한다 — load_data.kfold_split 주석 참고.
 #
 # 실행:
 #   SMOKE=1 bash shell_scripting/shell21.sh   # 120 iter — OOM 없이 exit 0 · 손실 하강 확인 (먼저 이것)
@@ -94,11 +91,11 @@ fi
 python -c "import cv2" 2>/dev/null || { echo "[STOP] cv2 import 실패 — bash /root/restore_env.sh 로 환경 복구 후 실행할 것."; exit 2; }
 
 # --- 가드: 기존 학습 결과를 말없이 덮어쓰지 않는다 (f1이 21시간짜리다) ---
-#if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; then
-#    echo "[STOP] ../result/$NET/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 ##결과가 사라진다."
-#    echo "       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 ##FORCE=1 로 실행할 것."
-#    exit 2
-#fi
+if [ -e "../result/$NET/checkpoints/model.pt" ] && [ "${FORCE:-0}" != "1" ]; then
+    echo "[STOP] ../result/$NET/checkpoints/model.pt 가 이미 있다 — 덮어쓰면 이전 학습 결과가 사라진다."
+    echo "       이어서 학습하려면 train.py에 --resume 을 붙이고, 정말 새로 덮어쓸 거면 FORCE=1 로 실행할 것."
+    exit 2
+fi
 
 # ==========================================================
 #  ↓↓↓  PromptMR+ K-Fold 학습 (fold $FOLD)  ↓↓↓
@@ -111,7 +108,7 @@ python train.py --model promptmr --readout-crop \
     -b 1 -l 2e-4 -e "$EPOCHS" -r 100 --num-workers 4 --use-checkpoint \
     --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 \
     --k-fold "$K_FOLD" --val-fold "$FOLD" --kfold-seed "$KFOLD_SEED" $EXTRA \
-    -n "$NET" --run-tag "$TAG" --resume \
+    -n "$NET" --run-tag "$TAG" \
     -t /workspace/Data/train/ -v /workspace/Data/val/
 { TRAIN_STATUS=$?; set +x; } 2>/dev/null
 echo "[TRAIN] $NET (fold $FOLD) 종료   exit=$TRAIN_STATUS"

@@ -19,22 +19,14 @@ def to_tensor(data):
 
 
 # ============================================================================
-# Data Augmentation (strategy/augmentation.md 구현) — 좌-우(width/phase-encode) 플립 하나뿐.
+# Data Augmentation (strategy/augmentation.md 구현)
 #   설계 원칙: hallucination-free lesion fidelity — bbox 안전 + 물리적으로 유효한 증강만.
-#   2026-07-28 결정으로 mask thinning·k-space 위상·측정 노이즈를 **코드에서 제거**했다.
-#     대회 입력이 acc4/acc8 두 가지로 고정이라 마스크를 더 솎으면 채점에 없는 가속률
-#     (주변부 간격 12~32)을 학습하게 되고, MoE 라우터 기준(마스크 샘플 비율 0.25)으로는
-#     acc4 샘플이 acc8 쪽 입력으로 바뀌어 전문가 분리 실험까지 흐린다.
-#     위상은 magnitude 불변이라 marginal, 노이즈는 검증 전이었다. 근거: augmentation.md §0.
-#   ⚠️ 이 파일 아래쪽의 **마스크 재생성(remask)은 위에서 지운 mask thinning이 아니다.** 생성
-#     치역이 대회 마스크 가족과 동일하고(step 4|8 · cf 0.08, 학습풀+leaderboard 280볼륨 비트정확
-#     재현), 학습 중인 전문가의 가속률과 마스크가 CLI로 강제 일치해 라우터도 안 흔든다.
-#     지우기 전에 augmentation.md §0의 "마스크 재생성" 절을 읽을 것 — 한 번 지워진 전례가 있다.
-#   미채택(기록): 위-아래(readout) 플립 = 무릎 뼈 위치가 뒤바뀌는 비현실 형태.
-#     translation = target이 384 center-crop으로 제공되는데 모델은 640×W에서 크롭해 정렬 불가.
-#   스케줄: MRAugment schedule_p 형태 — delay D까지 off, T(=총 epoch)로 정규화한 exp/ramp/constant 증가.
-#   epoch 전달(train_part.py set_epoch)·args 정의(train.py --aug-*)는 배선 완료.
-#     --aug-on 기본값이 off라, 켜지 않으면 기존 학습과 동일하게 동작.
+#   채택(ON): 좌-우(width/phase-encode) 플립만 · ACS 보존 마스크 증강 · 소폭 정수 translation
+#             · k-space 랜덤 위상(marginal) · 측정 노이즈(보수적)
+#   위-아래(readout) 플립은 제외(무릎 뼈 위치가 뒤바뀌는 비현실 형태) — augmentation.md Tier 3.
+#   스케줄: 지수형 확률(첫 warmup epoch off → max_prob 점증) · 샘플별 결정적 RNG(재현성).
+#   ※ epoch 전달·args 정의는 train_part.py/train.py 배선 필요(strategy/todo.md).
+#     기본값은 전부 off라, 배선 전엔 기존 학습과 동일하게 동작.
 # ============================================================================
 
 def _fftc(img, axes=(-2, -1)):
@@ -99,8 +91,7 @@ def global_scale(kspace_c, percentile=99.0):
 
 def _detect_acs(mask):
     """1D 마스크(1=sampled)에서 중앙 연속 완전샘플(ACS) 구간을 bool로 반환.
-    ACS는 sensitivity map/GRAPPA 캘리브레이션 소스다 — coil_compress가 이 구간에서만
-    압축행렬을 뽑는다(추론에서 완전샘플인 구간이 여기뿐이라서)."""
+    ACS는 sensitivity map/GRAPPA 캘리브레이션 소스라 증강에서 절대 보존해야 한다."""
     W = mask.shape[0]
     c = W // 2
     if mask[c] < 1:  # 중앙이 안 찍혔으면 가장 가까운 샘플을 중심으로
@@ -136,8 +127,8 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     압축행렬 W는 "코일 조합 기저"라, 추론 시점에 **실제로 가진 데이터**로 계산해야 한다.
     대회 추론에서는 언더샘플 k-space만 주어지고, 그중 **완전샘플 구간은 중앙 ACS(저주파)뿐**이다.
     따라서 train/test 모두 ACS에서만 W를 구해 일관성을 유지한다(confirmed_model.md의
-    "입력 유도(label 통계 금지)" 원칙과 동일한 계열). 남은 증강이 좌우 flip 하나뿐이고
-    flip은 ACS를 그대로 옮기기만 하므로 증강과도 안전하게 호환된다.
+    "입력 유도(label 통계 금지)" 원칙과 동일한 계열). ACS는 mask 증강에도 100% 보존되므로
+    (MRIAugmentor._aug_mask) 증강과도 안전하게 호환된다.
 
     ── 알고리즘 (SVD) ─────────────────────────────────────────────────────────
       1) ACS 열(중앙 완전샘플 PE 라인)만 모아 calibration 행렬 A = (C, H·n_acs) 구성.
@@ -185,18 +176,27 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
 
 
 class AugmentConfig:
-    """증강 설정. train.py args에서 채워지며(없으면 getattr 기본값), 기본은 off.
-    증강이 좌우 flip 하나뿐이라 변환 선택 스위치·가중치 필드는 없다 — on/off는 `on` 하나."""
+    """증강 설정. train.py args에서 채워지며(없으면 getattr 기본값), 기본은 전부 off."""
 
     def __init__(self, **kw):
         self.on = kw.get("on", False)
-        # 스케줄 — MRAugment 공식 repo(mraugment/data_augment.py: schedule_p)와 동일 형태.
-        #   p(t<D)=0, p(T)=p_max. T로 정규화하므로 런 길이가 바뀌어도 증강량이 스케일된다.
-        self.schedule = kw.get("schedule", "exp")          # 'exp' | 'ramp' | 'constant'
-        self.delay = kw.get("delay", 0)                    # D: 증강 없이 보내는 앞쪽 epoch 수
-        self.total_epochs = kw.get("total_epochs", 1)      # T: args.num_epochs (load_data가 채움)
-        self.exp_decay = kw.get("exp_decay", 5.0)          # 논문/공식 repo 기본 c=5.0
-        self.max_prob = kw.get("max_prob", 0.55)           # 논문 기본 p_max=0.55
+        # 스케줄
+        self.schedule = kw.get("schedule", "exp")          # 'exp' | 'constant'
+        self.warmup_epochs = kw.get("warmup_epochs", 10)
+        self.ramp_epochs = kw.get("ramp_epochs", 15)
+        self.max_prob = kw.get("max_prob", 0.5)
+        # 개별 aug on/off
+        self.flip = kw.get("flip", True)                   # 좌-우(width)만
+        self.mask = kw.get("mask", True)
+        self.phase = kw.get("phase", False)                # marginal → 기본 off
+        self.noise = kw.get("noise", False)                # 검토 → 기본 off
+        # ※ translation은 미채택: target이 384로 center-crop돼 제공되는데 모델은 640×368에서
+        #   크롭하므로, 640 도메인 shift가 384 target과 정렬 불가(높이 크롭이 wrap과 불일치).
+        #   flip은 center-crop과 commute해 안전하지만 translation은 안 됨. → 제거.
+        # 파라미터
+        self.mask_thin_max = kw.get("mask_thin_max", 4)    # 주변부 추가 언더샘플 최대 배수
+        self.orig_mask_prob = kw.get("orig_mask_prob", 0.5)  # 원본(무증강) 마스크 유지 확률(분포 정합)
+        self.noise_sigma = kw.get("noise_sigma", 0.0)      # 상대 측정 노이즈(보수적)
         self.seed = kw.get("seed", 430)
 
 
@@ -212,25 +212,17 @@ class MRIAugmentor:
         self.epoch = int(epoch)
 
     # ---- 스케줄 ----
-    def prob(self):
-        """이번 epoch에서 flip이 걸릴 확률. 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
-        MRAugment 공식 schedule_p와 동일: D=delay, T=total_epochs, c=exp_decay/(T-D).
-        p(t<D)=0이고 p(T)=p_max로 정규화되므로 런 길이가 달라도 증강량이 일관된다.
-        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)"""
+    def _prob(self):
         c = self.cfg
         if not c.on:
             return 0.0
-        D, T, t, p_max = int(c.delay), int(c.total_epochs), self.epoch, float(c.max_prob)
-        if t < D:
-            return 0.0
         if c.schedule == "constant":
-            return p_max
-        if T - D <= 0:                       # 가드: 1 epoch 스모크 런 등
-            return p_max
-        if c.schedule == "ramp":
-            return p_max * (t - D) / (T - D)
-        k = c.exp_decay / (T - D)
-        return float(p_max / (1.0 - np.exp(-(T - D) * k)) * (1.0 - np.exp(-(t - D) * k)))
+            return c.max_prob
+        e = self.epoch
+        if e < c.warmup_epochs:                # warmup 동안 증강 off (기본기 학습)
+            return 0.0
+        t = (e - c.warmup_epochs) / max(1, c.ramp_epochs)
+        return float(c.max_prob * (1.0 - np.exp(-3.0 * t)))  # 지수형 점증(t=1에서 ≈95%)
 
     def _rng(self, fname, sl):
         """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨.
@@ -240,29 +232,31 @@ class MRIAugmentor:
         return np.random.default_rng(zlib.crc32(key))
 
     # ---- 개별 augmentation ----
+    def _aug_mask(self, rng, mask):
+        """ACS 보존 + 주변부(고주파) 추가 언더샘플. 원본 마스크의 부분집합만 반환(라인 추가 불가)."""
+        acs = _detect_acs(mask)
+        periph_idx = np.where((mask >= 1) & (~acs))[0]
+        if periph_idx.size == 0:
+            return mask.copy()
+        thin = int(rng.integers(1, self.cfg.mask_thin_max + 1))  # 1..thin_max
+        if thin == 1:
+            return mask.copy()
+        off = int(rng.integers(0, thin))
+        keep = np.zeros_like(mask)
+        keep[acs] = 1
+        keep[periph_idx[off::thin]] = 1  # equispaced thinning + 랜덤 오프셋
+        return keep.astype(mask.dtype)
+
     def _flip_lr(self, K, target, bbox, mask, grappa=None):
-        """좌-우(width) 플립을 FFT 없이 closed form으로 수행 → 픽셀 정확 정렬(재시뮬 불필요).
-        DFT 성질: y[n]=x[W-1-n]이면 Y[k]=e^{2πik/W}·X[-k]. 이 파일의 centered 규약
-        (fftshift(fft(ifftshift(·))))에서 인덱스 -k는 centered 인덱스로 (W-j)%W에 대응하고,
-        이는 마스크와 동일한 공식 roll(flip(·),1)이다. 즉 K2 = roll(flip(K),1) · ramp,
-        ramp[j] = exp(2πi(j-W//2)/W). height축 FFT는 폭 flip에 대해 항등(취소)이라
-        아예 필요 없고, width축 관계는 위 식으로 대수적으로 닫혀 있어 FFT 자체가 불필요하다
-        (기존 ifftc→flip→fftc 왕복 대비 15배 빠름, 470ms→31ms @ (15,640,368) 실측).
-        검증: 위 공식과 옛 이미지-도메인 왕복 구현의 상대오차 ~2.5e-07(W=368) — 짝수 폭 전제.
-        홀수 W(예 371)는 공식이 깨진다(상대오차 ~1.4) → 아래 assert가 그 전제를 강제한다.
-        마스크는 같은 even-length 정확 공식 M'[j]=M[(W-j)%W] = roll(flip(M),1)로 도출(1-라인 오차 방지).
+        """좌-우(width) 플립을 이미지 도메인에서 수행 후 k-space 재생성 → 재시뮬 없이 픽셀 정확 정렬.
+        flip은 center-crop과 commute하므로 384 target(=flip(clean))과 완전 일치.
+        마스크는 even-length 정확 공식 M'[j]=M[(W-j)%W] = roll(flip(M),1)로 도출(1-라인 오차 방지).
+        검증: recon(K_flip) == flip(recon(K)) (오차 ~1e-7), 샘플 라인 수 보존.
         GRAPPA(영상 384², 있으면)도 같은 좌우 flip으로 동기 — 두 입력의 해부 정렬 유지."""
-        assert mask.shape[0] % 2 == 0, (
-            f"좌우 flip의 마스크 공식 roll(flip(M),1)은 짝수 폭에서만 성립한다 (W={mask.shape[0]}). "
-            "홀수 폭이면 flip된 k-space 에너지가 마스크 밖으로 나가 조용히 삭제된다.")
-        W = K.shape[-1]
-        j = np.arange(W)
-        ramp = np.exp(2j * np.pi * (j - W // 2) / W).astype(K.dtype, copy=False)
-        K2 = np.roll(np.flip(K, axis=-1), 1, axis=-1) * ramp
+        coil = _ifftc(K)[:, :, ::-1]
+        K2 = _fftc(np.ascontiguousarray(coil))
         M2 = np.roll(np.flip(mask), 1).astype(np.float32)
-        # closed form은 순수 인덱스 치환이라 K2의 support가 이미 정확히 M2다(수치 누설 없음).
-        # 이 곱은 방어용 — 호출부가 마스크 안 씌운 K를 넘기더라도 계약(K2 ⊆ M2)을 지킨다.
-        K2 = K2 * M2
+        K2 = K2 * M2                                       # FFT 수치 누설 제거
         tgt = np.ascontiguousarray(target[:, ::-1])
         if bbox is not None:
             W = tgt.shape[1]
@@ -274,69 +268,39 @@ class MRIAugmentor:
         """kspace_c:(coils,H,W) complex(raw) · mask:(W,) · target:(384,384) or None
         · grappa:(384,384) magnitude or None(GRAPPA 보조 입력, 확정: 영상 도메인 유지).
         반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
-        GRAPPA에도 flip(기하)을 동기 적용한다 — 두 입력의 해부 정렬이 어긋나면 안 되므로."""
+        ⚠️ GRAPPA에는 flip(기하)만 동기 적용하고 mask/phase/noise 증강은 미적용
+           — 이미 복원된 깨끗한 prior라 라인 더 지우거나 노이즈 주입은 스스로 훼손(confirmed_model)."""
+        cfg = self.cfg
         M = (mask >= 1).astype(mask.dtype)
         K = kspace_c * M                       # 제공 언더샘플 적용
-        if (not self.cfg.on) or (target is None):
+        if (not cfg.on) or (target is None):
             return K, M, target, bbox, grappa
-        p = self.prob()
+        p = self._prob()
         if p <= 0.0:
             return K, M, target, bbox, grappa
-        if self._rng(fname, sl).random() >= p:
-            return K, M, target, bbox, grappa
+        rng = self._rng(fname, sl)
+        tgt = target
 
-        # 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
-        K, tgt, M, bbox, grappa = self._flip_lr(K, target, bbox, M, grappa)
+        # 1) mask augmentation (원본 유지 확률 반영 → test 고정마스크 분포 정합). GRAPPA엔 미적용.
+        if cfg.mask and (rng.random() < p) and (rng.random() >= cfg.orig_mask_prob):
+            M = self._aug_mask(rng, M)
+            K = kspace_c * M
+
+        # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
+        if cfg.flip and (rng.random() < p):
+            K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
+
+        # 3) k-space 랜덤 위상 (global, magnitude/RSS 불변 → bbox 채점 불변, 이득 marginal). GRAPPA 불변.
+        if cfg.phase and (rng.random() < p):
+            K = K * np.exp(1j * rng.uniform(0.0, 2.0 * np.pi))
+
+        # 4) 측정 노이즈 (보수적, 샘플된 라인에만). GRAPPA 미적용.
+        if cfg.noise and (cfg.noise_sigma > 0.0) and (rng.random() < p):
+            scale = cfg.noise_sigma * float(np.abs(K).mean())
+            n = (rng.standard_normal(K.shape) + 1j * rng.standard_normal(K.shape)) * scale
+            K = K + n * M
+
         return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox, grappa
-
-
-# ============================================================================
-# 마스크 재생성 (remask) — 학습 로더 전용. 근거: augmentation.md §0 후속(2026-07-29).
-#   학습풀 h5의 kspace는 **마스크 곱 이전 full k-space**다(train 170/170 · val 30/30 실측).
-#   그래서 딸려온 마스크를 버리고 우리가 만든 마스크를 곱하면 같은 볼륨을 반대 가속률로 쓸 수 있다.
-#   정답 image_label은 fully-sampled 복원이라(corr 1.0000000000, attrs['max']도 label 기준)
-#   마스크를 바꿔도 그대로 유효하다 → MoE 전문가 하나가 보는 볼륨이 80 → 160이 된다
-#   (acc4 전문가는 acc8 파일에서 뽑은 acc4로, acc8 전문가는 acc4 파일에서 뽑은 acc8로).
-#
-#   생성기는 주최측 것과 동일하다 — 학습풀 200 + leaderboard 80 전수에서 center_fraction 후보
-#   {0.04, 0.08, 0.10} 완전탐색 결과 **네 셀 모두 0.08만 유일하게** 비트정확 재현(실패 0건).
-#   ⚠️ 벤더 fastmri의 EquispacedMaskFunc는 adjusted_accel(실수 간격)을 써서 이 데이터와 안 맞는다.
-#      np.arange(offset, W-1, acc)도 금지 — (W-1)%acc==offset인 볼륨에서 마지막 열이 조용히 빠진다.
-#      슬라이싱 m[offset::acc]만 이 데이터의 규약과 일치한다.
-#
-#   [offset] 학습풀은 offset == (W//2)%acc로 **결정론적**이다(200볼륨 전수, 예측=실측).
-#   그런데 leaderboard는 **무작위 0~acc-1**이다(acc4 예측 24/0/16/0 vs 실측 15/11/7/7).
-#   그래서 기본은 uniform이다 — 지금 acc8 전문가는 채점 볼륨의 65%를 학습에서 본 적 없는
-#   offset으로 만난다. canonical은 "그 볼륨이 반대 가속률로 배정됐다면 주최측이 붙였을 바로
-#   그 마스크"를 재현하는 모드로, 분포를 전혀 안 건드리고 볼륨 풀만 2배로 늘리고 싶을 때 쓴다.
-# ============================================================================
-
-CENTER_FRACTION = 0.08   # acc4·acc8 공통. 280볼륨 비트정확 재현으로 확정. CLI로 노출하지 말 것.
-
-
-def equispaced_mask(W, acc, offset, center_fraction=CENTER_FRACTION, dtype=np.float32):
-    """대회 마스크 생성기. mask = {i : i ≡ offset (mod acc)} ∪ ACS[pad, pad+nlf).
-    nlf = round(cf·W)(W=368→29, W=372→30), pad = (W−nlf+1)//2(→170, →171)."""
-    W, acc, offset = int(W), int(acc), int(offset)
-    m = np.zeros(W, dtype=dtype)
-    m[offset % acc::acc] = 1                    # ★ 슬라이싱 규약 = range(offset, W, acc)
-    nlf = int(round(center_fraction * W))
-    pad = (W - nlf + 1) // 2
-    m[pad:pad + nlf] = 1
-    return m
-
-
-def canonical_offset(W, acc):
-    """학습풀의 offset 규칙 — 격자가 k-space 중앙열 W//2를 지난다. 200볼륨 전수 일치."""
-    return (int(W) // 2) % int(acc)
-
-
-def remask_offset(seed, epoch, fname, sl, acc):
-    """(seed, epoch, fname, slice)에서 결정적으로 뽑는 균등 offset.
-    MRIAugmentor._rng와 같은 관례(zlib.crc32 — builtin hash는 프로세스마다 달라 재현 불가)이되
-    salt "remask"로 스트림을 분리한다 → flip 동전 시퀀스가 remask on/off에서 동일해야 A/B가 성립."""
-    key = repr(("remask", int(seed), int(epoch), str(fname), int(sl), int(acc))).encode()
-    return int(np.random.default_rng(zlib.crc32(key)).integers(int(acc)))
 
 
 class DataTransform:
@@ -365,7 +329,7 @@ class DataTransform:
                  ※ grappa 폭 384 vs kspace 폭 W(368/372) 격자 차 → network에서 폭 crop 또는 출력단 384² head로 정합.
       • scale  : per-sample 정규화 스칼라. 최종 출력·SSIM은 이 값으로 역정규화(원 스케일 복귀) 후 채점.
       • 감도맵 1회 추정 후 재사용(mask증강=그대로/flip=flip)은 network(varnet.py) 쪽 최적화 — 여기선 미포함.
-      • 증강 확률 스케줄(delay→exp/ramp/constant)은 구현·epoch 전달(train_part set_epoch) 모두 배선 완료.
+      • 증강 확률 스케줄(warmup→지수)은 구현돼 있으나 epoch 전달(train_part set_epoch)은 배선 필요(나중/동료).
     """
 
     # GRAPPA 키(image 파일 내). load_data.py가 이 키로 읽어 넘겨준다.
@@ -374,8 +338,7 @@ class DataTransform:
     def __init__(self, isforward, max_key, augmentor=None, is_train=False, return_bbox=False,
                  normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
                  return_grappa=False, coil_compress=False, n_virtual_coils=8,
-                 return_fg_mask=False, remask_acc=None, remask_offset="uniform",
-                 remask_seed=430):
+                 return_fg_mask=False):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
@@ -394,17 +357,9 @@ class DataTransform:
         #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, candidates.md.
         self.coil_compress = bool(coil_compress)
         self.n_virtual_coils = int(n_virtual_coils)
-        # ---- 마스크 재생성(학습 전용). None = off = 딸려온 마스크 그대로(기존과 비트 동일) ----
-        self.remask_acc = None if remask_acc in (None, "off", "") else int(remask_acc)
-        self.remask_offset = str(remask_offset)
-        self.remask_seed = int(remask_seed)
-        self.epoch = 0
 
     def set_epoch(self, epoch):
-        """train_part.py가 매 epoch 호출(스케줄 갱신). augmentor 없으면 augmentor만 no-op.
-        remask의 uniform offset도 이 epoch을 쓴다 — 안 받으면 매 epoch 같은 마스크가 되어
-        크래시 없이 이득만 조용히 사라진다."""
-        self.epoch = int(epoch)
+        """train_part.py가 매 epoch 호출(스케줄 갱신). augmentor 없으면 no-op."""
         if self.augmentor is not None:
             self.augmentor.set_epoch(epoch)
 
@@ -431,17 +386,6 @@ class DataTransform:
         mask1d = np.asarray(mask)
         kspace_c = np.asarray(input)           # complex (coils, H, W)
         orig_cdtype = kspace_c.dtype           # 증강(FFT/exp)이 complex128로 승격시키는 것 방지
-
-        # 마스크 재생성 — 딸려온 마스크를 버리고 대회 생성기로 다시 만든다(학습 전용).
-        #   full k-space라 어떤 가속률 마스크를 곱해도 주최측 입력 생성식과 같은 물건이 되고,
-        #   정답은 마스크와 무관하다. 아래 언더샘플 곱(augmentor의 K=kspace*M 또는 else 분기)이
-        #   새 마스크로 수행된다 — 이 파일에서 동작이 바뀌는 지점은 여기 하나뿐이다.
-        #   val/forward는 is_train 게이트에 걸린다(load_data도 애초에 None을 넘긴다 = 2중 방어).
-        if (self.remask_acc is not None) and self.is_train and (tgt is not None):
-            W = kspace_c.shape[-1]
-            off = (canonical_offset(W, self.remask_acc) if self.remask_offset == "canonical"
-                   else remask_offset(self.remask_seed, self.epoch, fname, slice, self.remask_acc))
-            mask1d = equispaced_mask(W, self.remask_acc, off, dtype=mask1d.dtype)
 
         bbox = self._parse_bbox(attrs, slice) if (self.return_bbox and not self.isforward) else None
 

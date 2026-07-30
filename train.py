@@ -60,35 +60,8 @@ def parse():
     # MoE(acc4/acc8 분리) — 학습 땐 파일명 accN 토큰으로 acc를 골라 학습, 추론 땐 마스크로 라우팅(test_part).
     parser.add_argument('--acc', type=str, default='all', choices=['all', '4', '8'], help='학습 데이터를 가속률로 필터(파일명 accN 기준). all=전체. MoE expert 학습 시 4 또는 8.')
     parser.add_argument('--init-from', type=str, default='', help='Option C 미세조정: 지정한 체크포인트의 model 가중치만 로드해 초기화(optimizer/epoch은 새로 시작). --resume과 배타적(resume 우선).')
-    # 마스크 재생성 — 학습풀 kspace가 full k-space라, 딸려온 마스크 대신 대회 생성기로 만든
-    #   마스크를 곱하면 같은 볼륨을 반대 가속률로 쓸 수 있다(정답은 마스크 무관). 근거: augmentation.md §0.
-    parser.add_argument('--remask', type=str, default='off', choices=['off', '4', '8'],
-                        help='학습 입력 마스크를 딸려온 것 대신 대회 생성기로 **재생성**한다(값=만들 가속률). '
-                             '--acc all 과만 쓴다 → MoE 전문가 하나가 보는 볼륨이 80→160 (acc4 전문가는 '
-                             'acc8 파일에서 뽑은 acc4로, 그 반대도). val/leaderboard는 미적용. '
-                             '기본 off = 기존 학습과 비트 동일.')
-    parser.add_argument('--remask-offset', type=str, default='uniform', choices=['uniform', 'canonical'],
-                        help='재생성 격자의 위상. uniform=(seed,epoch,volume,slice) 균등추첨(기본) — '
-                             '학습풀은 offset이 (W//2)%%acc로 결정론인데 채점은 무작위 0~acc-1이라 '
-                             '지금 acc8 전문가는 채점 볼륨의 65%%를 못 본 offset으로 만난다. '
-                             'canonical=(W//2)%%acc — 주최측 규칙 그대로라 분포를 안 건드리고 볼륨 풀만 2배.')
-
-    # ---- 증강 (좌우 flip 하나뿐). 기본 off = 기존 학습과 동일 ----
-    #   스케줄은 공식 repo(MathFLDS/MRAugment) schedule_p와 동일 형태 — delay D + 총 epoch T 정규화.
-    #   mask thinning·위상·노이즈는 2026-07-28 제거(strategy/augmentation.md §0).
-    parser.add_argument('--aug-on', action='store_true', help='좌-우(phase-encode) flip 증강 켜기. 기본 off면 기존 학습과 100%% 동일(비트 동일).')
-    parser.add_argument('--aug-schedule', type=str, default='exp', choices=['exp', 'ramp', 'constant'],
-                        help='증강 확률 스케줄. exp=지수 점증(공식 기본), ramp=선형, constant=고정')
-    parser.add_argument('--aug-max-prob', type=float, default=0.55, help='p_max — 마지막 epoch에서의 증강 확률(논문 기본 0.55)')
-    parser.add_argument('--aug-delay', type=int, default=0, help='앞쪽 몇 epoch을 증강 없이 보낼지(D). 과적합이 시작되는 epoch 직전에 두는 것이 목적')
-    parser.add_argument('--aug-exp-decay', type=float, default=5.0, help='--aug-schedule exp의 감쇠 계수 c (공식 기본 5.0)')
 
     args = parser.parse_args()
-
-    # 오조합은 여기서 죽인다 — 로더까지 가면 345MB짜리 --init-from 체크포인트를 이미 로드한 뒤다.
-    if args.remask != 'off' and str(args.acc) != 'all':
-        parser.error(f"--remask {args.remask} 는 --acc all 과만 쓴다 (지금 --acc {args.acc}). "
-                     "--acc 로 파일을 걸러버리면 볼륨 풀이 절반이 되어 이 기능의 목적이 사라진다.")
     return args
 
 if __name__ == '__main__':

@@ -1,6 +1,0 @@
-==========================================================
-[START] shell1   2026-07-15 17:14:49
-[CWD  ] /root/FastMRI_SNU_2026_GMG
-[LOG  ] shell_scripting/logs/shell1_20260715_171449.log
-==========================================================
-+ python recon_eval.py -n sdum_run11 -p /root/Data/leaderboard

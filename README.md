@@ -21,12 +21,14 @@ knee 데이터만 쓰고, 가속률은 acc4와 acc8, 출력은 384×384입니다
 | 모델 | SSIM_full | SSIM_bbox | ms/slice |
 |---|---|---|---|
 | zero-filled (재구성 없음) | 0.833 | 0.820 | — |
-| PromptMR+ 단일 | 0.9303 | 0.9279 | 716.9 |
+| PromptMR+ 단일 | 0.9309 | 0.9284 | 733.6 |
 | PromptMR+ MoE | 0.9321 | 0.9300 | 734.3 |
+
+아래 두 행은 같은 pretrain에서 갈라져 나온 쌍이라 그대로 비교됩니다. MoE는 0.7ms를 더 쓰고 full +0.0012, bbox +0.0016을 가져갔습니다.
 
 MoE를 가속률로 쪼개면 acc4가 0.9497 / 0.9505, acc8이 0.9145 / 0.9094입니다. acc8이 0.035쯤 낮고, 여기가 지금 가장 큰 약점입니다.
 
-표의 두 행은 서로 다른 run이라 17ms 차이에 학습 조건 차이가 섞여 있습니다. MoE 자체 이득은 같은 run에서 잰 단일 모델(0.9309 / 0.9284) 대비 +0.0012 / +0.0016입니다.
+따로 돌린 K-fold f2 + flip 증강 run은 0.9303 / 0.9279 / 716.9ms입니다. 점수는 조금 낮은데 17ms 빠릅니다.
 
 점수 사본은 [shell_scripting/results/](shell_scripting/results/), 실행 로그는 [shell_scripting/logs/](shell_scripting/logs/)에 있습니다.
 

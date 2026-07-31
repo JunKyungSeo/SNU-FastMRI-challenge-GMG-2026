@@ -1,6 +1,6 @@
 # Vendored from sMartify-fastmri/2025_final (FastMRI_challenge_sMaRtIfy_final/utils/model/promptmr_plus.py)
 # 원본 커밋: c7087f58addfc2e6f0cec0b33443213d69e2ce52 (main). PromptMR+ (Xin et al., arXiv:2411/ECCV'24).
-# 이 repo에선 knee·정적 2D·단일 슬라이스·Cartesian 전용으로 사용(num_adj_slices=1).
+# 이 repo에선 knee·정적 2D·Cartesian 전용. num_adj_slices=1(기본) 또는 3(--num-adj-slices 3).
 # `import fastmri`는 varnet과 동일하게 utils/model/fastmri로 해석됨(sens_expand/sens_reduce는 그쪽에 추가함).
 import math
 from typing import List, Optional, Tuple, Union
@@ -477,10 +477,11 @@ class NormPromptUnet(nn.Module):
         return x, latent, history_feat
 
 class PromptMRBlock(nn.Module):
-    def __init__(self, model: nn.Module):
+    def __init__(self, model: nn.Module, num_adj_slices: int = 1):
 
         super().__init__()
         self.model = model
+        self.num_adj_slices = num_adj_slices   # DC(sens_expand/reduce)가 슬라이스 그룹을 알아야 한다
         self.dc_weight = nn.Parameter(torch.ones(1))
 
     def forward(
@@ -493,8 +494,9 @@ class PromptMRBlock(nn.Module):
         history_feat: Optional[Tuple[torch.Tensor, ...]] = None
     ):
         zero = torch.zeros(1, 1, 1, 1, 1).to(current_img)
-        current_kspace = fastmri.sens_expand(current_img, sens_maps)
-        ffx = fastmri.sens_reduce(torch.where(mask != 0, current_kspace, zero), sens_maps) # mask != 0 for silence warning
+        current_kspace = fastmri.sens_expand(current_img, sens_maps, self.num_adj_slices)
+        ffx = fastmri.sens_reduce(torch.where(mask != 0, current_kspace, zero), sens_maps,
+                                  self.num_adj_slices) # mask != 0 for silence warning
         if self.model.n_buffer > 0:
             # adaptive input. buffer: A^H*A*x_i, s_i, x0, A^H*A*x_i-x0
             buffer = torch.cat([ffx, latent, img_zf] + [ffx-img_zf]*(self.model.n_buffer-3), dim=1)
@@ -536,13 +538,22 @@ class PromptMR(nn.Module):
         adaptive_input: bool = True,   # Plus
         n_buffer: int = 4,             # Plus
         n_history: int = 11,           # Plus
+        num_adj_slices: int = 1,       # 2.5D 인접 슬라이스 (1=단일, 3=±1). 상류 원본과 동일 규약
     ):
-        # slim: 단일 슬라이스 전용 → num_adj_slices/use_sens_adj/center_slice 제거.
+        # 인접 슬라이스 규약(상류 promptmr_v2.py와 동일):
+        #   masked_kspace 코일축은 **슬라이스-major** 배열 — (B, adj*C, H, W, 2) 에서
+        #   [adj0의 C코일, adj1의 C코일, ...] 순서. einops 'b (adj coil) ...' 와 같은 뜻이다.
+        #   sens_reduce/sens_expand(coil_combine.py)가 이 배열을 전제로 이미 num_adj_slices를 받는다.
+        #   use_sens_adj는 미사용(감도는 코일별 독립 추정) — 8GB에서 compute_sens_per_coil을 쓰므로
+        #   sens U-Net in_chans는 2로 둔다. 상류의 use_sens_adj=False 분기와 동일.
         super().__init__()
         self.num_cascades = num_cascades
         self.n_history = n_history
         self.n_buffer = n_buffer
+        self.num_adj_slices = num_adj_slices
+        self.center_slice = num_adj_slices // 2
         self.sens_net = SensitivityModel(
+            num_adj_slices=num_adj_slices,
             n_feat0=sens_n_feat0,
             feature_dim=sens_feature_dim,
             prompt_dim=sens_prompt_dim,
@@ -562,8 +573,8 @@ class PromptMR(nn.Module):
         self.cascades = nn.ModuleList([
             PromptMRBlock(
                 NormPromptUnet(
-                    in_chans=2,
-                    out_chans=2,
+                    in_chans=2 * num_adj_slices,    # 상류: 실/허 2채널 × 인접 슬라이스 수
+                    out_chans=2 * num_adj_slices,
                     n_feat0=n_feat0,
                     feature_dim=feature_dim,
                     prompt_dim=prompt_dim,
@@ -579,6 +590,7 @@ class PromptMR(nn.Module):
                     n_buffer=n_buffer,
                     n_history=n_history
                 ),
+                num_adj_slices=num_adj_slices,
             ) for _ in range(num_cascades)
         ])
 
@@ -618,7 +630,7 @@ class PromptMR(nn.Module):
             self.sens_net_ckp.use_checkpoint = use_checkpoint
             sens_maps = self.sens_net_ckp(masked_kspace, mask, num_low_frequencies, mask_type, compute_sens_per_coil)
 
-        img_zf = fastmri.sens_reduce(masked_kspace, sens_maps)
+        img_zf = fastmri.sens_reduce(masked_kspace, sens_maps, self.num_adj_slices)
         img_pred = img_zf.clone()
         latent = img_zf.clone()
         history_feat = None
@@ -635,7 +647,12 @@ class PromptMR(nn.Module):
             else:
                 img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
 
-        # slim: 단일 슬라이스라 중앙 슬라이스 추출(chunk) 불필요 → RSS로 바로 coil-combine.
+        # 인접 슬라이스면 **중앙 슬라이스만** 최종 출력이다(상류와 동일). img_pred는 (B,adj,H,W,2),
+        # sens_maps는 (B,adj*C,H,W,2) — 각각 adj로 chunk해 center를 꺼낸 뒤 coil-combine한다.
+        # num_adj_slices=1이면 chunk(...,1)[0]이 항등이라 기존 동작과 비트 동일하다.
+        if self.num_adj_slices > 1:
+            img_pred = torch.chunk(img_pred, self.num_adj_slices, dim=1)[self.center_slice]
+            sens_maps = torch.chunk(sens_maps, self.num_adj_slices, dim=1)[self.center_slice]
         # complex_mul 은 torch.stack 으로 새 텐서를 만들어 입력을 건드리지 않는다 → clone 불필요.
         img_pred = fastmri.rss(fastmri.complex_abs(fastmri.complex_mul(img_pred, sens_maps)), dim=1)
         img_pred = center_crop(img_pred, 384, 384)
@@ -658,9 +675,13 @@ class SensitivityModel(nn.Module):
         no_use_ca: bool = False,
         mask_center: bool = True,
         learnable_prompt=False,
+        num_adj_slices: int = 1,
     ):
-        # slim: 단일 슬라이스 전용 → num_adj_slices/use_sens_adj 제거(코일별 감도 추정).
+        # use_sens_adj는 미사용(상류의 use_sens_adj=False 분기) → 감도는 **코일별 독립 추정**이라
+        # unet in_chans는 인접 슬라이스 수와 무관하게 2다. num_adj_slices는 RSS 정규화를
+        # 슬라이스 그룹별로 하기 위해서만 필요하다(divide_root_sum_of_squares 참고).
         super().__init__()
+        self.num_adj_slices = num_adj_slices
         self.mask_center = mask_center
         self.norm_unet = NormPromptUnet(in_chans=2,
                                         out_chans=2,
@@ -688,7 +709,15 @@ class SensitivityModel(nn.Module):
 
     def divide_root_sum_of_squares(self, x: torch.Tensor) -> torch.Tensor:
         # per-pixel coil normalization: sum_c |S_c|^2 = 1
-        return x / fastmri.rss_complex(x, dim=1).unsqueeze(-1).unsqueeze(1)
+        # ⚠️ 인접 슬라이스에서는 **슬라이스 그룹별로** 정규화해야 한다(상류와 동일). 코일축 전체로
+        #    한 번에 나누면 각 그룹 합이 1/adj 로 줄어 스케일이 조용히 어긋난다.
+        if self.num_adj_slices == 1:
+            return x / fastmri.rss_complex(x, dim=1).unsqueeze(-1).unsqueeze(1)
+        b, adj_coil, h, w, two = x.shape
+        coil = adj_coil // self.num_adj_slices
+        x = x.view(b, self.num_adj_slices, coil, h, w, two)
+        x = x / fastmri.rss_complex(x, dim=2).unsqueeze(-1).unsqueeze(2)
+        return x.view(b, adj_coil, h, w, two)
 
     def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool,
                      use_checkpoint: bool = False) -> torch.Tensor:

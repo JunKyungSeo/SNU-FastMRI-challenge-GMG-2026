@@ -43,7 +43,10 @@ DATA_ROOT="${DATA_ROOT:-$([ -d /workspace/Data ] && echo /workspace/Data || echo
 # 탐침 대상. 증강 유무에 따라 읽는 법이 달라진다:
 #   flip 으로 학습된 모델(_aug) → 좌우 격차가 대조군(0 이어야 정상), 180° 격차 ≈ 순수 상하 몫.
 #   증강 없이 학습된 모델        → 좌우 격차도 정보다(flip 이 회수했을 양의 상한).
-PROBE_NET="${PROBE_NET:-promptmr_moe_f2_shared_aug}"
+#   ⚠️ shell28 의 기본값(promptmr_moe_f2_shared_aug)은 서버에 없다 — 그걸 복사하지 말 것.
+#      증강 없이 학습된 f2(promptmr_kfold_f2)도 체크포인트가 안 남아 있어서, 좌우 격차는
+#      flip 학습본을 대조군으로 쓰는 수밖에 없다.
+PROBE_NET="${PROBE_NET:-promptmr_moe_f2_aug_rm}"
 ACCS="${ACCS:-8}"
 PROBE_VOLS="${PROBE_VOLS:-10}"      # 0 = hold-out 전수
 # PROBE_KFOLD=0 이면 고정분할 → hold-out 은 $DATA_ROOT/val.

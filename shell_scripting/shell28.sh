@@ -82,6 +82,7 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "offset" ]; then
 fi
 
 if [ "$STAGE" = "all" ] || [ "$STAGE" = "l1" ]; then
+    ARM_DIR="$(mktemp -d)"
     for W in 0.0 "$L1_W"; do
         NET="probe_l1_${W}"
         rm -rf "../result/$NET"
@@ -89,10 +90,26 @@ if [ "$STAGE" = "all" ] || [ "$STAGE" = "l1" ]; then
         set -x
         python train.py "${BASE_ARGS[@]}" \
             --l1-weight "$W" -e 1 --max-iters "$L1_ITERS" \
-            -n "$NET" --run-tag "probe_l1_${W}"
-        { B=$?; set +x; } 2>/dev/null
+            -n "$NET" --run-tag "probe_l1_${W}" 2>&1 | tee "$ARM_DIR/$W.txt"
+        { B=${PIPESTATUS[0]}; set +x; } 2>/dev/null
         [ "$B" -ne 0 ] && STATUS="$B"
     done
+
+    echo
+    echo "===== B 결과: 손실 궤적 ====="
+    paste <(printf 'iter  l1=0.0\n'; grep -o 'Iter = \[ *[0-9]*/.*Loss = [0-9.e+-]*' "$ARM_DIR/0.0.txt" \
+                | sed -E 's/Iter = \[ *([0-9]+).*Loss = /\1  /') \
+          <(printf "l1=$L1_W\n"; grep -o 'Loss = [0-9.e+-]*' "$ARM_DIR/$L1_W.txt" | sed 's/Loss = //') \
+        | column -t
+    echo
+    echo "===== B 판정 ====="
+    echo "ValLoss (1-masked SSIM, 낮을수록 좋음) — 두 arm 모두 순수 SSIM 이라 이것만 비교 가능:"
+    for W in 0.0 "$L1_W"; do
+        printf '  l1=%-5s %s\n' "$W" "$(grep -o 'ValLoss *= *[0-9.]*' "$ARM_DIR/$W.txt" | tail -1)"
+    done
+    echo "⚠️ TrainLoss 는 arm 마다 손실 **함수가 다르다**((1-w)·SSIM + w·L1) — 나란히 놓지 말 것."
+    echo "⚠️ ${L1_ITERS} iter 는 안정성 확인용이다. 이득 판정은 L1_ITERS 를 키워서 다시."
+    rm -rf "$ARM_DIR"
 fi
 
 echo "=========================================================="

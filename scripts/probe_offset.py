@@ -24,8 +24,12 @@ import h5py
 import numpy as np
 import torch
 
-if str(Path.cwd() / "utils" / "model") not in sys.path:
-    sys.path.insert(1, str(Path.cwd() / "utils" / "model"))
+# scripts/ 에서 실행되므로 sys.path[0] 은 scripts/ 다 — repo 루트를 직접 넣어야 utils 가 보인다
+# (recon_eval.py 는 루트에 있어서 이게 필요 없다). utils/model 은 varnet 의 `import fastmri` 용.
+_ROOT = Path(__file__).resolve().parents[1]
+for _p in (str(_ROOT), str(_ROOT / "utils" / "model")):
+    if _p not in sys.path:
+        sys.path.insert(1, _p)
 
 from utils.common.metrics import SSIM, foreground_mask, ssim_bbox, ssim_full
 from utils.data.load_data import KFOLD_ROOT_SEP, kfold_split

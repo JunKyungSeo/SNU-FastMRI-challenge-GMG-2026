@@ -28,6 +28,9 @@ import numpy as np
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")   # Windows cp949 콘솔에서 →·← 출력 깨짐 방지
 
+# repo 루트를 import 경로에 (scripts/ 에서 직접 실행해도 utils 를 찾게 — bbox_ssim_breakdown.py 관례)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 
 def pearson(a, b):
     """두 패치의 Pearson r. 어느 쪽이든 분산 0이면 정의 불가 → nan."""

@@ -36,7 +36,7 @@ cd "$SCRIPT_DIR/.." || exit 1
 
 # ===== [이번 run] =====
 STAGE="${STAGE:-all}"
-DATA_ROOT="${DATA_ROOT:-/root/Data}"
+DATA_ROOT="${DATA_ROOT:-$([ -d /workspace/Data ] && echo /workspace/Data || echo /root/Data)}"
 # 탐침 대상은 **remask 없이 학습된** 모델이어야 한다(격차가 남아 있어야 잰다).
 #   PROBE_KFOLD=0 이면 고정분할 → hold-out 은 $DATA_ROOT/val.
 #   PROBE_KFOLD>0 이면 그 fold 가 hold-out (학습 때와 **같은** fold/seed 를 줄 것).
@@ -74,10 +74,16 @@ if [ -n "$USED" ] && [ "$USED" -ge 500 ]; then
 fi
 
 # --- 가드: 탐침 체크포인트 존재 ---
+#   ⚠️ 이름에 _rm 이 붙은 건 remask 로 학습돼 offset 을 이미 다 봤다 → 격차가 0 으로 나온다.
+#      remask **없이** 학습된 모델을 골라야 사각지대를 잰다.
 if { [ "$STAGE" = "all" ] || [ "$STAGE" = "offset" ]; } \
    && [ ! -e "../result/$PROBE_NET/checkpoints/best_model.pt" ]; then
-    echo "[STOP] ../result/$PROBE_NET/checkpoints/best_model.pt 없음. PROBE_NET= 으로 지정하라. 후보:"
-    ls -1 ../result 2>/dev/null | grep -i acc8
+    echo "[STOP] ../result/$PROBE_NET/checkpoints/best_model.pt 없음. PROBE_NET= 으로 지정하라."
+    echo "       쓸 수 있는 체크포인트 (⚠️=remask 학습본이라 탐침 부적합):"
+    for n in $(ls -1 ../result 2>/dev/null); do
+        [ -e "../result/$n/checkpoints/best_model.pt" ] || continue
+        case "$n" in *_rm*) echo "         ⚠️ $n" ;; *) echo "            $n" ;; esac
+    done
     exit 2
 fi
 

@@ -68,6 +68,26 @@ class SSIMLoss(nn.Module):
         return 1 - (num / den).mean()
 
 
+def masked_l1_loss(output, target, data_range, mask=None):
+    """data_range로 나눈 L1. SSIM 항(0~1)과 같은 자릿수가 되게 만드는 게 이 나눗셈의 목적이다
+    — 안 나누면 픽셀 절대값 스케일이라 혼합 즉시 L1이 SSIM을 압도한다.
+    mask를 주면 SSIMLoss(mask=...)와 같은 영역(foreground) 안에서만 평균낸다.
+
+    Args:
+        output, target: (B, H, W)
+        data_range: (B,) — 각 샘플의 max
+        mask: (B, H, W) 0/1 또는 None
+    """
+    diff = (output - target).abs()
+    if mask is not None:
+        num = (diff * mask).sum(dim=(1, 2))
+        den = mask.sum(dim=(1, 2)).clamp_min(1.0)
+        per_sample = num / den
+    else:
+        per_sample = diff.mean(dim=(1, 2))
+    return (per_sample / data_range).mean()
+
+
 BBOX_CAP = 2   # C1: 슬라이스당 박스 개수 상한. batch=1에서 박스 많은 슬라이스의 과대 gradient 스파이크 억제.
 
 

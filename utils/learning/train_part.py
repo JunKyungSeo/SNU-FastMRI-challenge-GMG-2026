@@ -10,7 +10,7 @@ import copy
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
-from utils.common.loss_function import SSIMLoss, bbox_ssim_loss
+from utils.common.loss_function import SSIMLoss, bbox_ssim_loss, masked_l1_loss
 from utils.model.varnet import VarNet
 
 import os
@@ -29,6 +29,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     lam = float(getattr(args, "bbox_loss_lambda", 0.0))   # C1: >0이면 tuple 맨 끝에 bbox가 붙고 λ항을 더함
     use_bbox = lam > 0
     area_weight = bool(getattr(args, "area_weight", False))   # PromptMR+: masked SSIM × sqrt(면적비)
+    l1_w = float(getattr(args, "l1_weight", 0.0))             # C11: >0이면 (1-w)·SSIM + w·L1
     accum = max(1, int(getattr(args, "accum_steps", 1)))      # gradient accumulation
     grad_clip = float(getattr(args, "grad_clip", 0.0))        # gradient clipping max_norm (0=off)
 
@@ -81,6 +82,11 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
 
         output = model(kspace, mask)
         loss = loss_type(output, target, maximum, mask=fg_mask) if fg else loss_type(output, target, maximum)
+        if l1_w > 0:
+            # 볼록 결합이라 총 스케일이 기존과 같게 유지된다(항을 더하는 bbox 방식과 다른 점).
+            # area_weight보다 **먼저** 섞어 두 항이 같은 면적 가중을 받게 한다.
+            loss = (1 - l1_w) * loss + l1_w * masked_l1_loss(
+                output, target, maximum, mask=(fg_mask if fg else None))
         if area_weight and fg:
             # masked SSIM × sqrt(foreground 면적비). foreground 작은 슬라이스 손실을 낮춰 가중(작년 팀 방식).
             area_ratio = fg_mask.float().mean().clamp_min(1e-6)   # batch=1 → 스칼라
@@ -208,10 +214,10 @@ def check_resume_compat(saved_args, args):
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8,
                       "k_fold": 0, "val_fold": 0, "kfold_seed": 430,
-                      "remask": "off", "remask_offset": "uniform"}
+                      "remask": "off", "remask_offset": "uniform", "l1_weight": 0.0}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
               "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold",
-              "remask"]
+              "remask", "l1_weight"]
     # ⚠️ 위 필드명은 argparse dest 와 **글자 그대로 같아야** 한다. 어긋나면 getattr 이 양쪽 다
     #    ABSENT_DEFAULT 를 집어 항상 일치 → 가드가 영구 no-op 이 된다(조용히 학습셋이 바뀐 채 재개).
     # K-Fold에서 분할이 달라지면 train/val 경계가 바뀐다 → 재개하는 순간 이전 val 볼륨으로 학습하게 된다

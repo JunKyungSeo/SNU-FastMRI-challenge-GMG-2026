@@ -46,6 +46,11 @@ def parse():
     parser.add_argument('--n-virtual-coils', type=int, default=8, help='--coil-compress 시 남길 가상코일 수 (기본 8). ACS 에너지 보존율은 scripts/coil_energy_report.py로 확인.')
     parser.add_argument('--fg-loss', action='store_true', help='B5: SSIM 손실·검증을 채점(metrics.foreground_mask) 정합 foreground 영역 안에서만 계산. 기본 off=전체 384². 소비부 train_part(train_epoch/validate) 확장됨.')
     parser.add_argument('--bbox-loss-lambda', type=float, default=0.0, help='C1: 병변 bbox 가중 손실. L = (1-SSIM_full) + λ·(1-SSIM_bbox). 기본 0.0=off(기존과 비트 동일). >0이면 train 로더가 bbox를 함께 반환(val/leaderboard는 자연 분포 유지 위해 미적용). 유효 박스 판정은 채점(metrics.ssim_bbox, win_size=7)과 동일.')
+    parser.add_argument('--l1-weight', type=float, default=0.0,
+                        help='C11: 손실을 (1-w)·SSIM + w·L1 로 섞는다(0=off, 기존과 비트 동일). '
+                             'L1은 data_range로 나눠 SSIM과 자릿수를 맞춘다 — 안 맞추면 L1이 압도한다. '
+                             '--fg-loss면 같은 foreground 안에서만 계산. 2019 knee 8× 실측 근거 0.16, '
+                             '보수적 시작은 0.05~0.10. validate()는 순수 SSIM 유지(채점 정합).')
     parser.add_argument('--area-weight', action='store_true',
         help='PromptMR+ 손실: masked SSIM × sqrt(foreground 면적비). foreground 작은 슬라이스 손실을 낮춰 가중. '
              '--fg-loss와 함께 켜야 함(fg_mask 필요). 작년 팀 방식.')

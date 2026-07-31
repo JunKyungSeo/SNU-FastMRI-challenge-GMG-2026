@@ -5,6 +5,10 @@ __pycache__
 .claude/
 .ipynb_checkpoints/
 
+# MCP 서버 설정 (개인 계정에 묶임 — 공유 대상 아님)
+.mcp.json
+.mcp.local.json
+
 # HDF5 데이터 파일 (utils/data 등)
 *.h5
 

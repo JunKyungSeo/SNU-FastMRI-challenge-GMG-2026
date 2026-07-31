@@ -187,45 +187,80 @@ def steps_per_epoch(args, len_loader):
 
 
 def build_scheduler(optimizer, args, len_loader):
-    """promptmr & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR).
-    warmup_iters·total_iters는 optimizer-step 단위(accum_steps로 나눔)로 해석한다."""
-    if getattr(args, "model", "varnet") != "promptmr" or getattr(args, "warmup_iters", 0) <= 0:
+    """promptmr에서 warmup 또는 cosine 감쇠가 켜져 있으면 LambdaLR, 아니면 None(상수 LR).
+
+    곡선은 세 구간이다 — [0, warmup) linear warmup → [warmup, decay_start) **base_lr 유지**
+    → [decay_start, total) cosine 감쇠(하한 = base_lr × --lr-min-factor).
+    warmup_iters·total_iters·decay_start는 전부 optimizer-step 단위(accum_steps로 나눔)다.
+    --lr-decay-start-epoch < 0 이면 decay_start = warmup → 기존 동작(warmup 직후부터 전 구간 cosine).
+    """
+    if getattr(args, "model", "varnet") != "promptmr":
+        return None
+    warmup = int(getattr(args, "warmup_iters", 0))
+    decay_start_epoch = int(getattr(args, "lr_decay_start_epoch", -1))
+    if warmup <= 0 and decay_start_epoch < 0:
         return None
     accum = max(1, int(getattr(args, "accum_steps", 1)))
     # epoch당 optimizer step = ceil(len/accum) (train_epoch 꼬리 step 포함). floor면 스케줄이 어긋남.
-    total_iters = args.num_epochs * math.ceil(len_loader / accum)   # optimizer-step 수
-    warmup = args.warmup_iters
+    # ⚠️ len_loader가 아니라 steps_per_epoch()를 쓴다 — train_epoch은 --max-iters에서 break 하므로
+    #    실제로 밟는 step이 그만큼 적다. len_loader를 쓰면 horizon이 길어져 cosine이 중간에서 끝나고,
+    #    resume fast-forward(아래 train())는 steps_per_epoch()를 써서 눈금까지 어긋난다.
+    opt_steps_per_epoch = math.ceil(steps_per_epoch(args, len_loader) / accum)
+    total_iters = args.num_epochs * opt_steps_per_epoch   # optimizer-step 수
+    decay_start = decay_start_epoch * opt_steps_per_epoch if decay_start_epoch >= 0 else warmup
+    f_min = float(getattr(args, "lr_min_factor", 0.0))
 
     def lr_lambda(step):
         if step < warmup:
             return (step + 1) / warmup
-        progress = (step - warmup) / max(1, total_iters - warmup)
-        return 0.5 * (1.0 + math.cos(math.pi * progress))
+        if step < decay_start:
+            return 1.0
+        progress = (step - decay_start) / max(1, total_iters - decay_start)
+        # min(progress, 1.0) 필수 — horizon을 넘겨 밟으면 cos가 다시 올라가 LR이 역주행한다.
+        return f_min + (1.0 - f_min) * 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def should_early_stop(val_loss_log, patience):
+    """val이 patience epoch 연속 개선되지 않았으면 True (patience<=0이면 항상 False).
+
+    카운터를 따로 들고 다니지 않고 val_loss_log((n,2) = [epoch, val_loss])에서 **파생**한다 —
+    체크포인트에 새 필드를 넣을 필요가 없고, resume 시 load_val_log가 복원해 주므로 공짜로 이어진다.
+    """
+    if patience <= 0 or len(val_loss_log) == 0:
+        return False
+    return len(val_loss_log) - 1 - int(np.argmin(val_loss_log[:, 1])) >= patience
+
+
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon).
-    num_epochs는 cosine 스케줄 horizon(total_iters=num_epochs*len)에만 영향 → cosine 활성
-    (warmup_iters>0)일 때만 일치를 요구한다. 상수 LR에선 num_epochs 증가(=학습 연장)를 허용:
+    num_epochs·max_iters는 cosine horizon(total_iters=num_epochs*ceil(steps_per_epoch/accum))에만
+    영향 → cosine 활성(warmup_iters>0 또는 lr_decay_start_epoch>=0)일 때만 일치를 요구한다.
+    상수 LR에선 num_epochs 증가(=학습 연장)를 허용:
     루프 range(start_epoch, num_epochs)만 늘어날 뿐 LR 곡선이 바뀌지 않아 안전."""
     # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8,
                       "k_fold": 0, "val_fold": 0, "kfold_seed": 430,
-                      "remask": "off", "remask_offset": "uniform", "l1_weight": 0.0}
+                      "remask": "off", "remask_offset": "uniform", "l1_weight": 0.0,
+                      "lr_decay_start_epoch": -1, "lr_min_factor": 0.0,
+                      "mask_aug": "off", "early_stop_patience": 0, "max_iters": 0}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
               "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold",
-              "remask", "l1_weight"]
+              "remask", "l1_weight", "lr_decay_start_epoch", "lr_min_factor", "mask_aug"]
+    # early_stop_patience는 일부러 뺐다 — 학습 결과를 바꾸지 않으므로 재개하면서 조정할 수 있어야 쓸모가 있다.
     # ⚠️ 위 필드명은 argparse dest 와 **글자 그대로 같아야** 한다. 어긋나면 getattr 이 양쪽 다
     #    ABSENT_DEFAULT 를 집어 항상 일치 → 가드가 영구 no-op 이 된다(조용히 학습셋이 바뀐 채 재개).
     # K-Fold에서 분할이 달라지면 train/val 경계가 바뀐다 → 재개하는 순간 이전 val 볼륨으로 학습하게 된다
     # (조용히 새는 leakage라 로그만 봐선 못 잡는다). 분할에 영향을 주는 값은 k-fold일 때만 확인한다.
     if int(getattr(saved_args, "k_fold", 0)) > 0 or int(getattr(args, "k_fold", 0)) > 0:
         fields += ["val_fold", "kfold_seed"]
-    if int(getattr(args, "warmup_iters", 0)) > 0:   # cosine horizon 있을 때만 num_epochs 고정
-        fields.append("num_epochs")
+    if (int(getattr(args, "warmup_iters", 0)) > 0
+            or int(getattr(args, "lr_decay_start_epoch", -1)) >= 0):   # cosine horizon 있을 때만 고정
+        # max_iters도 horizon이다 — total_iters = num_epochs * ceil(steps_per_epoch(args,len)/accum)
+        # 이라 --max-iters를 바꿔 재개하면 곡선과 fast-forward 눈금이 함께 어긋난다.
+        fields += ["num_epochs", "max_iters"]
     # n_virtual_coils는 압축이 켜져 있을 때만 입력에 영향을 준다. 압축 off끼리 재개하는데
     # 죽은 값이 다르다고 막으면 헛돈다(코일 전부 사용이 기본이 된 뒤로는 이 경우가 정상 경로다).
     if getattr(saved_args, "coil_compress", False) or getattr(args, "coil_compress", False):
@@ -234,6 +269,10 @@ def check_resume_compat(saved_args, args):
     if (str(getattr(saved_args, "remask", "off")) != "off"
             or str(getattr(args, "remask", "off")) != "off"):
         fields += ["remask_offset", "seed"]
+    # --mask-aug 도 마스크를 (seed, epoch, volume, slice)에서 뽑는다 → seed가 바뀌면 입력이 바뀐다.
+    elif (str(getattr(saved_args, "mask_aug", "off")) != "off"
+            or str(getattr(args, "mask_aug", "off")) != "off"):
+        fields.append("seed")
     for f in fields:
         fallback = ABSENT_DEFAULT.get(f, None)
         s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)
@@ -381,8 +420,15 @@ def train(args):
 
     scheduler = build_scheduler(optimizer, args, len(train_loader))
     if scheduler is not None:
-        print(f"[scheduler] warmup={args.warmup_iters} → cosine, "
-              f"total_iters={args.num_epochs * len(train_loader)}, base_lr={args.lr}")
+        # build_scheduler와 같은 식으로 찍는다 — accum·--max-iters를 안 반영하면 로그가
+        # 실제 horizon과 달라져, 스케줄이 의도대로 걸렸는지 확인할 유일한 계기판이 거짓말을 한다.
+        _acc = max(1, int(getattr(args, "accum_steps", 1)))
+        _spe = math.ceil(steps_per_epoch(args, len(train_loader)) / _acc)
+        _de = int(getattr(args, "lr_decay_start_epoch", -1))
+        print(f"[scheduler] warmup={args.warmup_iters} → "
+              f"decay_start={_de * _spe if _de >= 0 else args.warmup_iters} step 부터 cosine "
+              f"(하한 {float(getattr(args, 'lr_min_factor', 0.0))}×base), "
+              f"total_iters={args.num_epochs * _spe}, base_lr={args.lr}")
 
     if resume_ckpt is not None:
         optimizer.load_state_dict(resume_ckpt["optimizer"])   # scheduler 생성 후에 로드(initial_lr=base 유지)
@@ -450,3 +496,11 @@ def train(args):
             print(
                 f'ForwardTime = {time.perf_counter() - start:.4f}s',
             )
+
+        # early stopping — 저장이 다 끝난 뒤에 판정한다(best_model.pt는 위에서 이미 남았으므로 추가 저장 없음).
+        patience = int(getattr(args, "early_stop_patience", 0))
+        if should_early_stop(val_loss_log, patience):
+            best_ep = int(val_loss_log[int(np.argmin(val_loss_log[:, 1])), 0])
+            print(f"[early-stop] epoch {best_ep} 이후 {patience} epoch 연속 val 개선 없음 → 학습 중단 "
+                  f"(best_val={float(val_loss_log[:, 1].min()):.4g})")
+            break

@@ -331,6 +331,15 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
                 "기준 산출물이라, 재생성한 입력과 짝지으면 제거한 라인의 정보가 옆문으로 새어 "
                 "실제 추론엔 없는 지름길을 학습한다.")
 
+    # ---- 마스크 증강 (--mask-aug, 기본 off) ----
+    #   --remask 와 같은 재생성 경로를 쓰되 --acc 제약은 없다 — offset 모드는 가속률을 안 바꾸므로
+    #   볼륨 풀을 넓힐 필요가 없다. train 로더 전용인 것은 동일(val/forward는 딸려온 마스크 그대로).
+    mask_aug = str(getattr(args, "mask_aug", "off"))
+    if mask_aug != "off" and is_train and return_grappa:
+        raise ValueError(
+            "--mask-aug 와 GRAPPA 는 배타적이다(--remask 와 같은 이유). image_grappa 는 딸려온 "
+            "마스크 기준 산출물이라 재생성한 입력과 짝지으면 제거한 라인 정보가 옆문으로 샌다.")
+
     data_storage = SliceData(
         root=data_path,
         transform=DataTransform(
@@ -343,6 +352,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
             remask_acc=(remask_acc if is_train else None),
             remask_offset=getattr(args, "remask_offset", "uniform"),
             remask_seed=getattr(args, "seed", 430),
+            mask_aug=(mask_aug if is_train else "off"),
         ),
         input_key=args.input_key,
         target_key=target_key_,
@@ -352,10 +362,10 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         num_adj_slices=num_adj_slices,
     )
 
-    if remask_acc is not None and is_train:
-        verify_remaskable(data_storage)
-        print(f"[remask] train 로더: acc{remask_acc} 마스크 재생성 "
-              f"(offset={getattr(args, 'remask_offset', 'uniform')}) · 볼륨 풀 --acc all")
+    if (remask_acc is not None or mask_aug != "off") and is_train:
+        verify_remaskable(data_storage)   # 재생성의 전제(생성기 동일 · full k-space)는 mask_aug도 똑같이 필요
+        print(f"[remask] train 로더 마스크 재생성 — remask={remask} · mask-aug={mask_aug} · "
+              f"offset={'재추첨' if mask_aug != 'off' else getattr(args, 'remask_offset', 'uniform')}")
     elif remask_acc is not None:
         print(f"[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터={acc_override})")
 

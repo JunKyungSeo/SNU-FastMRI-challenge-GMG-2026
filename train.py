@@ -61,7 +61,18 @@ def parse():
     parser.add_argument('--grad-clip', type=float, default=0.0, help='gradient clipping max_norm (0=off). PromptMR+ 권장 0.1')
     parser.add_argument('--accum-steps', type=int, default=1, help='gradient accumulation 스텝 수(1=off, batch 유사 효과). PromptMR+ 권장 2')
     parser.add_argument('--warmup-iters', type=int, default=0, help='linear LR warmup iters 후 cosine 감쇠 (0=off → 상수 LR). promptmr에서만 활성')
+    parser.add_argument('--lr-decay-start-epoch', type=int, default=-1,
+                        help='이 epoch(0-based)부터 cosine 감쇠를 시작하고 그 전까지는 base_lr을 유지한다. '
+                             '-1=기존 동작(warmup 직후부터 전 구간 cosine). warmup 없이 이것만 켤 수도 있다 — '
+                             '앞구간을 큰 LR로 버티면 감쇠에 쓰는 후반 epoch이 그만큼 짧아진다.')
+    parser.add_argument('--lr-min-factor', type=float, default=0.0,
+                        help='cosine 하한 = base_lr × 이 값 (0.0=기존, 끝에서 정확히 0). '
+                             '0으로 떨어뜨리면 마지막 epoch들이 사실상 학습을 안 한다 → 하한을 두는 쪽.')
     parser.add_argument('--run-tag', type=str, default='', help='val_loss_log 파일명 suffix (run별 분리 저장, 덮어쓰기 방지). 예: run4')
+    parser.add_argument('--early-stop-patience', type=int, default=0,
+                        help='val이 N epoch 연속 개선되지 않으면 학습을 끊는다 (0=off). '
+                             '판정은 val_loss_log에서 파생하므로 --resume 해도 카운터가 이어진다. '
+                             'best_model.pt는 이미 저장돼 있어 잃는 것이 없다.')
     parser.add_argument('--resume', action='store_true', help='<net_name>/checkpoints/의 model.pt(epoch 경계) 또는 latest.pt(epoch 중간, 500 iter마다 저장) 중 더 진행된 쪽에서 이어학습. 같은 config로만.')
     parser.add_argument('--k-fold', type=int, default=0, help='K-Fold Cross Validation 분할 수 (0=off, 기존 train/val 구분 모드)')
     parser.add_argument('--val-fold', type=int, default=0, help='Validation으로 사용할 fold 인덱스 (0 <= val-fold < k-fold)')
@@ -81,6 +92,12 @@ def parse():
                              '학습풀은 offset이 (W//2)%%acc로 결정론인데 채점은 무작위 0~acc-1이라 '
                              '지금 acc8 전문가는 채점 볼륨의 65%%를 못 본 offset으로 만난다. '
                              'canonical=(W//2)%%acc — 주최측 규칙 그대로라 분포를 안 건드리고 볼륨 풀만 2배.')
+    parser.add_argument('--mask-aug', type=str, default='off', choices=['off', 'offset', 'full'],
+                        help='마스크 증강(학습 로더 전용). off=기존과 비트 동일. '
+                             'offset=가속률은 그대로 두고 격자 위상만 매 epoch 재추첨 — 채점 offset이 '
+                             '무작위인데 학습풀은 (W//2)%%acc로 고정이라 그 간극을 메운다. '
+                             'full=가속률까지 4|8 재추첨(--remask와 배타, MoE 전문가 학습엔 쓰지 말 것). '
+                             '--acc 제약은 없다(offset은 볼륨 풀을 안 넓히므로). GRAPPA와는 배타.')
 
     # ---- 증강 (좌우 flip 하나뿐). 기본 off = 기존 학습과 동일 ----
     #   스케줄은 공식 repo(MathFLDS/MRAugment) schedule_p와 동일 형태 — delay D + 총 epoch T 정규화.
@@ -98,6 +115,10 @@ def parse():
     if args.remask != 'off' and str(args.acc) != 'all':
         parser.error(f"--remask {args.remask} 는 --acc all 과만 쓴다 (지금 --acc {args.acc}). "
                      "--acc 로 파일을 걸러버리면 볼륨 풀이 절반이 되어 이 기능의 목적이 사라진다.")
+    if args.mask_aug == 'full' and args.remask != 'off':
+        parser.error(f"--mask-aug full 과 --remask {args.remask} 는 모순이다. 하나는 가속률을 "
+                     "4|8로 흔들고 다른 하나는 한 값으로 고정한다 — 전문가는 한 가속률만 봐야 한다. "
+                     "위상만 흔들 거면 --mask-aug offset 을 쓴다.")
     return args
 
 if __name__ == '__main__':

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import torch
 import numpy as np
 from pathlib import Path
-from utils.learning.train_part import build_scheduler, steps_per_epoch, check_resume_compat, load_resume_checkpoint, load_val_log, save_latest
+from utils.learning.train_part import build_scheduler, steps_per_epoch, check_resume_compat, load_resume_checkpoint, load_val_log, save_latest, should_early_stop
 
 
 def _dummy_opt(lr):
@@ -18,12 +18,13 @@ def test_build_scheduler_none_for_varnet():
 
 
 def test_build_scheduler_none_when_warmup_zero():
-    args = SimpleNamespace(model="sdum", warmup_iters=0, num_epochs=2)
+    # warmup·decay 둘 다 off면 promptmr에서도 상수 LR(스케줄러 없음)이어야 한다.
+    args = SimpleNamespace(model="promptmr", warmup_iters=0, num_epochs=2)
     assert build_scheduler(_dummy_opt(1e-3), args, 100) is None
 
 
 def test_build_scheduler_warmup_then_cosine():
-    args = SimpleNamespace(model="sdum", warmup_iters=10, num_epochs=1)
+    args = SimpleNamespace(model="promptmr", warmup_iters=10, num_epochs=1)
     opt = _dummy_opt(2e-4)
     sch = build_scheduler(opt, args, 100)          # total_iters = 100
     assert sch is not None
@@ -42,7 +43,7 @@ def test_steps_per_epoch():
 
 
 def test_fast_forward_lands_at_correct_lr():
-    args = SimpleNamespace(model="sdum", warmup_iters=10, num_epochs=2, max_iters=0)
+    args = SimpleNamespace(model="promptmr", warmup_iters=10, num_epochs=2, max_iters=0)
     len_loader = 50
     k = 1 * steps_per_epoch(args, len_loader)       # 1 epoch fast-forward = 50 step
     opt = _dummy_opt(2e-4)
@@ -53,6 +54,69 @@ def test_fast_forward_lands_at_correct_lr():
     progress = (k - args.warmup_iters) / max(1, total - args.warmup_iters)
     expected = 2e-4 * 0.5 * (1.0 + math.cos(math.pi * progress))
     assert abs(opt.param_groups[0]["lr"] - expected) < 1e-9
+
+
+# ---- LR 스케줄: 상수 유지 구간(--lr-decay-start-epoch) + 하한(--lr-min-factor) -------------
+
+def _lr_seq(sch, opt, n):
+    """step 0..n-1 에서 **실제로 쓰이는** LR 수열과, n번 step 뒤의 LR을 함께 돌려준다.
+    (scheduler.step()은 optimizer step **뒤에** 불리므로 i번째 step이 쓰는 값은 lr_lambda(i)다.)"""
+    seq = []
+    for _ in range(n):
+        seq.append(opt.param_groups[0]["lr"])
+        sch.step()
+    return seq, opt.param_groups[0]["lr"]
+
+
+def test_hold_then_cosine_with_floor():
+    """warmup 없이 앞 5 epoch은 base 유지 → 그 뒤 cosine → 끝에서 하한(base×0.05)."""
+    args = SimpleNamespace(model="promptmr", warmup_iters=0, lr_decay_start_epoch=5,
+                           num_epochs=12, lr_min_factor=0.05, max_iters=0)
+    opt = _dummy_opt(2e-4)
+    sch = build_scheduler(opt, args, 10)            # spe=10 → decay_start=50, total=120
+    seq, end = _lr_seq(sch, opt, 120)
+    # epoch 0~4(=step 0~49)는 감쇠 없음. step 50은 cosine의 progress=0이라 역시 base.
+    assert all(abs(x - 2e-4) < 1e-12 for x in seq[:51])
+    assert seq[51] < 2e-4                           # 그 다음부터 실제로 내려간다
+    assert abs(end - 2e-4 * 0.05) < 1e-12           # horizon 끝 = 하한에 정확히 착지
+
+
+def test_floor_reached_with_max_iters():
+    """--max-iters로 epoch이 짧아져도 마지막 step이 하한에 닿아야 한다.
+    build_scheduler가 len_loader를 쓰면 horizon이 5배로 늘어 여기서 아직 감쇠 중이 된다."""
+    args = SimpleNamespace(model="promptmr", warmup_iters=0, lr_decay_start_epoch=0,
+                           num_epochs=3, lr_min_factor=0.1, max_iters=20)
+    opt = _dummy_opt(1e-3)
+    sch = build_scheduler(opt, args, 100)           # spe=min(20,100)=20 → total=60
+    _, end = _lr_seq(sch, opt, 60)
+    assert abs(end - 1e-3 * 0.1) < 1e-12
+
+
+def test_defaults_match_legacy_cosine():
+    """기본값(-1, 0.0)이면 예전 곡선 그대로 — warmup 직후부터 전 구간 cosine, 끝에서 0."""
+    args = SimpleNamespace(model="promptmr", warmup_iters=200, num_epochs=2, max_iters=0,
+                           lr_decay_start_epoch=-1, lr_min_factor=0.0)
+    base, len_loader = 2e-4, 500
+    opt = _dummy_opt(base)
+    sch = build_scheduler(opt, args, len_loader)
+    total = args.num_epochs * len_loader            # accum=1
+    seq, end = _lr_seq(sch, opt, total)
+    for i in (0, 199, 200, 700, total - 1):
+        want = base * ((i + 1) / 200 if i < 200
+                       else 0.5 * (1.0 + math.cos(math.pi * (i - 200) / (total - 200))))
+        assert abs(seq[i] - want) < 1e-12, i
+    assert abs(end) < 1e-15
+
+
+# ---- early stopping (val_loss_log에서 파생 → resume 시 카운터가 공짜로 이어진다) ----------
+
+def test_should_early_stop():
+    log = np.array([[0, 0.5], [1, 0.4], [2, 0.41], [3, 0.42]])   # 최저=epoch 1, 이후 2 epoch 경과
+    assert not should_early_stop(log, 0)                          # 0 = off
+    assert not should_early_stop(log, 3)
+    assert should_early_stop(log, 2)
+    assert not should_early_stop(np.empty((0, 2)), 1)             # 첫 epoch 전
+    assert not should_early_stop(np.array([[0, 0.5]]), 1)         # 방금이 best면 안 멈춘다
 
 
 def _args(**kw):

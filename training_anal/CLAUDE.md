@@ -87,6 +87,7 @@
 | — | `run_kfold_old` | `--k-fold 5 --val-fold 1` (이름그룹 분할) | fg-val 0.09357. 🐛 200 volume을 170으로 세던 식별자 버그 발견→수정. **분할이 이후 런과 달라 비교 불가.** ❌ 채점 미실행. | [4런 묶음](2026-07-26-promptmr-4runs-analysis.md) |
 | — | `run_moe` | acc4/acc8 전문가 분리(Option C: shared 10ep → ft4/ft8 3ep → merge) | shared fg-val 0.08990 = `run_base`와 곡선 일치(**재현성 실증**). ⚠️ 미세조정 3ep 무변화 → **효과 미판정**. 🐛 라우터 임계값 0.1875→0.25 수정(acc8 전량 오라우팅). ❌ 채점 미실행. | [4런 묶음](2026-07-26-promptmr-4runs-analysis.md) |
 | — | `run_kfold_f2` | 분할 단위 이름→**볼륨**으로 교정 후 fold2 | 진행 중(ep1 fg-val 0.09315). 같은 분할의 다른 fold가 없어 **비교 대상 부재**. | [4런 묶음](2026-07-26-promptmr-4runs-analysis.md) |
+| — | `shell28` 탐침 | 학습 아님 — (A) offset 민감도 채점 (B) ℓ1 혼합 스모크 | **A: offset 가설 반증**(격차 −0.0045/−0.0071, 부호 반대) → 39h 후속 취소. 학습 노출은 성능과 무관하고 offset 자체 난이도만 존재(0·4가 바닥). shell27의 remask +0.0005는 **볼륨 2배 몫**으로 확정. **B: ℓ1 안 튐**(궤적 평행), 단 300 iter·scratch라 이득은 미판정. 🐛 probe sys.path 버그 수정. | [shell28](2026-07-31-shell28-probe-analysis.md) |
 
 > 📊 **recon_eval 스코어카드**(리더보드 실채점, 새 규칙 0.5·full+0.5·bbox+시간): run7 full **0.9004**/bbox **0.8911**/1515ms ([스코어카드](2026-07-10-run7-reconeval-scorecard.md)) · run8 full 0.9062/bbox 0.8979/**2820ms** · run10 full 0.9118/bbox 0.9021/1523ms · **run11 full 0.9161/bbox 0.9095/1514ms(=현재 best, fg-loss)** · run12 full 0.9114/bbox 0.9045/1535ms(bbox+UC, run11 대비 3축 퇴행). baseline(zf) full 0.833/bbox 0.820. **교훈: 추론시간 1급 + epoch>용량 + fg-loss(채점정합)가 확실한 이득. bbox 가중손실·UC는 (묶음 기준) 순손해 — run13로 UC 분리 확인 중.**
 

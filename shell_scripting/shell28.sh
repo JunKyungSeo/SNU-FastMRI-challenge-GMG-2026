@@ -8,9 +8,25 @@
 #
 #   shell26/27 과 net 이름이 안 겹친다. B 는 --l1-weight 기본 0(비트 동일)이라 켜기 전엔 무영향.
 #
+# [왜] 둘 다 본실험이 60h 급이다. 2h 로 "걸지 말지"만 먼저 가른다.
+#      A 는 학습·채점의 offset 분포가 다른 게 실제로 점수를 깎는지(280볼륨 전수조사로
+#      분포차 자체는 이미 확인됨, augmentation.md), B 는 손실을 바꿨을 때 학습이 튀는지.
+#
+# [해석]
+#   A 격차 <0.002 → 모델이 offset 에 둔감. remask 의 offset 몫은 0 (볼륨 2배 몫은 남으니
+#                   --remask-offset canonical 로 전환). 그리고 shell26 의 remask 이득은
+#                   "마스크 다양성"이 아니라 "스텝 2배"로 읽어야 한다.
+#     격차 >=0.005 → 사각지대 실재. remask 확정 + acc4 에도 적용(offset 3 미노출 17.5%).
+#                    val 도 학습풀이라 이 격차를 구조적으로 못 본다는 뜻이기도 하다.
+#   B 궤적이 l1=0.0 과 비슷 → 안정. L1_ITERS 를 키워 이득 판정으로.
+#     튀거나 발산      → α(L1_W) 를 낮추거나 폐기. run12 처럼 "안정적으로 나쁜" 것과 구분할 것.
+#   ⚠️ TrainLoss 는 arm 마다 손실 함수가 달라 비교 불가. ValLoss(순수 SSIM)만 같은 자다.
+#   ⚠️ A 는 회수 "상한"이지 remask 학습이 그걸 회수한다는 뜻이 아니다. shell27 채점과 대조할 것.
+#
 # 실행:  bash shell_scripting/shell28.sh                 # A+B
 #        STAGE=offset bash shell_scripting/shell28.sh    # A 만
 #        STAGE=l1     bash shell_scripting/shell28.sh    # B 만
+#        L1_ITERS=2000 bash shell_scripting/shell28.sh   # B 를 길게(이득 신호까지)
 # ============================================================
 set -uo pipefail
 export PYTHONUNBUFFERED=1

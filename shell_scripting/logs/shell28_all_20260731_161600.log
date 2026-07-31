@@ -18,3 +18,6 @@ Current cuda device:  0
 [K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
 Epoch # 0 ............... probe_l1_0.0 ...............
 Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1715 Time = 5.4076s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.05612 Time = 228.7485s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.1048 Time = 234.0160s
+Epoch = [  0/  1] Iter = [ 150/2163] Loss = 0.09512 Time = 233.1814s

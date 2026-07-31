@@ -33,6 +33,10 @@ def parse():
     parser.add_argument('--n-feat0', type=int, default=48, help='PromptMR+ recon U-Net base 폭 (feature)')
     parser.add_argument('--sens-n-feat0', type=int, default=24, help='PromptMR+ 감도맵 U-Net base 폭 (sens feature)')
     parser.add_argument('--n-history', type=int, default=3, help='PromptMR+ momentum history 길이 (원본 11, 메모리 레버)')
+    parser.add_argument('--num-adj-slices', type=int, default=1, choices=[1, 3],
+                        help='2.5D 인접 슬라이스 입력. 1=단일(기본, 기존과 비트 동일) / 3=±1. '
+                             'h5 읽기·코일축이 3배가 되고 VRAM·시간이 늘어난다. gap2 이상은 병변 SSIM이 '
+                             '대조군 아래로 뒤집혀 5는 막아뒀다(strategy/model_strategy.md §3).')
     parser.add_argument('--use-checkpoint', action=argparse.BooleanOptionalAction, default=True, help='PromptMR+ gradient checkpointing (8GB VRAM용, 기본 on). 끄려면 --no-use-checkpoint')
     parser.add_argument('--input-key', type=str, default='kspace', help='Name of input key')
     parser.add_argument('--target-key', type=str, default='image_label', help='Name of target key')

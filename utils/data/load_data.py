@@ -67,11 +67,18 @@ def _norm_acc(acc):
 
 
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None, acc=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None, acc=None,
+                 num_adj_slices=1):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
         self.forward = forward
+        # 2.5D 인접 슬라이스: 1이면 기존과 완전히 동일(추가 I/O 0). 3이면 s-1,s,s+1을 읽어
+        # **코일축에 슬라이스-major**로 쌓는다 — (adj*C, H, W), [s-1의 C코일, s의 C코일, s+1의 C코일].
+        # 이 배열이 promptmr_plus의 sens_reduce/sens_expand·감도 RSS 정규화가 전제하는 규약이다.
+        self.num_adj_slices = int(num_adj_slices)
+        if self.num_adj_slices % 2 != 1:
+            raise ValueError(f"num_adj_slices는 홀수여야 한다(중앙 슬라이스가 있어야 함): {num_adj_slices}")
         # (image_path|None, kspace_path, slice_idx, vol_id) 튜플. image와 kspace를 **같은 root 안에서**
         # 짝지어 한 항목에 담는다. 예전엔 두 리스트에 따로 쌓고 같은 인덱스로 꺼낸 뒤 .name이 같은지로
         # 검증했는데, root가 둘이 되면 그 검증이 무력해진다(train/…/x.h5 와 val/…/x.h5 는 .name이 같다).
@@ -155,7 +162,16 @@ class SliceData(Dataset):
         image_fname, kspace_fname, dataslice, vol_id = self.examples[i]
 
         with h5py.File(kspace_fname, "r") as hf:
-            input = hf[self.input_key][dataslice]
+            ds = hf[self.input_key]
+            if self.num_adj_slices == 1:
+                input = ds[dataslice]
+            else:
+                # 볼륨 경계는 clamp(자기 복제) — 첫/마지막 슬라이스에서 인접이 없으면 자신을 반복한다.
+                # 0-padding 대신 clamp인 이유: 빈 코일 그룹은 감도맵 RSS 정규화에서 0 나눗셈이 된다.
+                n = ds.shape[0]
+                half = self.num_adj_slices // 2
+                idxs = [min(max(dataslice + d, 0), n - 1) for d in range(-half, half + 1)]
+                input = np.concatenate([ds[j] for j in idxs], axis=0)   # (adj*C, H, W) 슬라이스-major
             mask =  np.array(hf["mask"])
         grappa = None
         if self.forward:
@@ -277,6 +293,12 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     # 효율 레버(후보): SVD coil compression. 기본 off = 기존과 동일. 배치 SME와 택1.
     #   켜면 kspace coil축이 n_virtual_coils로 축소되어 소비부(train_part 등)에 전달됨.
     coil_compress = getattr(args, "coil_compress", False)
+    # 2.5D 인접 슬라이스 — 코일축에 슬라이스를 쌓으므로 코일축을 섞는 기법과 배타적이다.
+    num_adj_slices = int(getattr(args, "num_adj_slices", 1))
+    if num_adj_slices > 1 and coil_compress:
+        raise ValueError(
+            "--num-adj-slices > 1 과 --coil-compress 는 함께 쓸 수 없다. coil compression은 코일축을 "
+            "SVD로 섞는데, 인접 슬라이스가 그 축에 쌓여 있어 서로 다른 슬라이스가 한 가상코일로 뭉개진다.")
     n_virtual_coils = getattr(args, "n_virtual_coils", 8)
     # B5: 손실·검증을 채점 정합 foreground 영역으로 제한(기본 off). train/val 양쪽 로더에 부착
     #     (forward는 target 없어 DataTransform이 내부적으로 미포함) → 소비부 train_epoch/validate 확장.
@@ -327,6 +349,7 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         forward=isforward,
         volumes=volumes,
         acc=(acc_override if acc_override is not None else getattr(args, "acc", "all")),
+        num_adj_slices=num_adj_slices,
     )
 
     if remask_acc is not None and is_train:

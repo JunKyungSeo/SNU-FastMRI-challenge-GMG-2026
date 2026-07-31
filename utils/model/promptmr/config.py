@@ -1,6 +1,6 @@
 """PromptMR+ config 팩토리 (SDUM의 config.py::tiny_8gb_args 대체).
 
-이번 대회 확정 구조: cascade 10 · feature 48 · sens feature 24 · 단일 슬라이스(num_adj_slices=1) ·
+이번 대회 확정 구조: cascade 10 · feature 48 · sens feature 24 · 슬라이스 수는 CLI(--num-adj-slices, 기본 1) ·
 Cartesian 전용. feature/prompt per-level 리스트는 n_feat0=48·sens=24에 대응하는 PromptMR+ 원본
 default 표를 그대로 사용(파생 규칙 아님).
 
@@ -11,10 +11,11 @@ default 표를 그대로 사용(파생 규칙 아님).
 from utils.model.promptmr.promptmr_plus import PromptMR
 
 
-def promptmr_kwargs(num_cascades=10, n_feat0=48, sens_n_feat0=24, n_history=3):
-    """PromptMR(**kwargs)로 넘길 인자. 단일 슬라이스(num_adj_slices=1) 고정."""
+def promptmr_kwargs(num_cascades=10, n_feat0=48, sens_n_feat0=24, n_history=3, num_adj_slices=1):
+    """PromptMR(**kwargs)로 넘길 인자. num_adj_slices=1(기본)이면 단일 슬라이스."""
     return dict(
-        num_cascades=num_cascades,                     # 단일 슬라이스 전용(num_adj_slices 인자는 슬림화로 제거됨)
+        num_cascades=num_cascades,
+        num_adj_slices=num_adj_slices,                 # 1=단일, 3=±1 인접(2.5D). model_strategy §3.1
         n_feat0=n_feat0,
         feature_dim=[72, 96, 120],                     # feature 48 계열 (3레벨=2다운샘플, 얕은 피라미드)
         prompt_dim=[24, 48, 72],
@@ -36,4 +37,5 @@ def build_promptmr_net(args):
         n_feat0=int(getattr(args, "n_feat0", 48)),
         sens_n_feat0=int(getattr(args, "sens_n_feat0", 24)),
         n_history=int(getattr(args, "n_history", 3)),
+        num_adj_slices=int(getattr(args, "num_adj_slices", 1)),
     ))

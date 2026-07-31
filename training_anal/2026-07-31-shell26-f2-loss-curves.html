@@ -1,0 +1,644 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shell26 fold2 — shared / acc4 / acc8 loss curves</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface:        #fcfcfb;
+    --ink:            #0b0b0b;
+    --ink-2:          #52514e;
+    --muted:          #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-train:   #2a78d6;
+    --series-val:     #eb6834;
+    --warn-ink:       #52514e;
+    --wash:           rgba(11,11,11,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page:         #0d0d0d;
+      --surface:      #1a1a19;
+      --ink:          #ffffff;
+      --ink-2:        #c3c2b7;
+      --muted:        #898781;
+      --grid:         #2c2c2a;
+      --axis:         #383835;
+      --border:       rgba(255,255,255,0.10);
+      --series-train: #3987e5;
+      --series-val:   #d95926;
+      --warn-ink:     #c3c2b7;
+      --wash:         rgba(255,255,255,0.05);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:         #0d0d0d;
+    --surface:      #1a1a19;
+    --ink:          #ffffff;
+    --ink-2:        #c3c2b7;
+    --muted:        #898781;
+    --grid:         #2c2c2a;
+    --axis:         #383835;
+    --border:       rgba(255,255,255,0.10);
+    --series-train: #3987e5;
+    --series-val:   #d95926;
+    --warn-ink:     #c3c2b7;
+    --wash:         rgba(255,255,255,0.05);
+  }
+
+  body {
+    background: var(--page);
+    color: var(--ink);
+    font: 15px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 32px 20px 64px;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; }
+
+  h1 { font-size: 24px; font-weight: 640; letter-spacing: -0.01em; margin: 0 0 6px; }
+  .sub { color: var(--ink-2); margin: 0 0 4px; }
+  .meta-line { color: var(--muted); font-size: 13px; margin: 0 0 24px; }
+
+  .callout {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    margin: 0 0 24px;
+    font-size: 13.5px;
+    color: var(--ink-2);
+  }
+  .callout strong { color: var(--ink); font-weight: 600; }
+  .callout p { margin: 0 0 8px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .legend {
+    display: flex; gap: 20px; align-items: center;
+    margin: 0 0 20px; font-size: 13.5px; color: var(--ink-2);
+    flex-wrap: wrap;
+  }
+  .legend .key { display: inline-flex; align-items: center; gap: 8px; }
+  .legend .stroke { width: 20px; height: 2px; border-radius: 1px; display: inline-block; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 18px 18px 12px;
+    margin: 0 0 20px;
+  }
+  .card h2 { font-size: 16px; font-weight: 620; margin: 0 0 2px; letter-spacing: -0.005em; }
+  .card .net { font-size: 12.5px; color: var(--muted); margin: 0 0 2px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .card .valdesc { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+
+  .plot-wrap { position: relative; }
+  .plot-wrap svg { display: block; width: 100%; height: auto; touch-action: none; }
+  .plot-wrap svg:focus-visible { outline: 2px solid var(--series-train); outline-offset: 2px; border-radius: 6px; }
+
+  .zooms { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 6px; }
+  @media (max-width: 640px) { .zooms { grid-template-columns: 1fr; } }
+  .zoom h3 {
+    font-size: 12px; font-weight: 600; color: var(--muted);
+    margin: 0 0 2px; text-transform: none; letter-spacing: 0.01em;
+  }
+  .zoom .rng { font-size: 11.5px; color: var(--muted); margin: 0 0 4px; font-variant-numeric: tabular-nums; }
+  .zoom .none { font-size: 12.5px; color: var(--muted); padding: 22px 0 26px; }
+
+  #tip {
+    position: fixed; pointer-events: none; z-index: 50;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 12.5px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.16);
+    opacity: 0; transition: opacity .09s ease;
+    min-width: 132px;
+  }
+  #tip .x { color: var(--muted); font-size: 11.5px; margin-bottom: 5px; }
+  #tip .row { display: flex; align-items: baseline; gap: 8px; margin-top: 3px; }
+  #tip .k { width: 16px; height: 2px; border-radius: 1px; flex: none; transform: translateY(-3px); }
+  #tip .v { font-weight: 640; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #tip .n { color: var(--ink-2); font-size: 11.5px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  caption { text-align: left; font-size: 13px; color: var(--muted); padding: 0 0 8px; }
+  th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid var(--grid); }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+  td { font-variant-numeric: tabular-nums; color: var(--ink); }
+  td.src { text-align: left; color: var(--muted); font-size: 11.5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  tbody tr:hover { background: var(--wash); }
+  .grp td { background: var(--wash); font-weight: 620; color: var(--ink); font-size: 12.5px; }
+
+  .notes { font-size: 13.5px; color: var(--ink-2); }
+  .notes h2 { font-size: 16px; color: var(--ink); margin: 0 0 10px; font-weight: 620; }
+  .notes ol { margin: 0; padding-left: 20px; }
+  .notes li { margin-bottom: 9px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px;
+         background: var(--wash); padding: 1px 5px; border-radius: 4px; }
+  .tablewrap { overflow-x: auto; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>shell26 · fold 2 — 학습 곡선</h1>
+  <p class="sub">shared 사전학습과 acc4 / acc8 전문가 미세조정의 train · val loss</p>
+  <p class="meta-line">기록 시각 2026-07-31 13:00 UTC · acc4는 epoch 4 학습 중 (표시는 epoch 3까지)</p>
+
+  <div class="callout">
+    <p><strong>패널끼리 높이를 비교하면 안 됩니다.</strong> 세 갈래의 val 셋이 서로 다릅니다 —
+      shared는 fold 전체(acc4 20 + acc8 20 vol), acc4는 acc4 20 vol, acc8은 acc8 20 vol만 봅니다.
+      <code>shell26.sh</code>가 적어둔 대로 판정의 정본은 <code>recon_eval.py</code> 채점이고,
+      loss는 학습이 살아있는지 보는 계기판입니다.</p>
+    <p><strong>y축은 패널마다 다릅니다.</strong> 아래 확대 그래프는 epoch 간 움직임을 보려고
+      각자 범위를 다시 잡은 것이라, 위쪽 본 그래프의 train↔val 간격과 축척이 다릅니다.</p>
+  </div>
+
+  <div class="legend">
+    <span class="key"><span class="stroke" style="background:var(--series-train)"></span> train loss</span>
+    <span class="key"><span class="stroke" style="background:var(--series-val)"></span> val loss</span>
+    <span style="color:var(--muted)">· 점 위에 마우스를 올리면 값이 나옵니다 (키보드는 ← → )</span>
+  </div>
+
+  <div id="cards"></div>
+
+  <div class="card">
+    <h2>값 (표)</h2>
+    <p class="valdesc">val은 <code>val_loss_log_*.npy</code>의 원본 정밀도, train은 로그의 epoch 요약 줄입니다.</p>
+    <div class="tablewrap"><table id="tbl">
+      <caption>train loss · val loss (fold 2, seed 430)</caption>
+      <thead><tr>
+        <th>epoch</th><th>train loss</th><th>val loss</th><th>train 시간</th><th class="src" style="text-align:left">출처</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </div>
+
+  <div class="card">
+    <h2>그래도 한 번은 겹쳐볼 수 있습니다 — 슬라이스 가중평균</h2>
+    <p class="valdesc">
+      두 전문가의 val 슬라이스를 더하면 <strong>548 + 536 = 1084</strong>로 shared의 val 셋과 정확히 같습니다.
+      <code>--fg-loss</code>가 켜져 있어 val loss는 <code>(1 − SSIM_full)</code>의 <strong>슬라이스 평균</strong>이고
+      (<code>utils/learning/train_part.py:158,176</code> — 합을 슬라이스 수로 나눔),
+      그래서 슬라이스 수로 가중평균하면 shared와 같은 축에 놓입니다.
+    </p>
+    <div class="tablewrap"><table>
+      <caption>MoE(두 전문가) 대 shared(단일) — val loss, 낮을수록 좋음</caption>
+      <thead><tr>
+        <th style="text-align:left">기준</th><th>acc4</th><th>acc8</th>
+        <th>MoE 가중평균</th><th>shared</th><th>차이</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td>best (acc4 ep2 · acc8 ep2)</td>
+          <td>0.067784</td><td>0.096752</td>
+          <td>0.082108</td><td>0.082954</td>
+          <td>−0.000846 (1.02%)</td>
+        </tr>
+        <tr>
+          <td>last (acc4 ep3 · acc8 ep4)</td>
+          <td>0.068026</td><td>0.096845</td>
+          <td>0.082276</td><td>0.082954</td>
+          <td>−0.000678 (0.82%)</td>
+        </tr>
+      </tbody>
+    </table></div>
+    <p class="valdesc" style="margin-top:12px">
+      loss가 <code>1 − SSIM_full</code>이므로 0.000846만큼 낮다는 건
+      <strong>SSIM_full이 약 +0.00085</strong>라는 뜻입니다. 다만 이 차이에는
+      <code>shell26.sh</code>가 경고한 대로 <strong>전문가 분리 + 마스크 재생성 + 스텝 2배</strong>가
+      전부 섞여 있어서 "MoE 이득"이라고 읽으면 안 됩니다. 그리고 이 숫자에는
+      <strong>SSIM_bbox가 들어있지 않습니다</strong> — 대회 점수는 full·bbox 5:5입니다.
+      판정의 정본은 여전히 <code>recon_eval.py</code> 채점입니다.
+    </p>
+  </div>
+
+  <div class="card notes">
+    <h2>읽을 때 주의할 것</h2>
+    <ol>
+      <li><strong>여기서 "shared"는 <code>promptmr_kfold_f2_aug</code>입니다.</strong>
+        shell26이 자기 pretrain을 돌리지 않고 <code>INIT_NET</code>으로 shell22 결과를 가져다 썼습니다.
+        shell26 자체 pretrain(<code>promptmr_moe_f2_shared_aug</code>)은 epoch 0 도중
+        <code>Terminated (exit=143)</code>로 끊겨서 loss 기록이 아예 없습니다.</li>
+      <li><strong>shared의 train loss는 epoch 9 하나뿐입니다.</strong>
+        val은 npy에 10 epoch이 다 있는데, epoch 0~8의 train loss는 이 서버 로그에 없습니다 —
+        최초 실행 로그(<code>shell22_f2_20260726_103637.log</code>)가 epoch 요약 줄을 남기지 못하고 끊겼고,
+        살아남은 건 epoch 9를 재개한 <code>shell22_f2_20260728_163009.log</code>뿐입니다.</li>
+      <li><strong>acc8 epoch 4의 train loss는 다른 epoch과 같은 기준이 아닙니다.</strong>
+        <code>iter 3000/4358</code>에서 재개해서 마지막 1358 iter 평균입니다
+        (train 시간 1.80h vs 다른 epoch 5.7h). 0.07245 → 0.07296으로 올라간 건
+        재개 구간만 평균 낸 결과일 수 있으니 상승으로 읽지 마세요.</li>
+      <li><strong>acc4 epoch 4는 진행 중이라 뺐습니다.</strong> 확인 시점에 <code>iter 2800/4358</code>이었습니다.</li>
+      <li><strong>증강 설정이 shared와 ft에서 다릅니다.</strong>
+        shared(shell22)는 <code>exp · delay 7 · max-prob 0.55 · mask-thin 4</code>,
+        ft(shell26)는 <code>constant · 0.5 · delay 0</code>에 mask thinning 제거입니다.
+        shared의 epoch 9에서 val이 0.0891 → 0.0830으로 크게 떨어진 것도 delay 7 이후 증강이
+        올라온 구간과 겹칩니다.</li>
+      <li><strong>ft 두 갈래는 <code>REMASK=1</code>입니다.</strong> 학습 볼륨이 80 → 160으로 늘고
+        마스크를 대회 생성기로 다시 만들어 씌웠습니다. val은 딸려온 마스크 그대로입니다.</li>
+      <li><strong>acc4 로그는 복구본입니다.</strong> 디스크의
+        <code>shell26_f2_ft4_20260730_103901.log</code>는 07-31 08:01에 inode가 교체돼
+        epoch 2에서 멈춰 있습니다. 학습은 계속 돌고 있었고, tee가 붙들고 있던 원본
+        inode(<code>/proc/912380/fd/3</code>)에서 epoch 3까지 받아왔습니다.</li>
+    </ol>
+  </div>
+
+</div>
+
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+const DATA = {
+ "shared": {
+  "label": "shared — 공유 사전학습 (10 epoch)",
+  "net": "promptmr_kfold_f2_aug",
+  "val_desc": "val 40 vol (acc4 20 · acc8 20) · 1084 slice",
+  "points": [
+   {"epoch": 0, "train": null, "val": 0.096681, "train_time": null, "src": null},
+   {"epoch": 1, "train": null, "val": 0.092949, "train_time": null, "src": null},
+   {"epoch": 2, "train": null, "val": 0.092083, "train_time": null, "src": null},
+   {"epoch": 3, "train": null, "val": 0.090679, "train_time": null, "src": null},
+   {"epoch": 4, "train": null, "val": 0.089834, "train_time": null, "src": null},
+   {"epoch": 5, "train": null, "val": 0.090183, "train_time": null, "src": null},
+   {"epoch": 6, "train": null, "val": 0.089501, "train_time": null, "src": null},
+   {"epoch": 7, "train": null, "val": 0.089507, "train_time": null, "src": null},
+   {"epoch": 8, "train": null, "val": 0.089074, "train_time": null, "src": null},
+   {"epoch": 9, "train": 0.07063, "val": 0.082954, "train_time": 17829.6019, "src": "shell22_f2_20260728_163009.log"}
+  ]
+ },
+ "acc4": {
+  "label": "acc4 전문가 — 미세조정 (5 epoch 중 4까지)",
+  "net": "promptmr_moe_f2_acc4_aug_rm",
+  "val_desc": "val 20 vol (acc4 20 · acc8 0) · 548 slice",
+  "points": [
+   {"epoch": 0, "train": 0.05408, "val": 0.068125, "train_time": 20066.8355, "src": "shell26_f2_ft4_20260730_103901.log (복구)"},
+   {"epoch": 1, "train": 0.05396, "val": 0.067881, "train_time": 20055.9586, "src": "shell26_f2_ft4_20260730_103901.log (복구)"},
+   {"epoch": 2, "train": 0.05377, "val": 0.067784, "train_time": 20092.2471, "src": "shell26_f2_ft4_20260730_103901.log (복구)"},
+   {"epoch": 3, "train": 0.05364, "val": 0.068026, "train_time": 20095.0056, "src": "shell26_f2_ft4_20260730_103901.log (복구)"}
+  ]
+ },
+ "acc8": {
+  "label": "acc8 전문가 — 미세조정 (5 epoch 완료)",
+  "net": "promptmr_moe_f2_acc8_aug_rm",
+  "val_desc": "val 20 vol (acc4 0 · acc8 20) · 536 slice",
+  "points": [
+   {"epoch": 0, "train": 0.07326, "val": 0.097299, "train_time": 20549.8992, "src": "shell26_f2_ft8_20260729_032703.log"},
+   {"epoch": 1, "train": 0.07293, "val": 0.097397, "train_time": 20519.6033, "src": "shell26_f2_ft8_20260729_032703.log"},
+   {"epoch": 2, "train": 0.07266, "val": 0.096752, "train_time": 20466.9709, "src": "shell26_f2_ft8_20260729_032703.log"},
+   {"epoch": 3, "train": 0.07245, "val": 0.097268, "train_time": 20481.2009, "src": "shell26_f2_ft8_20260729_032703.log"},
+   {"epoch": 4, "train": 0.07296, "val": 0.096845, "train_time": 6488.5896, "src": "shell26_f2_ft8_20260730_084448.log (재개)"}
+  ]
+ }
+};
+
+const ORDER = ["shared", "acc4", "acc8"];
+const SERIES = [
+  { key: "train", name: "train loss", varname: "--series-train" },
+  { key: "val",   name: "val loss",   varname: "--series-val"   }
+];
+
+const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmt  = (v, d = 5) => v == null ? "—" : v.toFixed(d);
+
+/* ---- nice y domain + ticks ---------------------------------------------- */
+function niceTicks(lo, hi, want = 4) {
+  if (!(hi > lo)) { const c = lo || 0; lo = c - 0.001; hi = c + 0.001; }
+  const raw  = (hi - lo) / want;
+  const mag  = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  const t0 = Math.floor(lo / step) * step, t1 = Math.ceil(hi / step) * step;
+  const ticks = [];
+  for (let t = t0; t <= t1 + step * 1e-6; t += step) ticks.push(+t.toFixed(10));
+  return { ticks, lo: t0, hi: t1, step };
+}
+function domainFor(vals) {
+  const v = vals.filter(x => x != null);
+  if (!v.length) return null;
+  let lo = Math.min(...v), hi = Math.max(...v);
+  if (hi === lo) { const p = Math.abs(hi) * 0.02 || 0.001; lo -= p; hi += p; }
+  else { const p = (hi - lo) * 0.18; lo -= p; hi += p; }
+  return niceTicks(lo, hi, 4);
+}
+function tickLabel(v, step) {
+  const dec = Math.max(0, Math.min(6, Math.ceil(-Math.log10(step)) + 1));
+  return v.toFixed(dec);
+}
+
+const SVGNS = "http://www.w3.org/2000/svg";
+const el = (n, a = {}) => {
+  const e = document.createElementNS(SVGNS, n);
+  for (const k in a) e.setAttribute(k, a[k]);
+  return e;
+};
+
+/* ---- one plot ------------------------------------------------------------ */
+/* spec: 2px lines · >=8px markers with 2px surface ring · hairline solid grid
+   · selective end labels · crosshair tooltip listing every series at that X   */
+function drawPlot(svg, cfg) {
+  const W = Math.max(280, svg.clientWidth || svg.parentNode.clientWidth || 640);
+  const H = cfg.height;
+  const M = cfg.margin;
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+  const iw = W - M.l - M.r, ih = H - M.t - M.b;
+  const pts = cfg.points;
+  const epochs = pts.map(p => p.epoch);
+  const ex0 = Math.min(...epochs), ex1 = Math.max(...epochs);
+  const X = e => M.l + (ex1 === ex0 ? iw / 2 : (e - ex0) / (ex1 - ex0) * iw);
+
+  const all = [];
+  cfg.series.forEach(s => pts.forEach(p => all.push(p[s.key])));
+  const dom = domainFor(all);
+  if (!dom) return;
+  const Y = v => M.t + ih - (v - dom.lo) / (dom.hi - dom.lo) * ih;
+
+  const surface = cssv("--surface");
+
+  /* grid — hairline, solid, recessive */
+  dom.ticks.forEach(t => {
+    svg.appendChild(el("line", {
+      x1: M.l, x2: M.l + iw, y1: Y(t), y2: Y(t),
+      stroke: cssv("--grid"), "stroke-width": 1, "shape-rendering": "crispEdges"
+    }));
+    const tx = el("text", {
+      x: M.l - 8, y: Y(t) + 4, "text-anchor": "end",
+      fill: cssv("--muted"), "font-size": cfg.fs, "font-variant-numeric": "tabular-nums"
+    });
+    tx.textContent = tickLabel(t, dom.step);
+    svg.appendChild(tx);
+  });
+
+  /* x axis */
+  svg.appendChild(el("line", {
+    x1: M.l, x2: M.l + iw, y1: M.t + ih, y2: M.t + ih,
+    stroke: cssv("--axis"), "stroke-width": 1, "shape-rendering": "crispEdges"
+  }));
+  epochs.forEach(e => {
+    const tx = el("text", {
+      x: X(e), y: M.t + ih + cfg.fs + 8, "text-anchor": "middle",
+      fill: cssv("--muted"), "font-size": cfg.fs, "font-variant-numeric": "tabular-nums"
+    });
+    tx.textContent = e;
+    svg.appendChild(tx);
+  });
+  if (cfg.xTitle) {
+    const xt = el("text", {
+      x: M.l + iw / 2, y: H - 2, "text-anchor": "middle",
+      fill: cssv("--muted"), "font-size": cfg.fs
+    });
+    xt.textContent = cfg.xTitle;
+    svg.appendChild(xt);
+  }
+
+  /* crosshair (under the marks) */
+  const cross = el("line", {
+    y1: M.t, y2: M.t + ih, stroke: cssv("--axis"),
+    "stroke-width": 1, opacity: 0, "shape-rendering": "crispEdges"
+  });
+  svg.appendChild(cross);
+
+  /* series */
+  const drawn = [];
+  cfg.series.forEach(s => {
+    const color = cssv(s.varname);
+    const dpts = pts.filter(p => p[s.key] != null);
+    if (!dpts.length) return;
+    drawn.push(s);
+
+    if (dpts.length > 1) {
+      const d = dpts.map((p, i) => `${i ? "L" : "M"}${X(p.epoch)},${Y(p[s.key])}`).join(" ");
+      svg.appendChild(el("path", {
+        d, fill: "none", stroke: color, "stroke-width": 2,
+        "stroke-linejoin": "round", "stroke-linecap": "round"
+      }));
+    }
+    /* markers: >=8px (r>=4) with a 2px surface ring */
+    dpts.forEach(p => {
+      svg.appendChild(el("circle", {
+        cx: X(p.epoch), cy: Y(p[s.key]), r: 4,
+        fill: color, stroke: surface, "stroke-width": 2
+      }));
+    });
+
+    /* selective direct label: the endpoint only */
+    const last = dpts[dpts.length - 1];
+    const lab = el("text", {
+      x: X(last.epoch) + 10, y: Y(last[s.key]) + 4,
+      fill: cssv("--ink-2"), "font-size": cfg.fs,
+      "font-variant-numeric": "tabular-nums", "font-weight": 600
+    });
+    lab.textContent = last[s.key].toFixed(cfg.labDec);
+    svg.appendChild(lab);
+  });
+
+  /* hover / focus layer — crosshair snaps to nearest epoch, tooltip lists all series */
+  const hit = el("rect", {
+    x: M.l, y: M.t, width: iw, height: ih, fill: "transparent",
+    style: "cursor:crosshair"
+  });
+  svg.appendChild(hit);
+
+  const tip = document.getElementById("tip");
+  let idx = -1;
+
+  function show(i, cx, cy) {
+    if (i < 0 || i >= pts.length) return;
+    idx = i;
+    const p = pts[i];
+    cross.setAttribute("x1", X(p.epoch));
+    cross.setAttribute("x2", X(p.epoch));
+    cross.setAttribute("opacity", 1);
+
+    tip.replaceChildren();
+    const hd = document.createElement("div");
+    hd.className = "x";
+    hd.textContent = `${cfg.armLabel} · epoch ${p.epoch}`;
+    tip.appendChild(hd);
+    drawn.forEach(s => {
+      const row = document.createElement("div");
+      row.className = "row";
+      const k = document.createElement("span");
+      k.className = "k";
+      k.style.background = cssv(s.varname);
+      const v = document.createElement("span");
+      v.className = "v";
+      v.textContent = p[s.key] == null ? "—" : p[s.key].toFixed(6);
+      const n = document.createElement("span");
+      n.className = "n";
+      n.textContent = s.name;
+      row.append(k, v, n);
+      tip.appendChild(row);
+    });
+    tip.style.opacity = 1;
+    const r = tip.getBoundingClientRect();
+    let left = cx + 14, top = cy - r.height - 12;
+    if (left + r.width > innerWidth - 8) left = cx - r.width - 14;
+    if (top < 8) top = cy + 16;
+    tip.style.left = left + "px";
+    tip.style.top = top + "px";
+  }
+  function hide() {
+    idx = -1;
+    cross.setAttribute("opacity", 0);
+    tip.style.opacity = 0;
+  }
+  function nearest(clientX) {
+    const b = svg.getBoundingClientRect();
+    const sx = (clientX - b.left) * (W / b.width);
+    let best = 0, bd = Infinity;
+    pts.forEach((p, i) => {
+      const d = Math.abs(X(p.epoch) - sx);
+      if (d < bd) { bd = d; best = i; }
+    });
+    return best;
+  }
+
+  hit.addEventListener("pointermove", ev => show(nearest(ev.clientX), ev.clientX, ev.clientY));
+  hit.addEventListener("pointerleave", hide);
+  svg.addEventListener("blur", hide);
+  svg.addEventListener("keydown", ev => {
+    if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+    ev.preventDefault();
+    let i = idx < 0 ? 0 : idx + (ev.key === "ArrowRight" ? 1 : -1);
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    const b = svg.getBoundingClientRect();
+    const cx = b.left + X(pts[i].epoch) * (b.width / W);
+    const cy = b.top + M.t * (b.width / W);
+    show(i, cx, cy);
+  });
+}
+
+/* ---- build cards --------------------------------------------------------- */
+const cardsEl = document.getElementById("cards");
+const plots = [];
+
+ORDER.forEach(key => {
+  const arm = DATA[key];
+  const card = document.createElement("div");
+  card.className = "card";
+
+  const h = document.createElement("h2");
+  h.textContent = arm.label;
+  const net = document.createElement("p");
+  net.className = "net";
+  net.textContent = arm.net;
+  const vd = document.createElement("p");
+  vd.className = "valdesc";
+  vd.textContent = arm.val_desc;
+  card.append(h, net, vd);
+
+  /* main plot: train + val on ONE shared y-axis (the real gap) */
+  const mainWrap = document.createElement("div");
+  mainWrap.className = "plot-wrap";
+  const mainSvg = document.createElementNS(SVGNS, "svg");
+  mainSvg.setAttribute("tabindex", "0");
+  mainSvg.setAttribute("role", "img");
+  mainSvg.setAttribute("aria-label", `${arm.label}: train loss와 val loss의 epoch별 변화`);
+  mainWrap.appendChild(mainSvg);
+  card.appendChild(mainWrap);
+  plots.push({ svg: mainSvg, cfg: {
+    points: arm.points, series: SERIES, height: 250,
+    margin: { l: 62, r: 74, t: 14, b: 42 }, fs: 11, labDec: 5,
+    xTitle: "epoch", armLabel: key
+  }});
+
+  /* zoom row: each series re-scaled so epoch-to-epoch movement is visible */
+  const zooms = document.createElement("div");
+  zooms.className = "zooms";
+  SERIES.forEach(s => {
+    const z = document.createElement("div");
+    z.className = "zoom";
+    const zh = document.createElement("h3");
+    zh.textContent = `${s.name} — 확대`;
+    z.appendChild(zh);
+
+    const vals = arm.points.map(p => p[s.key]).filter(v => v != null);
+    const rng = document.createElement("p");
+    rng.className = "rng";
+    if (vals.length > 1) {
+      rng.textContent = `${Math.min(...vals).toFixed(5)} – ${Math.max(...vals).toFixed(5)}  (Δ ${(Math.max(...vals) - Math.min(...vals)).toFixed(5)})`;
+      z.appendChild(rng);
+      const wrap = document.createElement("div");
+      wrap.className = "plot-wrap";
+      const sv = document.createElementNS(SVGNS, "svg");
+      sv.setAttribute("tabindex", "0");
+      sv.setAttribute("role", "img");
+      sv.setAttribute("aria-label", `${arm.label}의 ${s.name} 확대 보기`);
+      wrap.appendChild(sv);
+      z.appendChild(wrap);
+      plots.push({ svg: sv, cfg: {
+        points: arm.points.filter(p => p[s.key] != null), series: [s], height: 168,
+        margin: { l: 60, r: 62, t: 12, b: 34 }, fs: 10, labDec: 5,
+        xTitle: "epoch", armLabel: key
+      }});
+    } else {
+      const none = document.createElement("p");
+      none.className = "none";
+      none.textContent = vals.length === 1
+        ? `기록이 epoch ${arm.points.find(p => p[s.key] != null).epoch} 하나뿐이라 곡선이 없습니다 (${vals[0].toFixed(5)}).`
+        : "기록 없음";
+      z.appendChild(none);
+    }
+    zooms.appendChild(z);
+  });
+  card.appendChild(zooms);
+  cardsEl.appendChild(card);
+});
+
+/* ---- table view ---------------------------------------------------------- */
+const tb = document.querySelector("#tbl tbody");
+ORDER.forEach(key => {
+  const arm = DATA[key];
+  const gr = document.createElement("tr");
+  gr.className = "grp";
+  const gc = document.createElement("td");
+  gc.colSpan = 5;
+  gc.textContent = `${arm.label} — ${arm.net}`;
+  gr.appendChild(gc);
+  tb.appendChild(gr);
+
+  arm.points.forEach(p => {
+    const tr = document.createElement("tr");
+    const cells = [
+      String(p.epoch),
+      p.train == null ? "—" : p.train.toFixed(5),
+      p.val.toFixed(6),
+      p.train_time == null ? "—" : (p.train_time / 3600).toFixed(2) + "h"
+    ];
+    cells.forEach(c => {
+      const td = document.createElement("td");
+      td.textContent = c;
+      tr.appendChild(td);
+    });
+    const src = document.createElement("td");
+    src.className = "src";
+    src.textContent = p.src || "npy만 (로그 없음)";
+    tr.appendChild(src);
+    tb.appendChild(tr);
+  });
+});
+
+/* ---- render + resize ----------------------------------------------------- */
+function renderAll() { plots.forEach(p => drawPlot(p.svg, p.cfg)); }
+renderAll();
+let rt;
+addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(renderAll, 120); });
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderAll);
+</script>
+</body>
+</html>

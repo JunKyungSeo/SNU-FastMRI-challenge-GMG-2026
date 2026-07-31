@@ -339,6 +339,31 @@ def remask_offset(seed, epoch, fname, sl, acc):
     return int(np.random.default_rng(zlib.crc32(key)).integers(int(acc)))
 
 
+# ---- 마스크 증강(--mask-aug) — 재생성 경로를 그대로 쓰되 무엇을 흔들지만 바꾼다 -------------
+#   offset : 가속률은 그대로 두고 격자 위상만 매 epoch 재추첨(채점의 무작위 offset 분포에 맞춤).
+#   full   : 가속률까지 4|8 중에서 재추첨 → 한 볼륨이 두 가속률을 오간다.
+#            전문가는 한 가속률만 봐야 하므로 --remask 와는 배타(train.py에서 fail-fast).
+
+def mask_aug_acc(seed, epoch, fname, sl):
+    """--mask-aug full 에서 뽑는 가속률(4|8). remask_offset과 같은 관례이되 salt를 달리해
+    스트림을 분리한다 — 안 나누면 가속률 추첨이 offset 추첨과 맞물려 조합이 편향된다."""
+    key = repr(("mask_aug_acc", int(seed), int(epoch), str(fname), int(sl))).encode()
+    return 4 if int(np.random.default_rng(zlib.crc32(key)).integers(2)) == 0 else 8
+
+
+def infer_acc(mask1d):
+    """딸려온 마스크에서 그 파일의 가속률을 읽는다 — ACS 밖 격자점의 **최소 간격**이 곧 acc
+    (ACS를 가로지르는 한 쌍만 더 벌어지므로 min이면 안전).
+    --mask-aug offset 이 --remask 없이 돌 때 "파일의 원래 가속률"을 유지하려고 쓴다.
+    파일명 accN 토큰을 읽는 길도 있지만 그 규약은 load_data 쪽이고, 여기서 import 하면
+    transforms↔load_data 순환이 된다. 마스크 자체가 더 직접적인 근거이기도 하다."""
+    m = np.asarray(mask1d) >= 1
+    idx = np.where(m & ~_detect_acs(m))[0]
+    if idx.size < 2:
+        raise ValueError("마스크에서 가속률을 못 읽었다 — ACS 밖 샘플 라인이 2개 미만")
+    return int(np.diff(idx).min())
+
+
 class DataTransform:
     """확정 파이프라인 전처리(strategy/confirmed_model.md). 신규 기능은 전부 플래그로 게이트.
 
@@ -375,7 +400,7 @@ class DataTransform:
                  normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
                  return_grappa=False, coil_compress=False, n_virtual_coils=8,
                  return_fg_mask=False, remask_acc=None, remask_offset="uniform",
-                 remask_seed=430):
+                 remask_seed=430, mask_aug="off"):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
@@ -398,6 +423,8 @@ class DataTransform:
         self.remask_acc = None if remask_acc in (None, "off", "") else int(remask_acc)
         self.remask_offset = str(remask_offset)
         self.remask_seed = int(remask_seed)
+        # ---- 마스크 증강(off|offset|full). off = 위 remask 로직 그대로(기존과 비트 동일) ----
+        self.mask_aug = str(mask_aug)
         self.epoch = 0
 
     def set_epoch(self, epoch):
@@ -437,11 +464,21 @@ class DataTransform:
         #   정답은 마스크와 무관하다. 아래 언더샘플 곱(augmentor의 K=kspace*M 또는 else 분기)이
         #   새 마스크로 수행된다 — 이 파일에서 동작이 바뀌는 지점은 여기 하나뿐이다.
         #   val/forward는 is_train 게이트에 걸린다(load_data도 애초에 None을 넘긴다 = 2중 방어).
-        if (self.remask_acc is not None) and self.is_train and (tgt is not None):
+        #   --mask-aug 도 같은 경로를 탄다 — off가 아니면 --remask가 꺼져 있어도 재생성한다.
+        #     offset: 가속률은 그대로(--remask 값, 없으면 딸려온 마스크에서 읽은 파일 원래 값) 두고 위상만 재추첨.
+        #     full  : 가속률까지 4|8 재추첨(--remask와는 배타 — train.py에서 막는다).
+        if ((self.remask_acc is not None) or self.mask_aug != "off") and self.is_train and (tgt is not None):
             W = kspace_c.shape[-1]
-            off = (canonical_offset(W, self.remask_acc) if self.remask_offset == "canonical"
-                   else remask_offset(self.remask_seed, self.epoch, fname, slice, self.remask_acc))
-            mask1d = equispaced_mask(W, self.remask_acc, off, dtype=mask1d.dtype)
+            if self.mask_aug == "full":
+                acc = mask_aug_acc(self.remask_seed, self.epoch, fname, slice)
+            elif self.remask_acc is not None:
+                acc = self.remask_acc
+            else:
+                acc = infer_acc(mask1d)
+            # mask_aug가 켜지면 위상 재추첨이 목적이라 canonical 고정을 덮는다.
+            off = (canonical_offset(W, acc) if (self.mask_aug == "off" and self.remask_offset == "canonical")
+                   else remask_offset(self.remask_seed, self.epoch, fname, slice, acc))
+            mask1d = equispaced_mask(W, acc, off, dtype=mask1d.dtype)
 
         bbox = self._parse_bbox(attrs, slice) if (self.return_bbox and not self.isforward) else None
 

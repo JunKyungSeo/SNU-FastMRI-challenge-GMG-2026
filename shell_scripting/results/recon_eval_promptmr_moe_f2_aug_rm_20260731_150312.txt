@@ -1,0 +1,8 @@
+Leaderboard SSIM_full : 0.9320
+Leaderboard SSIM_bbox : 0.9301
+Leaderboard Recon Time : 1629.19s (736.2 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9498   SSIM_full (acc8): 0.9143
+SSIM_bbox (acc4): 0.9507   SSIM_bbox (acc8): 0.9094
+Recon Time (acc4): 853.23s (748.5 ms/slice)   (acc8): 775.96s (723.2 ms/slice)
+Recon Time (total): 1629.19s

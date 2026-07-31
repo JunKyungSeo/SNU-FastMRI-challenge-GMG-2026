@@ -1,0 +1,7 @@
+==========================================================
+[START] shell28  STAGE=all  2026-07-31 16:12:04
+[LOG  ] shell_scripting/logs/shell28_all_20260731_161204.log
+==========================================================
+[GPU  ] used=2MiB
+[STOP] ../result/promptmr_moe_f2_shared_aug/checkpoints/best_model.pt 없음. PROBE_NET= 으로 지정하라. 후보:
+promptmr_moe_f2_acc8_aug_rm

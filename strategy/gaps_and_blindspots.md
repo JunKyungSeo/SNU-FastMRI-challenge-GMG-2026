@@ -5,7 +5,7 @@
 > - **Part A — 구현 정합성 갭**: 문서엔 있으나 코드에 없거나, 코드가 문서와 어긋난 부분(사실 확인됨).
 > - **Part B — 전략적 사각지대**: 우리 사고 틀 자체가 인지하지 못한, 대회의 본질·승부 아이디어(가설·검증 필요).
 > 각 항목은 **무엇을 놓쳤나 · 왜 중요한가(이유) · 방향**으로 적는다.
-> 관련: SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 배선 [`implementation.md`](implementation.md).
+> 관련: SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`next_levers.md`](next_levers.md) · 배선 [`implementation.md`](implementation.md).
 
 ---
 
@@ -45,7 +45,7 @@
 
 - **무엇**: [`loss_function.py:12`](../utils/common/loss_function.py#L12) `SSIMLoss`는 **배경 포함 full SSIM**. 채점은 (a)전경마스크 SSIM_full + (b)bbox SSIM.
 - **이유**: **손실이 최적화하는 대상과 채점 대상이 다르다.** 배경(공기)까지 SSIM에 포함되어 학습 신호가 희석되고, 순위축 bbox는 손실에 아예 없다.
-- **방향**: 손실에 전경마스크 적용 + **bbox 가중 손실**([`candidates.md`](candidates.md) 1순위) 배선. bbox 파싱은 되나 손실 소비부 미배선.
+- **방향**: 손실에 전경마스크 적용 + **bbox 가중 손실** 배선. → **2026-08-01 현황**: 둘 다 배선 완료. `--fg-loss`는 run11에서 채택(full 0.9161/bbox 0.9095, 새 best), `--bbox-loss-lambda`는 run12에서 λ=0.5로 시도했으나 퇴행해 기본 0.0(off). 근거: `training_anal/2026-07-14-run11-fgloss-analysis.md`, `training_anal/2026-07-18-run12-bbox-uc-analysis.md`.
 
 ## A6. 🟡 배치가 bs=1에 갇혀 있고 acc4/acc8 폭(368/372) pad 미구현
 
@@ -131,4 +131,4 @@
 4. **B2 첫 실험(가장 반직관적 = 승부처)**: **"고주파 집중(§2.4) vs 병변부 보수화(B2)"**를 acc8 bbox에서 직접 A/B. 어느 쪽이 SSIM_bbox를 올리는지 데이터로 판정.
 5. **B4 / B1**: GRAPPA-centric 경량 refiner를 VarNet과 A/B(시간축) · 불확실성/앙상블(B5)로 환각 억제.
 
-> ⚠️ 이 문서의 Part A는 **사실(코드 확인)**, Part B는 **가설(검증 필요)**. Part B 항목은 [`candidates.md`](candidates.md)의 A/B 규칙(SSIM_bbox 비퇴행 하드 게이트, incremental) 하에서만 채택한다.
+> ⚠️ 이 문서의 Part A는 **사실(코드 확인)**, Part B는 **가설(검증 필요)**. Part B 항목은 [`augmentation.md`](augmentation.md) §4.3의 A/B 규칙(SSIM_bbox 비퇴행 하드 게이트, 직전 best 위에 하나만 추가하는 incremental) 하에서만 채택한다.

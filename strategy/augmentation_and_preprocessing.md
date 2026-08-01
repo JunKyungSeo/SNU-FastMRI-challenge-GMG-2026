@@ -444,5 +444,5 @@ A/B를 하는 내내 **동일한 split·동일한 seed**를 써야 비교가 오
 | `strategy/augmentation.md` | 증강 전략 전체 근거 (Tier 분류, 우승팀 레시피, 기각 사유) |
 | `strategy/preprocessing.md` | 전처리 후보 A1~C6과 그 근거 |
 | `strategy/rejected.md` | 이미 기각된 것들 — 재논의 방지용 |
-| `strategy/candidates.md` | 미결정 후보 전체 |
+| `strategy/next_levers.md` | 미결정 후보 전체 |
 | `summary.md` | 프로젝트 통합 현황 (실험 성적표, 적용/미적용 방법) |

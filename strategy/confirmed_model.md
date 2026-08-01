@@ -89,7 +89,7 @@ image_GRAPPA(384²,mag) ──┼───────────────[ 
 - **GRAPPA prior + residual**: `varnet.py` `VarNet.forward` 보조 채널 경로 + residual(out=grappa+f).
 - **감도맵 재사용**: sens 추정을 per-view forward에서 분리(mask=그대로/flip=flip).
 - **소비부 확장**: train_part.py/test_part.py 배치 언패킹 확장 + 출력 `×s` 역정규화.
-- **acc-conditioned GRAPPA 가중**(후보): mask frac≤0.25→acc8/else acc4로 conditioning → 융합 가중 학습. [`candidates.md`](candidates.md).
+- ~~**acc-conditioned GRAPPA 가중**(후보): mask frac≤0.25→acc8/else acc4로 conditioning → 융합 가중 학습.~~ → **2026-08-01 기각**: MoE(acc4/acc8 전문가 분리)가 같은 1비트 조건을 100% 파라미터 분리로 쓰는 조건화의 상한이라, conditioning 몇백 파라미터가 이를 넘을 구조적 경로가 없다. 근거: [`next_levers.md`](next_levers.md) C5.
 
 ### ⏳ 보류 (외부조건)
 - **forward(추론) GRAPPA 로딩**: leaderboard 데이터 구조 미공개 → 공개 후 배선. 제출 전 필수 확인.

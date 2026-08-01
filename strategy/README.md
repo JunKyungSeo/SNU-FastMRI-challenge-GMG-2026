@@ -50,8 +50,23 @@ inconclusive, that is a **measurement** — record the numbers and say it was in
 
 ### R3 — Write for revision, and keep the revision history
 
-- **Every file ends with a `## Change Log` section**, chronological, oldest entry first:
-  `- YYYY-MM-DD — <what changed> — <why> — <commit or log reference>`
+- **Every file ends with a `## Change Log` section**, chronological, oldest entry first.
+  **Write each entry long, not terse.** A future agent must be able to reconstruct the
+  reasoning from the entry alone, without the conversation that produced it. Length is
+  not a cost in this folder; a missing premise is. Use this shape:
+
+  ```markdown
+  - YYYY-MM-DD — <short title of the change>
+    - **What changed**: the concrete edit, naming the section/claim that was touched.
+    - **Why**: the reason the previous version was wrong, incomplete, or superseded.
+      Include the reasoning, not just the conclusion.
+    - **Evidence**: log file, script, commit hash, or measurement that justifies it.
+      If there is none, say so explicitly and label the entry an assumption.
+    - **Supersedes**: the earlier statement this replaces, quoted or referenced, so the
+      reader can see what the position used to be and that it changed deliberately.
+  ```
+
+  A one-line entry is acceptable only for a pure typo or link fix.
 - **When a statement is superseded, do not silently delete it.** Mark the old statement
   as superseded with its date, keep the original reasoning, and add the new statement
   next to it. A reader must be able to see that the position changed and why.
@@ -61,13 +76,17 @@ inconclusive, that is a **measurement** — record the numbers and say it was in
 - Structure sections so a single claim can be replaced without rewriting the file:
   one claim per bullet or per table row, not buried inside a paragraph.
 
-### Why R1 conflicts with three existing files — resolve before editing them
+### R1 and the three forward-looking files — under human review, do not auto-edit
 
 `candidates.md` (open A/B candidates), `next_levers.md` (ranked future levers), and the
 "전략 사각지대(가설)" half of `gaps_and_blindspots.md` are **forward-looking by design**.
-Under a strict reading of R1 their content does not belong in `strategy/`. This is
-unresolved: decide whether R1 exempts those three files, or whether their content moves
-elsewhere, before editing them.
+Under a strict reading of R1 their content does not belong in `strategy/`.
+
+**Status (2026-08-01): the human owner is reviewing these three files and will decide how
+R1 applies to them.** Until that decision is recorded here, an AI agent must not
+restructure, prune, or relocate their content on the basis of R1. Fixing a factually
+wrong number or a stale claim inside them is still allowed, and still requires a
+Change Log entry.
 
 ---
 
@@ -113,9 +132,40 @@ knee 전용 · **`0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** 채점(full�
 
 ## Change Log
 
-- 2026-08-01 — Added the "Authoring Rules for `strategy/`" section (R1 record-what-is /
-  R2 AI-readability / R3 revision history). Reason: these documents are consumed by an
-  agent with no access to the originating conversation, so unstated context is lost and
-  undated claims keep re-litigating settled decisions. Flagged the unresolved conflict
-  between R1 and the three forward-looking files (`candidates.md`, `next_levers.md`,
-  `gaps_and_blindspots.md` 사각지대 half).
+- 2026-08-01 — Added the "Authoring Rules for `strategy/`" section
+  - **What changed**: New top-level section between the intro block and "파일 역할",
+    defining three binding rules for every file under `strategy/`: R1 (record what is,
+    never what might be), R2 (optimize for AI readability, English preferred, never
+    abbreviate away the referent), R3 (write for revision, keep a chronological
+    Change Log). Also added this Change Log section to the README itself.
+  - **Why**: These documents are consumed primarily by an AI agent that has no access to
+    the conversation in which a decision was made and cannot ask a follow-up question.
+    Two concrete failure modes had already occurred in this repo and motivated each rule:
+    (a) a claim with no recorded measurement conditions — "bbox 내부 상관 0.08~0.59" from
+    a 2-file sample with no control group — blocked the 2.5D adjacent-slice feature for a
+    month until it was re-measured and refuted (see `model_strategy.md` §3); (b) stale
+    comments asserting that augmentation was unwired survived the wiring commit and kept
+    steering decisions, because nothing forced a dated supersede note.
+  - **Evidence**: `model_strategy.md` §3 (re-measurement refuting the old correlation
+    claim), `scripts/adjacent_slice_corr.py` (the script that produced it).
+  - **Supersedes**: nothing — the folder previously had no authoring convention at all.
+
+- 2026-08-01 — Amended R3 to require long-form Change Log entries, and changed the status
+  of the three forward-looking files from "unresolved" to "under human review"
+  - **What changed**: R3's Change Log template replaced a single-line
+    `date — what — why — ref` format with a structured multi-line entry
+    (What changed / Why / Evidence / Supersedes), and now states explicitly that length
+    is not a cost here while a missing premise is. One-line entries are restricted to
+    typo and link fixes. Separately, the R1-conflict subsection was retitled and now
+    records that the human owner is reviewing `candidates.md`, `next_levers.md`, and the
+    사각지대 half of `gaps_and_blindspots.md`; an AI agent must not restructure, prune, or
+    relocate their content on R1 grounds until that decision is recorded here.
+  - **Why**: A one-line entry cannot carry the premise of a decision, which defeats the
+    purpose R3 exists for — the same failure mode R1 and R2 are guarding against. The
+    three-file status was changed because ownership of that decision is now explicit, and
+    leaving it marked "unresolved" invited an agent to act on its own reading of R1.
+  - **Evidence**: instruction from the repository owner, this conversation, 2026-08-01.
+  - **Supersedes**: the previous R3 template
+    (`- YYYY-MM-DD — <what changed> — <why> — <commit or log reference>`) and the previous
+    subsection heading "Why R1 conflicts with three existing files — resolve before
+    editing them".

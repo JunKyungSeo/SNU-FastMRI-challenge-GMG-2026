@@ -361,7 +361,7 @@ acc8이 acc4보다 0.05 이상 뒤처져 있으므로(§2.1) **개선 여지가 
 |---|---|
 | 현재 백본(PromptMR+) 설계·손실·실행법 | `strategy/promptmr_plus.md` |
 | 구 SDUM 모델 설계(superseded, 모델무관 요소는 유효) | `strategy/confirmed_model.md` |
-| 후보 아이디어 원본 (§5의 출처) | `strategy/candidates.md` |
+| 후보 아이디어 원본 (§5의 출처) | `strategy/next_levers.md` (candidates.md 는 2026-08-01 삭제) |
 | 기각 목록 원본 (§4의 출처) | `strategy/rejected.md` |
 | 증강 관련 상세 판단 | `strategy/augmentation.md` |
 | 알려진 구멍과 전략적 사각지대 | `strategy/gaps_and_blindspots.md` |

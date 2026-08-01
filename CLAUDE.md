@@ -113,7 +113,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 10. 범위 밖 (후순위 / 다른 팀원)
 
-- 상세: `strategy/candidates.md`, `strategy/implementation.md` 참고.
+- 상세: `strategy/next_levers.md`, `strategy/implementation.md` 참고.
 
 ---
 

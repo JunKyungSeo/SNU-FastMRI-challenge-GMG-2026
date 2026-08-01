@@ -154,7 +154,7 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     • sens_net은 압축된 ACS로 내부 감도맵을 추정 → 그냥 Nvc코일로 동작(수정 불필요).
 
     ── 상호배타 주의 ─────────────────────────────────────────────────────────
-    candidates.md 기준 coil compression은 **배치 SME(§3.2)와 택1(동시적용 금지)** — 둘 다
+    coil compression은 **배치 SME(model_strategy §3.2)와 택1(동시적용 금지)** — 둘 다
     SME 비용 절감이 목적이라 중복. 하나만 켠다.
 
     Args:
@@ -416,7 +416,7 @@ class DataTransform:
         self.return_grappa = bool(return_grappa)  # GRAPPA 영상 prior 반환
         # ---- 효율 레버(후보): SVD coil compression. 기본 off. 배치 SME와 택1 ----
         #   켜면 코일 C(예 15)→n_virtual_coils(예 8)로 축소 → 반환 kspace shape의 coil축이 바뀜.
-        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, candidates.md.
+        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, strategy/preprocessing.md A2.
         self.coil_compress = bool(coil_compress)
         self.n_virtual_coils = int(n_virtual_coils)
         # ---- 마스크 재생성(학습 전용). None = off = 딸려온 마스크 그대로(기존과 비트 동일) ----

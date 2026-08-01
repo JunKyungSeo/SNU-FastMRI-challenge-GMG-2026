@@ -1,0 +1,46 @@
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_probe_adj3_f2 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.2154 Time = 11.7531s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.0597 Time = 450.1596s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.109 Time = 452.4222s
+Epoch = [  0/  1] Iter = [ 150/2163] Loss = 0.09883 Time = 450.8583s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1443 Time = 449.8397s
+Epoch = [  0/  1] Iter = [ 250/2163] Loss = 0.1441 Time = 453.4729s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.0944 Time = 451.7858s
+Epoch = [  0/  1] Iter = [ 350/2163] Loss = 0.09972 Time = 451.9209s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.09831 Time = 450.7697s
+Epoch = [  0/  1] Iter = [ 450/2163] Loss = 0.1524 Time = 451.9512s
+Epoch = [  0/  1] Iter = [ 500/2163] Loss = 0.1835 Time = 452.6384s
+Epoch = [  0/  1] Iter = [ 550/2163] Loss = 0.1225 Time = 451.7637s
+Epoch = [  0/  1] Iter = [ 600/2163] Loss = 0.04577 Time = 453.2930s
+Epoch = [  0/  1] Iter = [ 650/2163] Loss = 0.06734 Time = 452.7036s
+Epoch = [  0/  1] Iter = [ 700/2163] Loss = 0.05106 Time = 453.1647s
+Epoch = [  0/  1] Iter = [ 750/2163] Loss = 0.1642 Time = 451.9006s
+Epoch = [  0/  1] Iter = [ 800/2163] Loss = 0.06549 Time = 453.7362s
+Epoch = [  0/  1] Iter = [ 850/2163] Loss = 0.07769 Time = 452.4958s
+Epoch = [  0/  1] Iter = [ 900/2163] Loss = 0.0952 Time = 454.0335s
+Epoch = [  0/  1] Iter = [ 950/2163] Loss = 0.04912 Time = 451.2431s
+Epoch = [  0/  1] Iter = [1000/2163] Loss = 0.06714 Time = 456.9355s
+Epoch = [  0/  1] Iter = [1050/2163] Loss = 0.04006 Time = 452.3606s
+Epoch = [  0/  1] Iter = [1100/2163] Loss = 0.1097 Time = 452.4127s
+Epoch = [  0/  1] Iter = [1150/2163] Loss = 0.08485 Time = 452.7033s
+Epoch = [  0/  1] Iter = [1200/2163] Loss = 0.08837 Time = 452.8143s
+Epoch = [  0/  1] Iter = [1250/2163] Loss = 0.06042 Time = 454.2581s
+Epoch = [  0/  1] Iter = [1300/2163] Loss = 0.09189 Time = 454.1926s
+Epoch = [  0/  1] Iter = [1350/2163] Loss = 0.06684 Time = 452.2373s
+Epoch = [  0/  1] Iter = [1400/2163] Loss = 0.1541 Time = 451.9797s
+Epoch = [  0/  1] Iter = [1450/2163] Loss = 0.07308 Time = 454.0325s
+Epoch = [  0/  1] Iter = [1500/2163] Loss = 0.07394 Time = 460.4291s
+Epoch = [  0/  1] Iter = [1550/2163] Loss = 0.06788 Time = 454.0644s
+Epoch = [  0/  1] Iter = [1600/2163] Loss = 0.0502 Time = 453.1666s
+Epoch = [  0/  1] Iter = [1650/2163] Loss = 0.05115 Time = 451.2514s
+Epoch = [  0/  1] Iter = [1700/2163] Loss = 0.04914 Time = 454.7011s
+Epoch = [  0/  1] Iter = [1750/2163] Loss = 0.05415 Time = 454.3476s
+Epoch = [  0/  1] Iter = [1800/2163] Loss = 0.07448 Time = 453.3858s
+Epoch = [  0/  1] Iter = [1850/2163] Loss = 0.1225 Time = 455.0173s
+Epoch = [  0/  1] Iter = [1900/2163] Loss = 0.09157 Time = 451.4886s
+Epoch = [  0/  1] Iter = [1950/2163] Loss = 0.07236 Time = 452.6507s
+[mem] epoch 0 peak allocated = 3.42GB / reserved = 5.14GB

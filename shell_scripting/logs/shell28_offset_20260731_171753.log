@@ -1,0 +1,48 @@
+==========================================================
+[START] shell28  STAGE=offset  2026-07-31 17:17:53
+[LOG  ] shell_scripting/logs/shell28_offset_20260731_171753.log
+==========================================================
+[GPU  ] used=2MiB
+[A offset] promptmr_kfold_f2_aug  acc8
++ python scripts/probe_offset.py -n promptmr_kfold_f2_aug --acc 8 --k-fold 5 --val-fold 2 --kfold-seed 430 --data-path-train /root/Data/train/ --data-path-val /root/Data/val/
+[probe] net=promptmr_kfold_f2_aug  acc=8  hold-out=k-fold 5 fold2 seed430  볼륨 20개  offset 0~7
+  [1/20] knee_acc8_27.h5  W=368  canonical_offset=0
+  [2/20] knee_acc8_29.h5  W=368  canonical_offset=0
+  [3/20] knee_acc8_3.h5  W=368  canonical_offset=0
+  [4/20] knee_acc8_43.h5  W=368  canonical_offset=0
+  [5/20] knee_acc8_44.h5  W=368  canonical_offset=0
+  [6/20] knee_acc8_5.h5  W=372  canonical_offset=2
+  [7/20] knee_acc8_52.h5  W=368  canonical_offset=0
+  [8/20] knee_acc8_59.h5  W=368  canonical_offset=0
+  [9/20] knee_acc8_6.h5  W=372  canonical_offset=2
+  [10/20] knee_acc8_7.h5  W=368  canonical_offset=0
+  [11/20] knee_acc8_73.h5  W=320  canonical_offset=0
+  [12/20] knee_acc8_74.h5  W=372  canonical_offset=2
+  [13/20] knee_acc8_75.h5  W=372  canonical_offset=2
+  [14/20] knee_acc8_76.h5  W=368  canonical_offset=0
+  [15/20] knee_acc8_79.h5  W=368  canonical_offset=0
+  [16/20] knee_acc8_82.h5  W=368  canonical_offset=0
+  [17/20] knee_acc8_83.h5  W=368  canonical_offset=0
+  [18/20] knee_acc8_12.h5  W=368  canonical_offset=0
+  [19/20] knee_acc8_13.h5  W=368  canonical_offset=0
+  [20/20] knee_acc8_14.h5  W=372  canonical_offset=2
+
+===== offset 별 =====
+ offset   SSIM_full   SSIM_bbox   비고
+      0      0.9033      0.9218   학습에서 봄 (볼륨 15개의 canonical)
+      1      0.9078      0.9292   
+      2      0.9079      0.9258   학습에서 봄 (볼륨 5개의 canonical)
+      3      0.9066      0.9287   
+      4      0.9026      0.9213   
+      5      0.9076      0.9285   
+      6      0.9078      0.9266   
+      7      0.9071      0.9289   
+
+===== 판정 =====
+canonical(학습에서 본 offset) : full 0.9024  bbox 0.9201
+그 외 offset                  : full 0.9069  bbox 0.9272
+격차                          : full -0.0045  bbox -0.0071
+→ 모델이 offset 에 둔감하다. --remask 로 회수할 게 거의 없다.
+==========================================================
+[DONE ] shell28  STAGE=offset  2026-07-31 18:10:35  exit=0
+==========================================================

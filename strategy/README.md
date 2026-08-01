@@ -5,6 +5,72 @@
 >
 > 🔄 **작업 사이클(train→분석→코멘트→수정)은 [`collaboration_workflow.md`](collaboration_workflow.md).**
 
+---
+
+## Authoring Rules for `strategy/` — MUST FOLLOW (2026-08-01)
+
+These rules bind **every file created or edited under `strategy/`**, and they bind the
+AI agent doing the editing, not only the human. They exist because these documents are
+read primarily by an agent that has **no access to the conversation in which a decision
+was made** and cannot ask a follow-up question. Anything not written here is lost.
+
+### R1 — Record what IS, never what MIGHT BE
+
+Do **not** write forward-looking improvement proposals. Concretely, do not write:
+"we could try X", "future work", "worth exploring later", "consider adding", "next step
+would be", "추후 검토", "여력 되면".
+
+Record only these three kinds of statement:
+
+| Allowed | Required content |
+|---|---|
+| **Decision** | what was decided, the date, and the reason it was decided that way |
+| **Measurement** | the numbers, the exact conditions they were measured under, and the script/log that produced them |
+| **Constraint** | what is true and cannot be changed (scoring formula, hardware, competition rules) |
+
+A proposal that has been neither decided nor measured does not belong in this folder.
+If an idea was evaluated and dropped, that is a **decision** — record it with its reason
+(this is what `rejected.md` is for). If an idea was measured and the result was
+inconclusive, that is a **measurement** — record the numbers and say it was inconclusive.
+
+### R2 — Optimize for AI readability, not human brevity
+
+- **English is preferred** for new prose. Existing Korean text may stay; do not mass-translate.
+- **Never abbreviate away the referent.** Write the full identifier: file path, symbol
+  name, and line number — `utils/data/transforms.py::MRIAugmentor._flip_lr` (line 286),
+  not "the flip function".
+- **Every number carries its units and its conditions.** Not "ValLoss 0.1148" but
+  "ValLoss 0.1148 (fold 2, acc8 only, 2000 iterations ≈ 1 epoch, seed 430, shell30)".
+- **Every claim carries its evidence.** Name the log file, the script, or the commit hash.
+  A claim with no traceable source must be labelled as an assumption.
+- **Prefer explicit tables over compressed prose.** Repeating a noun is cheaper than
+  making the reader resolve a pronoun.
+- Do not rely on the reader having seen a sibling file. Restate the premise in one line,
+  then link.
+
+### R3 — Write for revision, and keep the revision history
+
+- **Every file ends with a `## Change Log` section**, chronological, oldest entry first:
+  `- YYYY-MM-DD — <what changed> — <why> — <commit or log reference>`
+- **When a statement is superseded, do not silently delete it.** Mark the old statement
+  as superseded with its date, keep the original reasoning, and add the new statement
+  next to it. A reader must be able to see that the position changed and why.
+  Use `~~strikethrough~~` for a retracted number, and a dated `⚠️`/`🔁` note for a
+  reversed conclusion.
+- **Never leave an undated claim.** If you cannot date it, mark it `(date unknown)`.
+- Structure sections so a single claim can be replaced without rewriting the file:
+  one claim per bullet or per table row, not buried inside a paragraph.
+
+### Why R1 conflicts with three existing files — resolve before editing them
+
+`candidates.md` (open A/B candidates), `next_levers.md` (ranked future levers), and the
+"전략 사각지대(가설)" half of `gaps_and_blindspots.md` are **forward-looking by design**.
+Under a strict reading of R1 their content does not belong in `strategy/`. This is
+unresolved: decide whether R1 exempts those three files, or whether their content moves
+elsewhere, before editing them.
+
+---
+
 ## 파일 역할 (읽는 순서)
 
 | 파일 | 역할 | 언제 보나 |
@@ -44,3 +110,12 @@
 
 ## 하드 제약 (전 문서 공통)
 knee 전용 · **`0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** 채점(full·bbox 5:5, 2026-07-09 규칙변경) · GTX 1080 8GB FP32 · external/pretrained 금지 · 세부는 [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).
+
+## Change Log
+
+- 2026-08-01 — Added the "Authoring Rules for `strategy/`" section (R1 record-what-is /
+  R2 AI-readability / R3 revision history). Reason: these documents are consumed by an
+  agent with no access to the originating conversation, so unstated context is lost and
+  undated claims keep re-litigating settled decisions. Flagged the unresolved conflict
+  between R1 and the three forward-looking files (`candidates.md`, `next_levers.md`,
+  `gaps_and_blindspots.md` 사각지대 half).

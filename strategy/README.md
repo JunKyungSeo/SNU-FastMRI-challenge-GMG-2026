@@ -14,6 +14,23 @@ AI agent doing the editing, not only the human. They exist because these documen
 read primarily by an agent that has **no access to the conversation in which a decision
 was made** and cannot ask a follow-up question. Anything not written here is lost.
 
+Two failures in this repository produced these rules; they are recorded here so the rules
+are not later dismissed as generic style advice.
+
+1. **A number without its conditions blocked a feature for a month.** `model_strategy.md`
+   §3 asserted that lesion-bbox inter-slice correlation was 0.08–0.59, and `rejected.md`
+   used it to reject 2.5D adjacent-slice input on 2026-07-02. The measurement came from a
+   **2-file sample with no control group**, and the script that produced it was a scratchpad
+   file that no longer exists. Re-measured on 2026-08-01 over 170 files with same-size
+   control boxes, lesion correlation was *higher* than control — the low absolute value had
+   been an artifact of computing Pearson on small patches. → **R2**: every number carries its
+   conditions and a traceable source.
+2. **Stale comments outlived the code they described and kept steering decisions.** After
+   augmentation was wired on 2026-07-26, `load_data.py` and `augmentation_and_preprocessing.md`
+   still stated that the `--aug-*` arguments did not exist and that augmentation was "dead",
+   because nothing forced a dated supersede note. → **R1** and **R3**: a decision must be
+   recorded as a decision, and a superseded claim must be visibly superseded, with its date.
+
 ### R1 — Record what IS, never what MIGHT BE
 
 Do **not** write forward-looking improvement proposals. Concretely, do not write:
@@ -50,31 +67,43 @@ inconclusive, that is a **measurement** — record the numbers and say it was in
 
 ### R3 — Write for revision, and keep the revision history
 
-- **Every file ends with a `## Change Log` section**, chronological, oldest entry first.
-  **Write each entry long, not terse.** A future agent must be able to reconstruct the
-  reasoning from the entry alone, without the conversation that produced it. Length is
-  not a cost in this folder; a missing premise is. Use this shape:
+- **The revision history goes inside the entry that changed, not in a section about the
+  document.** Do not add a "Change Log", "수정 내역", or "이 문서의 한계" section. Narrating
+  your own edits ("moved section 4 into L07", "retitled this subsection", "deleted the
+  estimate column") is editorial bookkeeping — git already holds it, in a form that cannot
+  drift out of sync with the file. What the document must hold is the **subject-matter**
+  history: when the idea appeared, when it landed in code, when it ran, what it measured.
+- **Write each entry long, not terse.** A future agent must be able to reconstruct the
+  reasoning from the entry alone, without the conversation that produced it. Length is not a
+  cost in this folder; a missing premise is. An entry that records a lifecycle should carry
+  each stage with its own date and its own evidence, for example:
 
   ```markdown
-  - YYYY-MM-DD — <short title of the change>
-    - **What changed**: the concrete edit, naming the section/claim that was touched.
-    - **Why**: the reason the previous version was wrong, incomplete, or superseded.
-      Include the reasoning, not just the conclusion.
-    - **Evidence**: log file, script, commit hash, or measurement that justifies it.
-      If there is none, say so explicitly and label the entry an assumption.
-    - **Supersedes**: the earlier statement this replaces, quoted or referenced, so the
-      reader can see what the position used to be and that it changed deliberately.
+  ### <item name>
+  - **Idea**: date first recorded, and where. If the earliest trace is a commit rather than a
+    document, say so.
+  - **Code**: commit hash + date, or `not implemented`.
+  - **Executed**: log file + date, or `not executed`.
+  - **Result**: the numbers with their measurement conditions, or `not measured`.
+  - **Status**: the current decision, dated, with the reason it was decided that way.
   ```
 
-  A one-line entry is acceptable only for a pure typo or link fix.
+  A field that cannot be filled says `not implemented` / `not executed` / `not measured`
+  rather than being omitted — an empty field cannot be told apart from an unchecked one.
 - **When a statement is superseded, do not silently delete it.** Mark the old statement
-  as superseded with its date, keep the original reasoning, and add the new statement
-  next to it. A reader must be able to see that the position changed and why.
+  as superseded with its date, keep the original reasoning, and put the new statement next
+  to it, in the same entry. A reader must be able to see that the position changed and why.
   Use `~~strikethrough~~` for a retracted number, and a dated `⚠️`/`🔁` note for a
   reversed conclusion.
 - **Never leave an undated claim.** If you cannot date it, mark it `(date unknown)`.
 - Structure sections so a single claim can be replaced without rewriting the file:
   one claim per bullet or per table row, not buried inside a paragraph.
+- **Keep the file at one depth.** Every fact belongs inside the entry that acts on it. Do not
+  create a "general findings" or "cross-cutting" section — a measurement parked away from the
+  decision it changes is a measurement nobody applies. The concrete failure this rule comes
+  from: `next_levers.md` carried a two-server wall-clock table showing a 2.5× difference in a
+  general-findings section, while every entry above it still quoted GPU hours without naming
+  a server.
 
 ### R1 and the two remaining forward-looking files — under human review, do not auto-edit
 
@@ -85,11 +114,17 @@ their content does not belong in `strategy/`.
 **Status (2026-08-01): the human owner is reviewing these two files and will decide how
 R1 applies to them.** Until that decision is recorded here, an AI agent must not
 restructure, prune, or relocate their content on the basis of R1. Fixing a factually
-wrong number or a stale claim inside them is still allowed, and still requires a
-Change Log entry.
+wrong number or a stale claim inside them is still allowed, and must be dated where it is
+made.
 
-`candidates.md` was the third such file. It was **deleted on 2026-08-01** — see the
-Change Log entry at the bottom of this file for the audit that justified it.
+`candidates.md` was the third such file. It was **deleted on 2026-08-01** after an
+item-by-item audit against the code found that 10 of its 24 entries were already decided
+while the file still listed them as open — `--fg-loss` was recorded as unverified after
+run11 had adopted it, bbox weighted loss was still the "1순위" candidate after run12 had
+turned it off, and four augmentations it offered for tuning had been removed from
+`utils/data/transforms.py` on 2026-07-28. Its surviving open items are all covered by
+`next_levers.md` with more information. Commit `c4ad79b` holds the deletion and the
+reference cleanup.
 
 ---
 
@@ -141,87 +176,3 @@ TensorRT(Pascal 이득 제한) · coil noise pre-whitening · ACS 저해상도 �
 
 ## 하드 제약 (전 문서 공통)
 knee 전용 · **`0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간`** 채점(full·bbox 5:5, 2026-07-09 규칙변경) · GTX 1080 8GB FP32 · external/pretrained 금지 · 세부는 [`.claude/CLAUDE.md`](../.claude/CLAUDE.md).
-
-## Change Log
-
-- 2026-08-01 — Added the "Authoring Rules for `strategy/`" section
-  - **What changed**: New top-level section between the intro block and "파일 역할",
-    defining three binding rules for every file under `strategy/`: R1 (record what is,
-    never what might be), R2 (optimize for AI readability, English preferred, never
-    abbreviate away the referent), R3 (write for revision, keep a chronological
-    Change Log). Also added this Change Log section to the README itself.
-  - **Why**: These documents are consumed primarily by an AI agent that has no access to
-    the conversation in which a decision was made and cannot ask a follow-up question.
-    Two concrete failure modes had already occurred in this repo and motivated each rule:
-    (a) a claim with no recorded measurement conditions — "bbox 내부 상관 0.08~0.59" from
-    a 2-file sample with no control group — blocked the 2.5D adjacent-slice feature for a
-    month until it was re-measured and refuted (see `model_strategy.md` §3); (b) stale
-    comments asserting that augmentation was unwired survived the wiring commit and kept
-    steering decisions, because nothing forced a dated supersede note.
-  - **Evidence**: `model_strategy.md` §3 (re-measurement refuting the old correlation
-    claim), `scripts/adjacent_slice_corr.py` (the script that produced it).
-  - **Supersedes**: nothing — the folder previously had no authoring convention at all.
-
-- 2026-08-01 — Amended R3 to require long-form Change Log entries, and changed the status
-  of the three forward-looking files from "unresolved" to "under human review"
-  - **What changed**: R3's Change Log template replaced a single-line
-    `date — what — why — ref` format with a structured multi-line entry
-    (What changed / Why / Evidence / Supersedes), and now states explicitly that length
-    is not a cost here while a missing premise is. One-line entries are restricted to
-    typo and link fixes. Separately, the R1-conflict subsection was retitled and now
-    records that the human owner is reviewing `candidates.md`, `next_levers.md`, and the
-    사각지대 half of `gaps_and_blindspots.md`; an AI agent must not restructure, prune, or
-    relocate their content on R1 grounds until that decision is recorded here.
-  - **Why**: A one-line entry cannot carry the premise of a decision, which defeats the
-    purpose R3 exists for — the same failure mode R1 and R2 are guarding against. The
-    three-file status was changed because ownership of that decision is now explicit, and
-    leaving it marked "unresolved" invited an agent to act on its own reading of R1.
-  - **Evidence**: instruction from the repository owner, this conversation, 2026-08-01.
-  - **Supersedes**: the previous R3 template
-    (`- YYYY-MM-DD — <what changed> — <why> — <commit or log reference>`) and the previous
-    subsection heading "Why R1 conflicts with three existing files — resolve before
-    editing them".
-
-- 2026-08-01 — Deleted `strategy/candidates.md` and repointed every live reference to it
-  - **What changed**: `strategy/candidates.md` was removed from the repository. The file-role
-    table row now points to `next_levers.md`. The "🔬 열린 후보" dashboard section, which
-    duplicated `candidates.md`'s contents, was rewritten to list what has since been
-    **decided** versus what remains **unimplemented**, and to state that `next_levers.md`
-    is the single authority for ranking. Fourteen inbound references in nine files were
-    repointed: `CLAUDE.md` (line 116), `strategy/augmentation.md`, `strategy/model_strategy.md`,
-    `strategy/preprocessing.md` (×2), `strategy/augmentation_and_preprocessing.md`,
-    `strategy/confirmed_model.md`, `strategy/gaps_and_blindspots.md` (×3),
-    `strategy/implementation.md` (×3), `strategy/model_decision_points.md` (×2),
-    `strategy/README.md` (×4). References inside `docs/superpowers/plans/` and
-    `docs/superpowers/specs/` were deliberately left untouched because those files are
-    dated historical records, not current guidance.
-  - **Why**: The file was created 2026-07-06 (`80f0a13`) and last edited 2026-07-12
-    (`347fb43`), then went untouched for three weeks while the decisions it tracked were
-    actually made. An item-by-item audit against the current code found **10 of its 24
-    entries were already settled and the file still listed them as open**, so it was
-    actively asserting false things: `--fg-loss` was recorded as "off·검증전" when run11
-    had already adopted it as the new best; bbox weighted loss was listed as the "1순위"
-    candidate after run12 had tried λ=0.5, regressed, and turned it off; 원본마스크 혼합비,
-    k-space 랜덤 위상, 라인 지터, and coil 노이즈 were listed as tunable when the
-    2026-07-28 decision had removed them from `utils/data/transforms.py` entirely; and
-    acc-conditioned GRAPPA weighting (FiLM) was still recommended after `next_levers.md`
-    C5 concluded MoE expert separation is the upper bound of that same one-bit
-    conditioning. The 9 genuinely open items are all covered by `next_levers.md` with
-    strictly more information (expected gain, GPU hours, whether the candidate was
-    adversarially verified), making `candidates.md` an inferior duplicate. Under R1 a
-    file whose decided entries are not recorded as decisions is worse than no file.
-  - **Evidence**: `git log --follow strategy/candidates.md` for the dates; per-item grep
-    of `train.py`, `utils/data/transforms.py`, `utils/data/load_data.py`, and
-    `utils/model/promptmr/promptmr_plus.py` for implementation status;
-    `training_anal/2026-07-14-run11-fgloss-analysis.md` (fg-loss adopted),
-    `training_anal/2026-07-18-run12-bbox-uc-analysis.md` (bbox loss regressed),
-    `strategy/next_levers.md` C5 (acc-conditioning killed).
-  - **Supersedes**: `strategy/candidates.md` in its entirety, and the previous
-    "🔬 열린 후보" dashboard bullets that mirrored it. Content deliberately not preserved:
-    the paper citations that existed only in `candidates.md` (FiLM — Perez et al. AAAI 2018;
-    Deeply-Supervised Nets — Lee et al. AISTATS 2015; Knowledge Distillation — Hinton et al.
-    2015; SVD coil compression — Buehrer et al. MRM 2007 / Zhang et al. MRM 2013). The
-    repository owner accepted this loss on 2026-08-01. The A/B judging rule that
-    `candidates.md` stated in its header (SSIM_bbox non-regression as a hard gate,
-    incremental one-change-at-a-time) was **not** lost — it is defined in
-    `augmentation.md` lines 393 and 403, which `candidates.md` was merely citing.

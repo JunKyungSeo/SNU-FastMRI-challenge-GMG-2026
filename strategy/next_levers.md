@@ -30,10 +30,33 @@ explicitly rather than being omitted.
 | **Result** | Numbers with their measurement conditions, or `not measured`. |
 | **Status** | `open` (no execution yet) / `closed-measured` (executed, decision made) / `closed-unmeasured` (dropped by reasoning alone) |
 
+### ⚠️ How much to trust an entry
+
+Of the 17 candidates this ledger inherited, **8 had been through adversarial verification and
+9 had not**. Verification repeatedly corrected the source material by large factors, so an
+unverified entry should be expected to move by a similar amount:
+
+| Corrected item | Pre-verification claim | After verification |
+|---|---|---|
+| L13 GPU-hour estimate | — | off by **2.4×** (the figure quoted was for the faster server) |
+| L04 inference cost | — | off by **two orders of magnitude** (per-slice backbone re-invocation) |
+| L01 "LR decay was already tried" | asserted as fact | **false** — `step_size 11` never fires in a 10-epoch run |
+| L13 offset coverage gain | acc8 +0.002~0.006 | measured gap **−0.0045 / −0.0071** (wrong sign) |
+| L14 rotation ceiling | worth a 60 h A/B if ≥0.010 | measured **+0.0031** |
+
+**Confirm file:line before acting on any entry.** The eight verification passes also ran
+without a working safety classifier, so their conclusions were never independently screened.
+
 ### ⚠️ Which dates are trustworthy
 
 - **Execution dates are reliable.** They come from the log filename and the `[START]` line,
   both written by the server clock at run time.
+- **Related ledger**: GRAPPA self-computation is tracked in
+  [`grappa_selfcompute.md`](grappa_selfcompute.md), not here. Four statements in other
+  strategy files are downstream of the premise that GRAPPA cannot be recomputed
+  (`preprocessing.md:16`, `model_strategy.md:66`, `rejected.md:30`, `augmentation.md:109`);
+  if that premise is wrong they are all wrong together, and the correction belongs in that
+  ledger. As of 2026-08-01 they are unfixed.
 - **Code-landing dates are approximate.** This branch has been rebased onto `origin/jkMRplus`
   many times, and rebase rewrites the committer date. Example of the damage: commit `12bbe7e`
   (2.5D adjacent-slice wiring) reports author date `2026-08-01 02:06`, but
@@ -445,111 +468,3 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
 - **Status**: closed-unmeasured — **rejected as measurement avoidance.** The repository owner
   stated that preprocessing belongs inside the reported recon time. Not implemented, and not
   to be revisited on efficiency grounds.
-
----
-
-## Change Log
-
-- 2026-07-31 — File created as "다음 레버 — PromptMR+ 위에서 무엇을 할 것인가"
-  - **What changed**: New file, added in commit `05d8ed2` alongside the `shell28.sh` probe
-    slot. Contained 17 candidates (C1–C17) organized by priority, each with an expected-gain
-    range and a GPU-hour estimate, split into "검증 완료 (생존 6)", "탈락 (검증됨)", and
-    "미검증".
-  - **Why**: to consolidate the output of a seven-branch investigation (two papers, the 2019
-    and 2020 fastMRI competitions, past SNU placing teams, recent SOTA, and an audit of this
-    repository's own code and history) into one ranked list.
-  - **Evidence**: commit `05d8ed2`, author date 2026-07-31 14:14.
-  - **Supersedes**: nothing.
-
-- 2026-08-01 — Recorded the 2.5D adjacent-slice measurement
-  - **What changed**: The re-judgement table entry for 2.5D adjacent slices was updated
-    twice: first to record that the old rejection basis had been refuted, then to record the
-    shell30 cost/benefit measurement and the resulting decision to defer adoption.
-  - **Why**: the rejection had been based on a 2-file sample with no control group, and the
-    replacement measurement produced the opposite result; then the implementation measurement
-    showed the cost was 1.9× for an effect that did not resolve above noise.
-  - **Evidence**: commits `c41ebd3` and `e520104`; `scripts/adjacent_slice_corr.py`;
-    `shell_scripting/logs/shell30_f2_20260731_191828.log`.
-  - **Supersedes**: the entry's original text, `bbox 내부 상관 0.08~0.59`.
-
-- 2026-08-01 — Rewrote the entire file as a dated lever ledger
-  - **What changed**: The document was restructured from a priority-ranked candidate list
-    into a ledger of 19 levers (L01–L19), each carrying five explicit fields —
-    **Idea / Code / Executed / Result / Status** — with dates and evidence for each. Open
-    levers are in §2, executed-or-dropped levers moved to §3 as history. The per-candidate
-    **expected-gain ranges and priority ordering were deleted**. A "how to read this file"
-    section was added in §0, including an explicit warning that code-landing dates are
-    unreliable because rebasing rewrote committer dates, and that log dates are the harder
-    evidence. Cross-cutting measurements were consolidated into §4, and §4.3 was added with
-    the 2025 winning clone's hyperparameters.
-  - **Why**: the previous structure violated all three authoring rules in
-    [`README.md`](README.md). Under **R1** it recorded proposals as if they were findings:
-    every candidate carried an expected-gain range produced before any measurement existed,
-    and two of those ranges were later contradicted by the only probes that ran — L13's
-    offset gap came back **negative** (−0.0045 full / −0.0071 bbox) where the document had
-    predicted acc8 +0.002~0.006, and L14's ceiling came back at +0.0031 against a 0.010
-    threshold. Under **R2** the entries did not say when anything happened or which log
-    produced a number, so a reader could not tell a measured value from an estimate. Under
-    **R3** there was no change log at all and no per-lever history, so the file could not
-    record that a lever had been executed without rewriting the claim in place and losing the
-    prior position. Three specific errors that the rewrite corrects: the file listed the
-    ℓ1-mixing probe as available when both `shell28.sh STAGE=all` launches had aborted on a
-    missing checkpoint and the ℓ1 arm never started; it did not record that L13's probe had
-    already killed the offset argument; and it did not record that L14 had already been
-    measured and folded.
-  - **Evidence**: `git log --diff-filter=AM -S<symbol>` for each code-landing date;
-    `shell_scripting/logs/shell28_offset_20260731_171753.log` (L13 result),
-    `shell_scripting/logs/shell28_all_20260731_161204.log` and `..._161600.log` (L05 aborted),
-    `shell_scripting/logs/shell29_20260731_190011.log` (L14 result),
-    `shell_scripting/logs/shell30_f2_20260731_181035.log` and `..._191828.log` (L06 result),
-    `training_anal/2026-07-14-run11-fgloss-analysis.md` (L16),
-    `training_anal/2026-07-18-run12-bbox-uc-analysis.md` (L15); code status of L02, L10, L11
-    verified by reading `utils/learning/train_part.py`,
-    `utils/model/promptmr/promptmr_plus.py`, and `utils/model/promptmr/adapter.py` on
-    2026-08-01.
-  - **Supersedes**: the entire prior structure — sections "0. 결론", "1. 우선순위" (including
-    the expected-gain and GPU-hour columns), "2. P1 상세", "3. acc8 — 헤드룸이 몰린 곳",
-    "4. 재판정 대상", "5. 조사 중 드러난 것들", "6. 문서 교정 필요", "7. 이 문서의 한계".
-    The candidate identifiers C1–C17 are retired; each lever entry names the C-number it came
-    from so older commits and analysis documents remain traceable. **Content deliberately
-    dropped**: section "6. 문서 교정 필요", a list of eight incorrect statements in other
-    documents. It is dropped from this file because it tracks other files' defects rather
-    than levers; the corrections it called for must be made in those files directly, and
-    four of them (`preprocessing.md:16`, `model_strategy.md:66`, `rejected.md:30`,
-    `augmentation.md:109` — all downstream of the premise that GRAPPA cannot be recomputed)
-    remain unfixed as of this rewrite.
-
-- 2026-08-01 — Flattened the file: dissolved the two free-floating sections into the lever
-  entries they bear on
-  - **What changed**: sections "4. Cross-cutting facts established while investigating these
-    levers" and "5. Known limits of this file" were removed as sections, and their content was
-    moved into the entry that acts on it. Specifically: the two-server wall-clock table
-    (17,830 vs 7,250 s/epoch) and the TF32 precision hazard moved into **L07**, which exists
-    precisely to quantify measurement noise, and the TF32 note gained the reproducibility
-    consequence (a model trained on Ampere+ will not reproduce on Pascal unless
-    `cudnn.allow_tf32` is explicitly disabled). The "memory is no longer binding" measurement
-    (peak 3.32 GB of 8 GB, and 3.42 GB in L06's 3×-coil run) moved into **L10**, whose entire
-    stated justification was memory savings — so the fact now sits where it invalidates the
-    lever's premise, along with the note that `promptmr_plus.md` still presents `n_history` 3,
-    `num_cascades` 10, and mandatory coil compression as forced by an 8 GB ceiling. The 2025
-    winning clone's hyperparameter table moved into **L01**, where the 30-epoch + StepLR
-    comparison is the actual argument for the lever, with the `num_adj_slices=1` TODO row
-    cross-referenced from **L06** as provenance. A "Uniform depth" clause was added to the
-    header stating the rule.
-  - **Why**: a fact parked in a "general findings" section is a fact nobody acts on. The
-    two-server difference is the clearest case — it had been sitting in §5.1 as an observation
-    while every lever entry above it still quoted GPU hours without naming a server. Moving
-    each fact next to the decision it changes also makes the file uniformly deep: one kind of
-    unit (the lever entry) instead of entries plus prose commentary at a different altitude.
-  - **Evidence**: instruction from the repository owner, 2026-08-01. No numbers were altered
-    in the move; the source logs and commits cited in each relocated passage are unchanged.
-  - **Supersedes**: sections 4 and 5 of the previous version of this file. Content from the
-    former §5 that had no lever to attach to is absorbed here instead: of the 17 candidates in
-    the 2026-07-31 version, **8 had been through adversarial verification and 9 had not**, and
-    verification repeatedly corrected the source material by large factors — L13's GPU-hour
-    estimate was off by 2.4×, L04's inference-cost estimate by two orders of magnitude, and
-    the claim that LR decay had already been tried was simply false (now recorded in L01).
-    The unverified entries should be expected to move by similar amounts, so file:line must be
-    confirmed before acting on any of them. The former §5 also noted that the eight
-    verification agents ran without a working safety classifier. GRAPPA self-computation
-    remains tracked separately in [`grappa_selfcompute.md`](grappa_selfcompute.md).

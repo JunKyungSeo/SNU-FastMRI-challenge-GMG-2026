@@ -1,0 +1,112 @@
+==========================================================
+[START] shell30   2026-07-31 19:18:29
+[BR   ] jkMRplus (08ce732)
+[CONF ] fold=2 acc=8 iters=2000 arms='1 3'  data=/root/Data
+[근거 ] model_strategy §3 재측정 — 옛 기각 근거(bbox blur) 반증. a=1 한정.
+==========================================================
+[GPU  ] used=2MiB
+
+---------- arm: --num-adj-slices 1  (net=promptmr_probe_adj1_f2) ----------
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-adj-slices 1 -e 1 --max-iters 2000 -n promptmr_probe_adj1_f2 --run-tag probe_adj1
++ tee shell_scripting/results/adj_probe_20260731_191828/adj1.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_probe_adj1_f2 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1715 Time = 5.7572s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.05602 Time = 228.7131s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.104 Time = 233.3226s
+Epoch = [  0/  1] Iter = [ 150/2163] Loss = 0.09437 Time = 232.7921s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1443 Time = 232.4283s
+Epoch = [  0/  1] Iter = [ 250/2163] Loss = 0.1457 Time = 234.2647s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.09496 Time = 233.4026s
+Epoch = [  0/  1] Iter = [ 350/2163] Loss = 0.09718 Time = 233.5590s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.09725 Time = 232.8304s
+Epoch = [  0/  1] Iter = [ 450/2163] Loss = 0.1546 Time = 233.5060s
+Epoch = [  0/  1] Iter = [ 500/2163] Loss = 0.1832 Time = 234.7039s
+Epoch = [  0/  1] Iter = [ 550/2163] Loss = 0.1263 Time = 233.3062s
+Epoch = [  0/  1] Iter = [ 600/2163] Loss = 0.0441 Time = 234.1189s
+Epoch = [  0/  1] Iter = [ 650/2163] Loss = 0.06822 Time = 233.9692s
+Epoch = [  0/  1] Iter = [ 700/2163] Loss = 0.05201 Time = 233.7997s
+Epoch = [  0/  1] Iter = [ 750/2163] Loss = 0.168 Time = 233.1072s
+Epoch = [  0/  1] Iter = [ 800/2163] Loss = 0.06633 Time = 234.2902s
+Epoch = [  0/  1] Iter = [ 850/2163] Loss = 0.08269 Time = 234.2912s
+Epoch = [  0/  1] Iter = [ 900/2163] Loss = 0.093 Time = 234.3987s
+Epoch = [  0/  1] Iter = [ 950/2163] Loss = 0.04917 Time = 233.4173s
+Epoch = [  0/  1] Iter = [1000/2163] Loss = 0.06512 Time = 238.8548s
+Epoch = [  0/  1] Iter = [1050/2163] Loss = 0.04011 Time = 233.2984s
+Epoch = [  0/  1] Iter = [1100/2163] Loss = 0.1093 Time = 232.8881s
+Epoch = [  0/  1] Iter = [1150/2163] Loss = 0.08525 Time = 233.4025s
+Epoch = [  0/  1] Iter = [1200/2163] Loss = 0.08703 Time = 233.5039s
+Epoch = [  0/  1] Iter = [1250/2163] Loss = 0.0614 Time = 234.7715s
+Epoch = [  0/  1] Iter = [1300/2163] Loss = 0.09379 Time = 234.3376s
+Epoch = [  0/  1] Iter = [1350/2163] Loss = 0.06657 Time = 233.4177s
+Epoch = [  0/  1] Iter = [1400/2163] Loss = 0.1492 Time = 233.0658s
+Epoch = [  0/  1] Iter = [1450/2163] Loss = 0.07041 Time = 234.0322s
+Epoch = [  0/  1] Iter = [1500/2163] Loss = 0.07637 Time = 240.9501s
+Epoch = [  0/  1] Iter = [1550/2163] Loss = 0.06787 Time = 233.9962s
+Epoch = [  0/  1] Iter = [1600/2163] Loss = 0.05273 Time = 234.1770s
+Epoch = [  0/  1] Iter = [1650/2163] Loss = 0.05358 Time = 232.7467s
+Epoch = [  0/  1] Iter = [1700/2163] Loss = 0.04867 Time = 234.5418s
+Epoch = [  0/  1] Iter = [1750/2163] Loss = 0.0527 Time = 234.0934s
+Epoch = [  0/  1] Iter = [1800/2163] Loss = 0.07284 Time = 233.4849s
+Epoch = [  0/  1] Iter = [1850/2163] Loss = 0.1213 Time = 234.2773s
+Epoch = [  0/  1] Iter = [1900/2163] Loss = 0.09376 Time = 232.3988s
+Epoch = [  0/  1] Iter = [1950/2163] Loss = 0.07124 Time = 233.0114s
+[mem] epoch 0 peak allocated = 2.92GB / reserved = 4.53GB
+loss file saved! ../result/promptmr_probe_adj1_f2/val_loss_log_probe_adj1
+Epoch = [   0/   1] TrainLoss = 0.09853 ValLoss = 0.1157 TrainTime = 9359.2831s ValTime = 351.5830s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.7026s
+[arm adj=1] exit=0
+
+---------- arm: --num-adj-slices 3  (net=promptmr_probe_adj3_f2) ----------
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-adj-slices 3 -e 1 --max-iters 2000 -n promptmr_probe_adj3_f2 --run-tag probe_adj3
++ tee shell_scripting/results/adj_probe_20260731_191828/adj3.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_probe_adj3_f2 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.2154 Time = 11.7531s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.0597 Time = 450.1596s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.109 Time = 452.4222s
+Epoch = [  0/  1] Iter = [ 150/2163] Loss = 0.09883 Time = 450.8583s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1443 Time = 449.8397s
+Epoch = [  0/  1] Iter = [ 250/2163] Loss = 0.1441 Time = 453.4729s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.0944 Time = 451.7858s
+Epoch = [  0/  1] Iter = [ 350/2163] Loss = 0.09972 Time = 451.9209s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.09831 Time = 450.7697s
+Epoch = [  0/  1] Iter = [ 450/2163] Loss = 0.1524 Time = 451.9512s
+Epoch = [  0/  1] Iter = [ 500/2163] Loss = 0.1835 Time = 452.6384s
+Epoch = [  0/  1] Iter = [ 550/2163] Loss = 0.1225 Time = 451.7637s
+Epoch = [  0/  1] Iter = [ 600/2163] Loss = 0.04577 Time = 453.2930s
+Epoch = [  0/  1] Iter = [ 650/2163] Loss = 0.06734 Time = 452.7036s
+Epoch = [  0/  1] Iter = [ 700/2163] Loss = 0.05106 Time = 453.1647s
+Epoch = [  0/  1] Iter = [ 750/2163] Loss = 0.1642 Time = 451.9006s
+Epoch = [  0/  1] Iter = [ 800/2163] Loss = 0.06549 Time = 453.7362s
+Epoch = [  0/  1] Iter = [ 850/2163] Loss = 0.07769 Time = 452.4958s
+Epoch = [  0/  1] Iter = [ 900/2163] Loss = 0.0952 Time = 454.0335s
+Epoch = [  0/  1] Iter = [ 950/2163] Loss = 0.04912 Time = 451.2431s
+Epoch = [  0/  1] Iter = [1000/2163] Loss = 0.06714 Time = 456.9355s
+Epoch = [  0/  1] Iter = [1050/2163] Loss = 0.04006 Time = 452.3606s
+Epoch = [  0/  1] Iter = [1100/2163] Loss = 0.1097 Time = 452.4127s
+Epoch = [  0/  1] Iter = [1150/2163] Loss = 0.08485 Time = 452.7033s
+Epoch = [  0/  1] Iter = [1200/2163] Loss = 0.08837 Time = 452.8143s
+Epoch = [  0/  1] Iter = [1250/2163] Loss = 0.06042 Time = 454.2581s
+Epoch = [  0/  1] Iter = [1300/2163] Loss = 0.09189 Time = 454.1926s
+Epoch = [  0/  1] Iter = [1350/2163] Loss = 0.06684 Time = 452.2373s
+Epoch = [  0/  1] Iter = [1400/2163] Loss = 0.1541 Time = 451.9797s
+Epoch = [  0/  1] Iter = [1450/2163] Loss = 0.07308 Time = 454.0325s
+Epoch = [  0/  1] Iter = [1500/2163] Loss = 0.07394 Time = 460.4291s
+Epoch = [  0/  1] Iter = [1550/2163] Loss = 0.06788 Time = 454.0644s
+Epoch = [  0/  1] Iter = [1600/2163] Loss = 0.0502 Time = 453.1666s
+Epoch = [  0/  1] Iter = [1650/2163] Loss = 0.05115 Time = 451.2514s
+Epoch = [  0/  1] Iter = [1700/2163] Loss = 0.04914 Time = 454.7011s
+Epoch = [  0/  1] Iter = [1750/2163] Loss = 0.05415 Time = 454.3476s
+Epoch = [  0/  1] Iter = [1800/2163] Loss = 0.07448 Time = 453.3858s
+Epoch = [  0/  1] Iter = [1850/2163] Loss = 0.1225 Time = 455.0173s
+Epoch = [  0/  1] Iter = [1900/2163] Loss = 0.09157 Time = 451.4886s
+Epoch = [  0/  1] Iter = [1950/2163] Loss = 0.07236 Time = 452.6507s
+[mem] epoch 0 peak allocated = 3.42GB / reserved = 5.14GB

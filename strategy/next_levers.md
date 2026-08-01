@@ -7,6 +7,10 @@
 > removed on 2026-08-01; they were unfalsifiable guesses that outlived the measurements
 > that contradicted them. A lever with no execution date has no claimed gain here.
 >
+> **Uniform depth**: every fact in this file lives inside the lever entry it bears on, or in
+> the Change Log if it describes the file itself. There is no separate "general findings"
+> section — a measurement that floats free of a lever is a measurement nobody acts on.
+>
 > Authoring rules for this folder: [`README.md`](README.md) R1/R2/R3. This file is subject
 > to R1's forward-looking restriction; the human owner exempted it as a designated
 > proposal-tracking file on 2026-08-01.
@@ -71,11 +75,28 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
 - **Executed**: `not executed` — no `shell31_*` log exists under `shell_scripting/logs/`.
 - **Result**: `not measured`.
 - **Status**: open.
-- **External comparison that motivates it**: the 2025 winning clone
-  (`2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/hacker.sh`) trained **30 epochs with
-  StepLR(step_size 11, gamma 0.3)**, while this repo trains 10 epochs at constant LR. With
-  `--num-epochs 10` a `step_size` of 11 never fires, so LR decay has genuinely never been
-  exercised in this pipeline.
+- **External comparison that motivates it**: the 2025 winning clone — the repository this
+  project's PromptMR+ backbone was vendored from — trained far longer with a decaying LR.
+  Read from `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/` on 2026-08-01:
+
+  | | sMaRtIfy final | This repo |
+  |---|---|---|
+  | epochs | **30** (+ 65 for the MoE stage) | 10 |
+  | LR schedule | **StepLR(step_size 11, gamma 0.3)**, from epoch 5 | constant |
+  | `num_cascades` | 8 | 10 |
+  | `n_feat0` | **8** | **48** |
+  | `feature_dim` | **[24, 32, 40]** | **[72, 96, 120]** |
+  | `sens_n_feat0` | 8 | 24 |
+  | MRAugment | `--aug_strength 0`, i.e. **off** | left-right flip only |
+  | k-space mask augmentation | on, weight 1.0, from epoch 15, exp schedule | removed 2026-07-28 |
+  | `num_adj_slices` | **1**, marked `TODO ... not implemented` in `train_part.py` | 1 (3 available since L06) |
+
+  Two readings bear on this lever. First, with `--num-epochs 10` a `step_size` of 11 never
+  fires, so **LR decay has genuinely never been exercised in this pipeline** — the claim in
+  the 2026-07-31 version of this document that it had been tried was false. Second, their
+  model is roughly 15× narrower than ours while training 3× longer, which is the opposite
+  trade from the one this repo made; that asymmetry is unmeasured and is the reason L01 is
+  worth running before any capacity lever (L03).
 
 ### L02 — `best_model` selection informed by SSIM_bbox
 
@@ -176,6 +197,13 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
   nothing to keep. **Re-open condition**: an equal-wall-clock A/B, giving adj=1 double the
   iterations. Comparing at equal iterations only shows that the slower model won at equal
   iterations, which is not a decision-relevant comparison.
+- **Provenance note**: the upstream repository this backbone was vendored from left this
+  feature unfinished — `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/utils/learning/train_part.py`
+  line 173 hardcodes `num_adj_slices=1` with the comment
+  `TODO Parameters considering adjacent slices are not implemented.` The slim vendoring in
+  this repo inherited that gap; `12bbe7e` is the first implementation of it on either side.
+- **VRAM measurement that this run contributed** (see also L10): peak 3.42 GB of 8 GB **with
+  a 3× coil axis**, against 2.92 GB at `adj=1`. Memory was not close to binding in either arm.
 
 ### L07 — Measure the seed-to-seed noise floor
 
@@ -189,7 +217,34 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
   that margin. For reference, the 2025 winning team's own ablation reported a MoE gain of
   +0.0002. L01, L02, L03, L05 and L08 all have candidate effects of that magnitude, so
   without a noise floor a single run cannot decide any of them. L06 already demonstrated the
-  failure mode concretely by flipping sign.
+  failure mode concretely by flipping sign between two runs of the same arm pair.
+- **Known noise source 1 — the two servers are not interchangeable.** Same config, same fold,
+  measured:
+
+  | Server | Data path | s/epoch | Hours/epoch |
+  |---|---|---|---|
+  | vessl GTX 1080 | `/root/Data` | 17,830 | **4.95** |
+  | runpod RTX 4000 Ada | `/workspace/Data` | 7,250 | **2.01** |
+
+  A 2.5× wall-clock difference means **any GPU-hour figure in this file is meaningless without
+  naming the server**. Worse, it has already contaminated a comparison: the two arms of the
+  flip-augmentation A/B ran on different servers, which is a fourth confound on top of the
+  three already known for that result.
+- **Known noise source 2 — TF32, unmeasured and currently unguarded.**
+  `utils/common/utils.py::seed_fix` sets `cudnn.deterministic = True` and
+  `cudnn.benchmark = False` but never touches `allow_tf32`, so PyTorch's defaults apply:
+  `cudnn.allow_tf32` is `True`. Pascal (GTX 1080, sm_61) has no TF32 hardware and therefore
+  runs convolutions in FP32; Ampere and later (sm_80+) run them at TF32 precision, a 10-bit
+  mantissa. A cross-server A/B can therefore be comparing FP32 convolutions against TF32
+  ones, at a magnitude comparable to the effects being measured — and PromptMR+ is
+  convolution-dominated. `nvidia-smi -L` on both servers settles whether this applies.
+  ⚠️ This is an **assumption from reading the defaults**, not a measurement; nobody has
+  compared the two precisions on this pipeline.
+- **Reproducibility consequence, independent of A/B validity**: the competition requires that
+  a fixed seed reproduces the result. With `allow_tf32` left at its default, a final model
+  trained on Ampere+ will not reproduce on a Pascal machine. If the submission is trained on
+  an Ampere+ server, `torch.backends.cudnn.allow_tf32 = False` has to be set explicitly,
+  at the cost of 2–3× slower convolutions.
 
 ### L08 — Weight averaging (SWA-lite / EMA)
 
@@ -225,6 +280,16 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
   adjacent slices. Sensitivity maps are low-frequency ACS-derived coil profiles with a
   different correlation structure, so neither L06's refutation of the old rejection nor L06's
   cost measurement transfers here.
+- ⚠️ **This lever's stated purpose no longer holds: memory is not the binding constraint.**
+  Batch SME was adopted (in `model_strategy.md` §3.2) as a memory optimization promising
+  ≈55% less GPU memory for sensitivity estimation. Measured peak on the current configuration
+  is **3.32 GB of 8 GB**, and L06's run peaked at **3.42 GB even with a 3× coil axis**. There
+  is no memory pressure to relieve, so if this lever is run it has to be justified by
+  *accuracy* (upstream PromptMR+ claims batch SME also improves the estimate), not by memory.
+  The same collapsed premise invalidates the reasoning behind several other reduction
+  decisions still recorded as necessary: `n_history` 3 instead of the upstream 11,
+  `num_cascades` 10, and "coil compression is mandatory". `promptmr_plus.md` still presents
+  those as forced by an 8 GB ceiling.
 
 ### L11 — Batch the per-coil sensitivity estimation on the inference path
 
@@ -383,78 +448,6 @@ adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-itera
 
 ---
 
-## 4. Cross-cutting facts established while investigating these levers
-
-These are measurements, not levers, but every lever's cost estimate depends on them.
-
-### 4.1 The same configuration trains 2.5× slower on one server than the other
-
-| Server | Data path | s/epoch | Hours/epoch |
-|---|---|---|---|
-| vessl GTX 1080 | `/root/Data` | 17,830 | **4.95** |
-| runpod RTX 4000 Ada | `/workspace/Data` | 7,250 | **2.01** |
-
-Same config, same fold. **Any GPU-hour figure is meaningless without naming the server.**
-A concrete consequence already in the record: the two arms of the flip-augmentation A/B ran
-on different servers, which is a confound on top of the three already known for that
-comparison.
-
-⚠️ Additional hazard identified 2026-08-01 but **not yet measured**: if the two servers have
-different GPU generations, `torch.backends.cudnn.allow_tf32` defaults to `True` and is never
-overridden in this repo (`utils/common/utils.py::seed_fix` sets only `cudnn.deterministic`
-and `cudnn.benchmark`). Pascal has no TF32 hardware; Ampere and later run convolutions at
-TF32 precision by default. A cross-server A/B could therefore be comparing FP32 against
-TF32 convolutions, at a magnitude comparable to the effects being measured. `nvidia-smi -L`
-on both servers settles whether this applies.
-
-### 4.2 Memory is no longer the binding constraint
-
-Measured peak **3.32 GB of 8 GB** on the current configuration; the 2.5D adjacent-slice run
-(L06) peaked at 3.42 GB even with a 3× coil axis. Several reduction decisions — `n_history`
-3 instead of 11, cascade count 10, "coil compression is mandatory" — were made under an
-8 GB OOM premise that no longer holds, and `promptmr_plus.md` still carries that premise.
-
-### 4.3 Hyperparameters of the 2025 winning clone, for comparison
-
-Source: `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/` — the repository this project's
-PromptMR+ backbone was vendored from. Read 2026-08-01.
-
-| | sMaRtIfy final | This repo |
-|---|---|---|
-| epochs | **30** (+ 65 for the MoE stage) | 10 |
-| LR schedule | StepLR(step_size 11, gamma 0.3), from epoch 5 | constant |
-| `num_cascades` | 8 | 10 |
-| `n_feat0` | **8** | **48** |
-| `feature_dim` | **[24, 32, 40]** | **[72, 96, 120]** |
-| `sens_n_feat0` | 8 | 24 |
-| MRAugment | `--aug_strength 0`, i.e. **off** | left-right flip only |
-| k-space mask augmentation | on, weight 1.0, from epoch 15, exp schedule | removed 2026-07-28 |
-| `num_adj_slices` | **1**, marked `TODO ... not implemented` in `train_part.py` | 1 (3 available since L06) |
-
-Two observations that bear on open levers: their model is roughly 15× narrower than ours
-while training 3× longer, and adjacent slices were a TODO for them too — L06 implemented what
-they left unfinished.
-
----
-
-## 5. Known limits of this file
-
-- Of the 17 candidates in the 2026-07-31 version of this document, 8 had been through
-  adversarial verification and 9 had not. Verification repeatedly corrected the source
-  material by large factors: L13's GPU-hour estimate was off by 2.4×, L04's inference-cost
-  estimate by two orders of magnitude, and a claim that LR decay had already been tried
-  turned out to be false. **The unverified entries can be expected to move by similar
-  amounts.** Confirm file:line before acting on any of them.
-- The expected-gain column that the 2026-07-31 version carried for every candidate has been
-  deleted. Those numbers were produced before any of the probes ran, and the two probes that
-  did run (L13, L14) both came back with the opposite sign or an order of magnitude smaller
-  than the estimate for their lever. Publishing an unfalsifiable estimate next to a measured
-  number invites the estimate to be cited as if it were measured.
-- GRAPPA self-computation is tracked separately in
-  [`grappa_selfcompute.md`](grappa_selfcompute.md).
-
----
-
 ## Change Log
 
 - 2026-07-31 — File created as "다음 레버 — PromptMR+ 위에서 무엇을 할 것인가"
@@ -525,3 +518,38 @@ they left unfinished.
     four of them (`preprocessing.md:16`, `model_strategy.md:66`, `rejected.md:30`,
     `augmentation.md:109` — all downstream of the premise that GRAPPA cannot be recomputed)
     remain unfixed as of this rewrite.
+
+- 2026-08-01 — Flattened the file: dissolved the two free-floating sections into the lever
+  entries they bear on
+  - **What changed**: sections "4. Cross-cutting facts established while investigating these
+    levers" and "5. Known limits of this file" were removed as sections, and their content was
+    moved into the entry that acts on it. Specifically: the two-server wall-clock table
+    (17,830 vs 7,250 s/epoch) and the TF32 precision hazard moved into **L07**, which exists
+    precisely to quantify measurement noise, and the TF32 note gained the reproducibility
+    consequence (a model trained on Ampere+ will not reproduce on Pascal unless
+    `cudnn.allow_tf32` is explicitly disabled). The "memory is no longer binding" measurement
+    (peak 3.32 GB of 8 GB, and 3.42 GB in L06's 3×-coil run) moved into **L10**, whose entire
+    stated justification was memory savings — so the fact now sits where it invalidates the
+    lever's premise, along with the note that `promptmr_plus.md` still presents `n_history` 3,
+    `num_cascades` 10, and mandatory coil compression as forced by an 8 GB ceiling. The 2025
+    winning clone's hyperparameter table moved into **L01**, where the 30-epoch + StepLR
+    comparison is the actual argument for the lever, with the `num_adj_slices=1` TODO row
+    cross-referenced from **L06** as provenance. A "Uniform depth" clause was added to the
+    header stating the rule.
+  - **Why**: a fact parked in a "general findings" section is a fact nobody acts on. The
+    two-server difference is the clearest case — it had been sitting in §5.1 as an observation
+    while every lever entry above it still quoted GPU hours without naming a server. Moving
+    each fact next to the decision it changes also makes the file uniformly deep: one kind of
+    unit (the lever entry) instead of entries plus prose commentary at a different altitude.
+  - **Evidence**: instruction from the repository owner, 2026-08-01. No numbers were altered
+    in the move; the source logs and commits cited in each relocated passage are unchanged.
+  - **Supersedes**: sections 4 and 5 of the previous version of this file. Content from the
+    former §5 that had no lever to attach to is absorbed here instead: of the 17 candidates in
+    the 2026-07-31 version, **8 had been through adversarial verification and 9 had not**, and
+    verification repeatedly corrected the source material by large factors — L13's GPU-hour
+    estimate was off by 2.4×, L04's inference-cost estimate by two orders of magnitude, and
+    the claim that LR decay had already been tried was simply false (now recorded in L01).
+    The unverified entries should be expected to move by similar amounts, so file:line must be
+    confirmed before acting on any of them. The former §5 also noted that the eight
+    verification agents ran without a working safety classifier. GRAPPA self-computation
+    remains tracked separately in [`grappa_selfcompute.md`](grappa_selfcompute.md).

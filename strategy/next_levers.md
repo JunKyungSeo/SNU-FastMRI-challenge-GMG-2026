@@ -1,470 +1,446 @@
-# next_levers.md — Lever Ledger (레버 원장)
+# next_levers.md — 레버 원장 (Lever Ledger)
 
-> **What this file is**: a dated ledger of every performance lever considered on top of the
-> PromptMR+ backbone. For each lever it records **when the idea was first written down, when
-> it landed in code, when it was executed, and what the measurement said** — in that order.
-> **What this file is not**: a ranked wish list. Ranking and expected-gain estimates were
-> removed on 2026-08-01; they were unfalsifiable guesses that outlived the measurements
-> that contradicted them. A lever with no execution date has no claimed gain here.
+> **이 파일의 정체**: PromptMR+ 백본 위에 얹을 성능 레버를 전부 날짜순으로 기록한 원장이다.
+> 레버 하나마다 **아이디어가 언제 처음 문서화됐는지, 언제 코드로 들어갔는지, 언제 실행됐는지,
+> 측정값이 무엇이었는지**를 그 순서로 적는다.
+> **이 파일이 아닌 것**: 순위가 붙은 희망 목록이 아니다. 랭킹과 기대이득 추정치는 2026-08-01에
+> 전부 삭제했다 — 반증 불가능한 추측이었고, 그 추측을 반박한 측정값보다 오래 살아남았다.
+> 실행 날짜가 없는 레버는 이 파일에서 어떤 이득도 주장하지 않는다.
 >
-> **Uniform depth**: every fact in this file lives inside the lever entry it bears on, or in
-> the Change Log if it describes the file itself. There is no separate "general findings"
-> section — a measurement that floats free of a lever is a measurement nobody acts on.
+> **깊이 균일**: 이 파일의 모든 사실은 그 사실이 영향을 주는 레버 항목 안에 들어간다.
+> 별도의 "일반 발견" 절은 두지 않는다 — 레버에서 떨어져 떠다니는 측정값은 아무도 적용하지 않는
+> 측정값이다.
 >
-> Authoring rules for this folder: [`README.md`](README.md) R1/R2/R3. This file is subject
-> to R1's forward-looking restriction; the human owner exempted it as a designated
-> proposal-tracking file on 2026-08-01.
+> 이 폴더의 작성 규칙: [`README.md`](README.md) R1/R2/R3. 이 파일은 R1의 "향후 제안 금지"
+> 제약 대상이지만, 2026-08-01에 사람 소유자가 제안 추적 전용 파일로 예외 처리했다.
 
 ---
 
-## 0. How to read this file
+## 0. 이 파일 읽는 법
 
-Every lever entry carries the same five fields. A field that cannot be filled says so
-explicitly rather than being omitted.
+모든 레버 항목은 같은 다섯 필드를 갖는다. 채울 수 없는 필드는 생략하지 않고 채울 수 없다고
+명시한다.
 
-| Field | Meaning |
+| 필드 | 의미 |
 |---|---|
-| **Idea** | Date the idea was first recorded, and where. If the earliest trace is a code commit rather than a document, that is stated. |
-| **Code** | Commit hash + date the wiring landed, or `not implemented`. |
-| **Executed** | Log file + server-clock date of the run, or `not executed`. |
-| **Result** | Numbers with their measurement conditions, or `not measured`. |
-| **Status** | `open` (no execution yet) / `closed-measured` (executed, decision made) / `closed-unmeasured` (dropped by reasoning alone) |
+| **아이디어** | 아이디어가 처음 기록된 날짜와 위치. 가장 이른 흔적이 문서가 아니라 커밋이면 그렇게 적는다. |
+| **코드** | 배선이 들어간 커밋 해시 + 날짜, 또는 `미구현`. |
+| **실행** | 로그 파일 + 서버 시계 기준 실행 날짜, 또는 `미실행`. |
+| **결과** | 측정 조건이 붙은 수치, 또는 `미측정`. |
+| **상태** | `open`(아직 실행 없음) / `closed-measured`(실행 후 결정됨) / `closed-unmeasured`(추론만으로 폐기) |
 
-### ⚠️ How much to trust an entry
+### ⚠️ 각 항목을 얼마나 믿을 수 있나
 
-Of the 17 candidates this ledger inherited, **8 had been through adversarial verification and
-9 had not**. Verification repeatedly corrected the source material by large factors, so an
-unverified entry should be expected to move by a similar amount:
+이 원장이 물려받은 후보 17개 중 **8개는 적대적 검증을 거쳤고 9개는 거치지 않았다.** 검증은
+원자료를 큰 배수로 반복 교정했다. 따라서 미검증 항목은 비슷한 폭으로 움직일 것을 전제해야 한다.
 
-| Corrected item | Pre-verification claim | After verification |
+| 교정된 항목 | 검증 전 주장 | 검증 후 |
 |---|---|---|
-| L13 GPU-hour estimate | — | off by **2.4×** (the figure quoted was for the faster server) |
-| L04 inference cost | — | off by **two orders of magnitude** (per-slice backbone re-invocation) |
-| L01 "LR decay was already tried" | asserted as fact | **false** — `step_size 11` never fires in a 10-epoch run |
-| L13 offset coverage gain | acc8 +0.002~0.006 | measured gap **−0.0045 / −0.0071** (wrong sign) |
-| L14 rotation ceiling | worth a 60 h A/B if ≥0.010 | measured **+0.0031** |
+| L13 GPU 시간 추정 | — | **2.4배** 어긋남 (인용된 수치는 빠른 서버 기준이었다) |
+| L04 추론 비용 | — | **두 자릿수 배수** 어긋남 (슬라이스마다 백본 재호출) |
+| L01 "LR 감쇠는 이미 해봤다" | 사실로 단정 | **거짓** — 10 epoch 런에서 `step_size 11`은 발동하지 않는다 |
+| L13 offset 커버리지 이득 | acc8 +0.002~0.006 | 실측 격차 **−0.0045 / −0.0071** (부호가 반대) |
+| L14 회전 상한 | 0.010 이상이면 60시간 A/B 가치 있음 | 실측 **+0.0031** |
 
-**Confirm file:line before acting on any entry.** The eight verification passes also ran
-without a working safety classifier, so their conclusions were never independently screened.
+**어떤 항목이든 행동에 옮기기 전에 file:line을 직접 확인하라.** 그리고 이 여덟 번의 검증은
+안전 분류기가 동작하지 않는 상태에서 돌았으므로, 그 결론들은 독립적으로 걸러진 적이 없다.
 
-### ⚠️ Which dates are trustworthy
+### ⚠️ 어떤 날짜를 믿을 수 있나
 
-- **Execution dates are reliable.** They come from the log filename and the `[START]` line,
-  both written by the server clock at run time.
-- **Related ledger**: GRAPPA self-computation is tracked in
-  [`grappa_selfcompute.md`](grappa_selfcompute.md), not here. Four statements in other
-  strategy files are downstream of the premise that GRAPPA cannot be recomputed
-  (`preprocessing.md:16`, `model_strategy.md:66`, `rejected.md:30`, `augmentation.md:109`);
-  if that premise is wrong they are all wrong together, and the correction belongs in that
-  ledger. As of 2026-08-01 they are unfixed.
-- **Code-landing dates are approximate.** This branch has been rebased onto `origin/jkMRplus`
-  many times, and rebase rewrites the committer date. Example of the damage: commit `12bbe7e`
-  (2.5D adjacent-slice wiring) reports author date `2026-08-01 02:06`, but
-  `shell_scripting/logs/shell30_f2_20260731_181035.log` shows a run that *used* `12bbe7e`
-  starting `2026-07-31 18:10:35`. The commit therefore existed earlier than its recorded
-  date. **When a log's `[BR]` line names a hash, that log's date is the harder upper bound
-  on when that code existed.**
+- **실행 날짜는 믿을 수 있다.** 로그 파일명과 `[START]` 줄에서 나오고, 둘 다 실행 시점의
+  서버 시계가 쓴 값이다.
+- **관련 원장**: GRAPPA 자체 계산은 여기가 아니라
+  [`grappa_selfcompute.md`](grappa_selfcompute.md)에서 추적한다. 다른 strategy 파일의 네 문장이
+  "GRAPPA는 재계산할 수 없다"는 전제에 딸려 있다
+  (`preprocessing.md:16`, `model_strategy.md:66`, `rejected.md:30`, `augmentation.md:109`).
+  그 전제가 틀리면 네 문장이 함께 틀리며, 교정 책임은 그 원장에 있다. 2026-08-01 기준
+  네 문장 모두 미수정이다.
+- **코드 진입 날짜는 근사값이다.** 이 브랜치는 `origin/jkMRplus` 위로 여러 번 rebase됐고,
+  rebase는 committer date를 다시 쓴다. 피해 사례: 커밋 `12bbe7e`(2.5D 인접슬라이스 배선)의
+  author date는 `2026-08-01 02:06`으로 적혀 있지만,
+  `shell_scripting/logs/shell30_f2_20260731_181035.log`는 `12bbe7e`를 *사용한* 런이
+  `2026-07-31 18:10:35`에 시작했음을 보여준다. 즉 커밋은 기록된 날짜보다 먼저 존재했다.
+  **로그의 `[BR]` 줄이 해시를 적고 있으면, 그 로그의 날짜가 해당 코드 존재 시점의 더 단단한
+  상한이다.**
 
 ---
 
-## 1. Baseline the levers are measured against
+## 1. 레버들이 비교되는 기준선
 
-| Metric | Value | Conditions |
+| 지표 | 값 | 조건 |
 |---|---|---|
-| SSIM_full | 0.9321 | MoE (acc4/acc8 expert split), no augmentation, leaderboard set |
-| SSIM_bbox | 0.9300 | same run |
-| Recon time | 734.3 ms/slice | same run |
-| acc4 breakdown | full 0.9497 / bbox 0.9505 | `shell20_moe_reconstruct_20260726_060814.log` |
-| **acc8 breakdown** | **full 0.9145 / bbox 0.9094** | same log — this is where the headroom is (gap 0.035 / 0.041) |
+| SSIM_full | 0.9321 | MoE(acc4/acc8 전문가 분리), 증강 없음, 리더보드 세트 |
+| SSIM_bbox | 0.9300 | 같은 런 |
+| Recon time | 734.3 ms/slice | 같은 런 |
+| acc4 내역 | full 0.9497 / bbox 0.9505 | `shell20_moe_reconstruct_20260726_060814.log` |
+| **acc8 내역** | **full 0.9145 / bbox 0.9094** | 같은 로그 — 여유가 남은 쪽은 여기다 (격차 0.035 / 0.041) |
 
-⚠️ **Scale warning that governs every entry below.** The measured gain from MoE expert
-separation itself was **acc8 +0.0014 full / +0.0020 bbox**. No seed-to-seed variance has ever
-been measured on this pipeline, so any lever whose effect is of that same order cannot be
-declared a win or a loss from a single run. This is not a hypothetical concern: the 2.5D
-adjacent-slice probe (L06) flipped sign between a 120-iteration and a 2000-iteration run.
+⚠️ **아래 모든 항목을 지배하는 스케일 경고.** MoE 전문가 분리 자체의 실측 이득은
+**acc8 full +0.0014 / bbox +0.0020**이었다. 이 파이프라인의 seed 간 분산은 한 번도 측정된 적이
+없으므로, 효과 크기가 그 정도인 레버는 단일 런으로 승패를 선언할 수 없다. 가정이 아니라 실제로
+일어난 일이다: 2.5D 인접슬라이스 프로브(L06)는 120 iteration 런과 2000 iteration 런 사이에서
+부호가 뒤집혔다.
 
 ---
 
-## 2. Open levers — code exists or idea recorded, not yet executed
+## 2. 열린 레버 — 코드가 있거나 아이디어가 기록됐으나 아직 실행되지 않음
 
-### L01 — Terminal LR decay (`--lr-decay-start-epoch`, `--lr-min-factor`)
+### L01 — 종단 LR 감쇠 (`--lr-decay-start-epoch`, `--lr-min-factor`)
 
-- **Idea**: recorded 2026-07-31 in this document's predecessor version as candidate `C3`
-  ("종단 LR 감쇠"). Earlier motivation: the MoE fine-tune stage ran `lr 5e-5 × 3 epoch` with
-  effectively no change, i.e. the fine-tune had never actually done anything.
-- **Code**: `c734b27` (author date 2026-08-01 05:49) added `--lr-decay-start-epoch` and
-  `--lr-min-factor` to `train.py`, plus slots `shell_scripting/shell31.sh` and
-  `shell_scripting/shell31_recon.sh`.
-- **Executed**: `not executed` — no `shell31_*` log exists under `shell_scripting/logs/`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **External comparison that motivates it**: the 2025 winning clone — the repository this
-  project's PromptMR+ backbone was vendored from — trained far longer with a decaying LR.
-  Read from `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/` on 2026-08-01:
+- **아이디어**: 2026-07-31, 이 문서의 이전 버전에서 후보 `C3`("종단 LR 감쇠")로 기록.
+  더 이전의 동기: MoE 미세조정 단계가 `lr 5e-5 × 3 epoch`로 돌았는데 사실상 아무 변화가 없었다.
+  즉 미세조정이 실제로는 아무 일도 하지 않고 있었다.
+- **코드**: `c734b27`(author date 2026-08-01 05:49)이 `train.py`에 `--lr-decay-start-epoch`와
+  `--lr-min-factor`를 추가했고, 슬롯 `shell_scripting/shell31.sh`와
+  `shell_scripting/shell31_recon.sh`도 함께 들어갔다.
+- **실행**: `미실행` — `shell_scripting/logs/`에 `shell31_*` 로그가 없다.
+- **결과**: `미측정`.
+- **상태**: open.
+- **이 레버의 동기가 되는 외부 비교 대상**: 2025년 우승 클론 — 이 프로젝트의 PromptMR+ 백본을
+  가져온 바로 그 레포 — 는 감쇠하는 LR로 훨씬 오래 학습했다. 2026-08-01에
+  `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/`에서 읽은 값:
 
-  | | sMaRtIfy final | This repo |
+  | | sMaRtIfy final | 이 레포 |
   |---|---|---|
-  | epochs | **30** (+ 65 for the MoE stage) | 10 |
-  | LR schedule | **StepLR(step_size 11, gamma 0.3)**, from epoch 5 | constant |
+  | epochs | **30** (+ MoE 단계 65) | 10 |
+  | LR 스케줄 | **StepLR(step_size 11, gamma 0.3)**, epoch 5부터 | 상수 |
   | `num_cascades` | 8 | 10 |
   | `n_feat0` | **8** | **48** |
   | `feature_dim` | **[24, 32, 40]** | **[72, 96, 120]** |
   | `sens_n_feat0` | 8 | 24 |
-  | MRAugment | `--aug_strength 0`, i.e. **off** | left-right flip only |
-  | k-space mask augmentation | on, weight 1.0, from epoch 15, exp schedule | removed 2026-07-28 |
-  | `num_adj_slices` | **1**, marked `TODO ... not implemented` in `train_part.py` | 1 (3 available since L06) |
+  | MRAugment | `--aug_strength 0`, 즉 **off** | 좌우 flip만 |
+  | k-space 마스크 증강 | on, weight 1.0, epoch 15부터, exp 스케줄 | 2026-07-28 제거 |
+  | `num_adj_slices` | **1**, `train_part.py`에 `TODO ... not implemented`로 표시 | 1 (L06 이후 3도 가능) |
 
-  Two readings bear on this lever. First, with `--num-epochs 10` a `step_size` of 11 never
-  fires, so **LR decay has genuinely never been exercised in this pipeline** — the claim in
-  the 2026-07-31 version of this document that it had been tried was false. Second, their
-  model is roughly 15× narrower than ours while training 3× longer, which is the opposite
-  trade from the one this repo made; that asymmetry is unmeasured and is the reason L01 is
-  worth running before any capacity lever (L03).
+  이 표에서 이 레버와 관련된 독법이 둘 있다. 첫째, `--num-epochs 10`에서는 `step_size` 11이
+  절대 발동하지 않으므로 **이 파이프라인에서 LR 감쇠는 정말로 한 번도 시도된 적이 없다** —
+  이 문서 2026-07-31 버전에 있던 "이미 시도했다"는 주장은 거짓이었다. 둘째, 저쪽 모델은 우리보다
+  대략 15배 좁으면서 3배 오래 학습했고, 이는 이 레포가 택한 것과 정반대의 트레이드다. 그 비대칭은
+  미측정이며, 용량 계열 레버(L03)보다 L01을 먼저 돌릴 이유가 여기에 있다.
 
-### L02 — `best_model` selection informed by SSIM_bbox
+### L02 — SSIM_bbox를 반영한 `best_model` 선택
 
-- **Idea**: recorded 2026-07-31 as candidate `C4`. Rationale: SSIM_bbox is half the score,
-  but checkpoint selection only looks at validation loss.
-- **Code**: `not implemented`. Verified 2026-08-01: `utils/learning/train_part.py::save_model`
-  takes an `is_new_best` flag derived from `best_val_loss` alone (lines 323–335, 402–410).
-  No SSIM_bbox term participates in the comparison.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
+- **아이디어**: 2026-07-31, 후보 `C4`로 기록. 근거: SSIM_bbox가 점수의 절반인데 체크포인트
+  선택은 검증 손실만 본다.
+- **코드**: `미구현`. 2026-08-01 확인: `utils/learning/train_part.py::save_model`은
+  `best_val_loss`만으로 유도된 `is_new_best` 플래그를 받는다(323–335, 402–410행).
+  비교식에 SSIM_bbox 항은 참여하지 않는다.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
 
-### L03 — Extra cascades appended to the acc8 expert only, earlier stages frozen
+### L03 — acc8 전문가에만 cascade 추가, 앞단은 freeze
 
-- **Idea**: recorded 2026-07-31 as candidate `C7`. Rationale: acc4 appears saturated
-  (full 0.9497) while acc8 does not (0.9145), yet both experts get identical capacity
-  (`--num-cascades 10`).
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
+- **아이디어**: 2026-07-31, 후보 `C7`로 기록. 근거: acc4는 포화된 것으로 보이는데(full 0.9497)
+  acc8은 아니고(0.9145), 그런데도 두 전문가가 동일한 용량(`--num-cascades 10`)을 받는다.
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
 
-### L04 — Frozen backbone + second-stage image-domain refiner
+### L04 — 백본 freeze + 2단계 영상영역 refiner
 
-- **Idea**: recorded 2026-07-31 as candidate `C8`. Precedent cited at the time: E2E-VarNet
-  0.8936 → 0.8953 with a 2M-parameter ShiftNet on fastMRI knee ×8; and SNU top-placing teams
-  repeating the pattern (2022 3rd place froze VarNet and trained an image-domain network;
-  2024 used VarNet + NAFNet).
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Hard constraint discovered during the 2026-07-31 review, recorded here so it is not
-  re-derived**: a 5-slice refiner variant must not be built. `recon_eval.py` lines 78–87 call
-  `recon_slice` once per slice and time each call individually. If slice `s` required
-  stage-I output for `s−2 … s+2`, that is five backbone invocations inside one timed call
-  ≈ 3670 ms/slice, ≈139 s per volume. A single-slice 2-channel variant (recon, aliased) is
-  the only shape that fits the timing harness.
+- **아이디어**: 2026-07-31, 후보 `C8`로 기록. 당시 인용된 선례: fastMRI knee ×8에서 E2E-VarNet
+  0.8936 → 0.8953 (2M 파라미터 ShiftNet), 그리고 SNU 상위 팀들이 같은 패턴을 반복한 사례
+  (2022년 3위는 VarNet을 freeze하고 영상영역 네트워크를 학습, 2024년은 VarNet + NAFNet).
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **2026-07-31 검토에서 발견된 하드 제약, 다시 도출하지 않도록 여기 기록**: 5슬라이스 refiner
+  변형은 만들면 안 된다. `recon_eval.py` 78–87행은 슬라이스마다 `recon_slice`를 한 번 호출하고
+  그 호출 하나하나를 개별로 시간 측정한다. 슬라이스 `s`가 `s−2 … s+2`의 1단계 출력을 필요로 하면
+  시간 측정되는 한 호출 안에서 백본을 다섯 번 호출하는 것이 되어 약 3670 ms/slice,
+  볼륨당 약 139초가 된다. 시간 측정 하네스에 들어맞는 형태는 단일 슬라이스 2채널 변형
+  (recon, aliased)뿐이다.
 
-### L05 — Loss mixing: SSIM + ℓ1, and later MS-SSIM
+### L05 — 손실 혼합: SSIM + ℓ1, 이후 MS-SSIM
 
-- **Idea**: recorded 2026-07-31 as candidate `C11`. Supporting number available at the time:
-  on fastMRI knee ×8, SSIM loss 0.662 vs MS-SSIM+ℓ1 0.673 measured on the same anatomy and
-  acceleration as ours, even though the evaluation metric was plain SSIM.
-- **Code**: `05d8ed2` (author date 2026-07-31 14:14) added `--l1-weight` to `train.py`
-  (default 0.0 = bit-identical to before), with the ℓ1 term divided by `data_range` so it
-  cannot dominate SSIM numerically.
-- **Executed**: **attempted and aborted, never actually ran.** `shell28.sh` `STAGE=all` was
-  launched twice — `shell28_all_20260731_161204.log` and `shell28_all_20260731_161600.log` —
-  and both exited immediately with
-  `[STOP] ../result/promptmr_moe_f2_shared_aug/checkpoints/best_model.pt 없음`, because the
-  slot's default `PROBE_NET` pointed at a checkpoint that does not exist on this server. The
-  ℓ1 arm is stage B of that slot and therefore never started.
-- **Result**: `not measured`.
-- **Status**: open. To run it, override the probe target:
+- **아이디어**: 2026-07-31, 후보 `C11`로 기록. 당시 확보된 뒷받침 수치: fastMRI knee ×8에서
+  SSIM 손실 0.662 대 MS-SSIM+ℓ1 0.673 — 우리와 같은 해부구조·같은 가속률에서 측정됐고,
+  평가 지표는 순수 SSIM이었음에도 그랬다.
+- **코드**: `05d8ed2`(author date 2026-07-31 14:14)가 `train.py`에 `--l1-weight`를 추가했다
+  (기본값 0.0 = 이전과 비트 단위 동일). ℓ1 항은 `data_range`로 나눠서 SSIM을 수치적으로
+  압도하지 못하게 했다.
+- **실행**: **시도했으나 중단, 실제로는 한 번도 돌지 않았다.** `shell28.sh` `STAGE=all`을 두 번
+  띄웠고 — `shell28_all_20260731_161204.log`와 `shell28_all_20260731_161600.log` — 둘 다
+  `[STOP] ../result/promptmr_moe_f2_shared_aug/checkpoints/best_model.pt 없음`으로 즉시 종료됐다.
+  슬롯의 기본 `PROBE_NET`이 이 서버에 존재하지 않는 체크포인트를 가리키고 있었기 때문이다.
+  ℓ1 arm은 그 슬롯의 stage B이므로 시작조차 못 했다.
+- **결과**: `미측정`.
+- **상태**: open. 돌리려면 프로브 대상을 덮어써야 한다:
   `STAGE=l1 PROBE_NET=promptmr_moe_f2_acc8_aug_rm bash shell_scripting/shell28.sh`.
 
-### L06 — 2.5D adjacent-slice input (`--num-adj-slices 3`)
+### L06 — 2.5D 인접슬라이스 입력 (`--num-adj-slices 3`)
 
-- **Idea**: originally **rejected**, then revived. The rejection is recorded in
-  `rejected.md` line 33 and dates to 2026-07-02, on the grounds that lesion-bbox
-  inter-slice correlation was low (0.08–0.59) and adjacent-slice stacking would therefore
-  blur lesions and damage SSIM_bbox.
-- **Re-measured 2026-08-01**: the rejection basis was refuted. `scripts/adjacent_slice_corr.py`
-  over 170 files / 7394 lesion boxes / 36761 control boxes found lesion-bbox correlation is
-  **higher** than same-size control boxes at gap 1 (acc4 0.627 vs 0.510; acc8 0.624 vs 0.500)
-  and gap-1 SSIM is identical (0.680 vs 0.682). The original low absolute values were a
-  small-patch variance-normalization artifact; the original 2-file sample had no control
-  group. Detail: `model_strategy.md` §3.
-- **Code**: `12bbe7e` — wiring across five sites (`promptmr_plus.py` num_adj_slices +
-  center-slice extraction + per-slice-group sensitivity RSS normalization,
-  `load_data.py` slice-major coil-axis stacking with volume-edge clamping,
-  `test_part.py` inference-side stacking, `train.py --num-adj-slices {1,3}`,
-  `config.py`). Regression test: `scripts/tests/test_adj_slices.py`.
-- **Executed**: twice, `shell_scripting/shell30.sh`, both on 2026-07-31.
-  - `shell30_f2_20260731_181035.log` — 120 iterations per arm, fold 2, acc8 only.
-  - `shell30_f2_20260731_191828.log` — 2000 iterations per arm (≈1 epoch), fold 2, acc8 only,
-    finished 2026-08-01 03:14:09.
-- **Result** (2000-iteration run, fold 2, acc8 only, seed 430):
+- **아이디어**: 원래는 **기각**됐고 이후 부활했다. 기각 기록은 `rejected.md` 33행에 있고
+  날짜는 2026-07-02, 근거는 병변 bbox의 슬라이스 간 상관이 낮으므로(0.08–0.59) 인접슬라이스를
+  쌓으면 병변이 뭉개져 SSIM_bbox가 손상된다는 것이었다.
+- **2026-08-01 재측정**: 기각 근거가 반박됐다. `scripts/adjacent_slice_corr.py`로 170 파일 /
+  병변 박스 7394개 / 대조 박스 36761개를 측정한 결과, gap 1에서 병변 bbox 상관은 같은 크기의
+  대조 박스보다 **더 높았다**(acc4 0.627 대 0.510, acc8 0.624 대 0.500). gap-1 SSIM은
+  사실상 동일했다(0.680 대 0.682). 원래의 낮은 절대값은 작은 패치에서 생기는 분산 정규화
+  아티팩트였고, 원래 표본은 2개 파일에 대조군도 없었다. 상세: `model_strategy.md` §3.
+- **코드**: `12bbe7e` — 다섯 지점에 걸친 배선 (`promptmr_plus.py`의 num_adj_slices +
+  center-slice 추출 + 슬라이스 그룹별 감도 RSS 정규화,
+  `load_data.py`의 slice-major coil 축 쌓기 + 볼륨 경계 clamp,
+  `test_part.py`의 추론측 쌓기, `train.py --num-adj-slices {1,3}`,
+  `config.py`). 회귀 테스트: `scripts/tests/test_adj_slices.py`.
+- **실행**: `shell_scripting/shell30.sh`로 두 번, 둘 다 2026-07-31.
+  - `shell30_f2_20260731_181035.log` — arm당 120 iteration, fold 2, acc8만.
+  - `shell30_f2_20260731_191828.log` — arm당 2000 iteration(≈1 epoch), fold 2, acc8만,
+    2026-08-01 03:14:09 종료.
+- **결과** (2000 iteration 런, fold 2, acc8만, seed 430):
 
-  | | adj=1 | adj=3 | delta |
+  | | adj=1 | adj=3 | 차이 |
   |---|---|---|---|
   | ValLoss | 0.1157 | 0.1148 | −0.0009 |
-  | TrainLoss | 0.09853 | 0.09885 | +0.0003 (worse) |
-  | TrainTime, 2000 iter | 9359 s | 18126 s | **1.94×** |
-  | ValTime, 536 slices | 351.6 s | 667.5 s | **1.90×** |
-  | VRAM peak | 2.92 GB | 3.42 GB | +17% (of 8 GB) |
+  | TrainLoss | 0.09853 | 0.09885 | +0.0003 (악화) |
+  | TrainTime, 2000 iter | 9359 s | 18126 s | **1.94배** |
+  | ValTime, 536 slices | 351.6 s | 667.5 s | **1.90배** |
+  | VRAM peak | 2.92 GB | 3.42 GB | +17% (8 GB 중) |
 
-  **The effect does not resolve above noise: the sign flipped between the two runs.** At 120
-  iterations adj=3 was worse (0.1566 vs 0.1543); at 2000 iterations it was better. The two
-  arms have different first/last convolution shapes (2→6 channels) so their initializations
-  differ, and ±0.001 sits inside that initialization noise.
-- **Status**: closed-measured — **wiring kept, adoption deferred.** At equal GPU budget,
-  adj=1 with twice the iterations is the better buy: in the same run adj=1 improved ValLoss
-  from 0.1543 at 120 iterations to 0.1157 at 2000 iterations (−0.0386 over a 16.7× increase),
-  so 2000→4000 iterations will almost certainly buy more than 0.0009. Default is
-  `--num-adj-slices 1`, which is bit-identical to the pre-wiring code, so the option costs
-  nothing to keep. **Re-open condition**: an equal-wall-clock A/B, giving adj=1 double the
-  iterations. Comparing at equal iterations only shows that the slower model won at equal
-  iterations, which is not a decision-relevant comparison.
-- **Provenance note**: the upstream repository this backbone was vendored from left this
-  feature unfinished — `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/utils/learning/train_part.py`
-  line 173 hardcodes `num_adj_slices=1` with the comment
-  `TODO Parameters considering adjacent slices are not implemented.` The slim vendoring in
-  this repo inherited that gap; `12bbe7e` is the first implementation of it on either side.
-- **VRAM measurement that this run contributed** (see also L10): peak 3.42 GB of 8 GB **with
-  a 3× coil axis**, against 2.92 GB at `adj=1`. Memory was not close to binding in either arm.
+  **효과가 노이즈 위로 올라오지 않는다: 두 런 사이에서 부호가 뒤집혔다.** 120 iteration에서는
+  adj=3이 더 나빴고(0.1566 대 0.1543), 2000 iteration에서는 더 좋았다. 두 arm은 첫/마지막
+  convolution 모양이 다르므로(2→6 채널) 초기화 자체가 다르고, ±0.001은 그 초기화 노이즈 안에
+  들어간다.
+- **상태**: closed-measured — **배선은 유지, 채택은 보류.** 같은 GPU 예산이라면 iteration을
+  두 배 주는 adj=1이 더 좋은 구매다. 같은 런에서 adj=1은 ValLoss가 120 iteration의 0.1543에서
+  2000 iteration의 0.1157로 개선됐다(16.7배 증가로 −0.0386). 따라서 2000→4000 iteration이
+  0.0009보다 더 많이 사줄 것이 거의 확실하다. 기본값은 `--num-adj-slices 1`이고 이는 배선 이전
+  코드와 비트 단위 동일하므로, 옵션을 남겨두는 비용은 0이다. **재개 조건**: adj=1에 iteration을
+  두 배 주는 동일 wall-clock A/B. 동일 iteration 비교는 "느린 모델이 동일 iteration에서 이겼다"만
+  보여주며, 그건 의사결정에 쓸 수 있는 비교가 아니다.
+- **출처 메모**: 이 백본을 가져온 상위 레포는 이 기능을 미완성으로 남겨뒀다 —
+  `2025_4th_clone/FastMRI_challenge_sMaRtIfy_final/utils/learning/train_part.py`
+  173행이 `num_adj_slices=1`을 하드코딩하고 주석으로
+  `TODO Parameters considering adjacent slices are not implemented.`라고 적어뒀다. 이 레포의
+  슬림 vendoring은 그 공백을 그대로 물려받았고, `12bbe7e`가 양쪽을 통틀어 첫 구현이다.
+- **이 런이 기여한 VRAM 측정값** (L10도 함께 볼 것): **coil 축이 3배인 상태에서** 8 GB 중
+  peak 3.42 GB, `adj=1`에서는 2.92 GB. 어느 arm에서도 메모리는 제약에 근접하지 않았다.
 
-### L07 — Measure the seed-to-seed noise floor
+### L07 — seed 간 노이즈 바닥 측정
 
-- **Idea**: recorded 2026-07-31 as candidate `C16`.
-- **Code**: not applicable — this is a run, not a feature.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Why it gates other levers**: the position that put MoE first was a margin of
-  +0.0012 full / +0.0016 bbox over the shared single model. No variance estimate exists for
-  that margin. For reference, the 2025 winning team's own ablation reported a MoE gain of
-  +0.0002. L01, L02, L03, L05 and L08 all have candidate effects of that magnitude, so
-  without a noise floor a single run cannot decide any of them. L06 already demonstrated the
-  failure mode concretely by flipping sign between two runs of the same arm pair.
-- **Known noise source 1 — the two servers are not interchangeable.** Same config, same fold,
-  measured:
+- **아이디어**: 2026-07-31, 후보 `C16`으로 기록.
+- **코드**: 해당 없음 — 기능이 아니라 런이다.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **왜 다른 레버들의 게이트인가**: MoE를 1순위에 놓은 근거는 공유 단일 모델 대비
+  full +0.0012 / bbox +0.0016의 마진이었다. 그 마진에 대한 분산 추정치는 존재하지 않는다.
+  참고로 2025년 우승 팀 자신의 ablation은 MoE 이득을 +0.0002로 보고했다. L01, L02, L03, L05,
+  L08은 모두 효과 크기 후보가 그 자릿수이므로, 노이즈 바닥 없이는 단일 런으로 어느 것도 결정할
+  수 없다. L06은 같은 arm 쌍의 두 런 사이에서 부호가 뒤집히며 이 실패 양상을 이미 구체적으로
+  보여줬다.
+- **알려진 노이즈 원인 1 — 두 서버는 서로 대체 가능하지 않다.** 같은 설정, 같은 fold, 실측:
 
-  | Server | Data path | s/epoch | Hours/epoch |
+  | 서버 | 데이터 경로 | s/epoch | 시간/epoch |
   |---|---|---|---|
   | vessl GTX 1080 | `/root/Data` | 17,830 | **4.95** |
   | runpod RTX 4000 Ada | `/workspace/Data` | 7,250 | **2.01** |
 
-  A 2.5× wall-clock difference means **any GPU-hour figure in this file is meaningless without
-  naming the server**. Worse, it has already contaminated a comparison: the two arms of the
-  flip-augmentation A/B ran on different servers, which is a fourth confound on top of the
-  three already known for that result.
-- **Known noise source 2 — TF32, unmeasured and currently unguarded.**
-  `utils/common/utils.py::seed_fix` sets `cudnn.deterministic = True` and
-  `cudnn.benchmark = False` but never touches `allow_tf32`, so PyTorch's defaults apply:
-  `cudnn.allow_tf32` is `True`. Pascal (GTX 1080, sm_61) has no TF32 hardware and therefore
-  runs convolutions in FP32; Ampere and later (sm_80+) run them at TF32 precision, a 10-bit
-  mantissa. A cross-server A/B can therefore be comparing FP32 convolutions against TF32
-  ones, at a magnitude comparable to the effects being measured — and PromptMR+ is
-  convolution-dominated. `nvidia-smi -L` on both servers settles whether this applies.
-  ⚠️ This is an **assumption from reading the defaults**, not a measurement; nobody has
-  compared the two precisions on this pipeline.
-- **Reproducibility consequence, independent of A/B validity**: the competition requires that
-  a fixed seed reproduces the result. With `allow_tf32` left at its default, a final model
-  trained on Ampere+ will not reproduce on a Pascal machine. If the submission is trained on
-  an Ampere+ server, `torch.backends.cudnn.allow_tf32 = False` has to be set explicitly,
-  at the cost of 2–3× slower convolutions.
+  wall-clock이 2.5배 차이 난다는 것은 **이 파일의 어떤 GPU 시간 수치도 서버 이름 없이는
+  의미가 없다**는 뜻이다. 더 나쁘게는, 이미 한 비교를 오염시켰다: flip 증강 A/B의 두 arm이
+  서로 다른 서버에서 돌았고, 이는 그 결과에 대해 이미 알려진 세 개의 교란 위에 얹힌 네 번째
+  교란이다.
+- **알려진 노이즈 원인 2 — TF32, 미측정이며 현재 무방비.**
+  `utils/common/utils.py::seed_fix`는 `cudnn.deterministic = True`와
+  `cudnn.benchmark = False`를 설정하지만 `allow_tf32`는 건드리지 않으므로 PyTorch 기본값이
+  적용된다: `cudnn.allow_tf32`는 `True`다. Pascal(GTX 1080, sm_61)에는 TF32 하드웨어가 없어
+  convolution을 FP32로 돌리고, Ampere 이후(sm_80+)는 10비트 mantissa인 TF32 정밀도로 돌린다.
+  따라서 서버 간 A/B는 FP32 convolution과 TF32 convolution을 비교하는 것일 수 있고, 그 크기는
+  측정하려는 효과와 비슷한 자릿수다 — 게다가 PromptMR+는 convolution 지배적이다. 양쪽 서버에서
+  `nvidia-smi -L`을 돌리면 해당 여부가 결정된다.
+  ⚠️ 이것은 **기본값을 읽고 세운 가정**이며 측정값이 아니다. 이 파이프라인에서 두 정밀도를
+  비교해 본 사람은 없다.
+- **A/B 타당성과 무관한 재현성 결과**: 대회는 고정 seed가 결과를 재현할 것을 요구한다.
+  `allow_tf32`를 기본값으로 둔 채 Ampere 이후에서 학습한 최종 모델은 Pascal 머신에서 재현되지
+  않는다. 제출 모델을 Ampere 이후 서버에서 학습한다면
+  `torch.backends.cudnn.allow_tf32 = False`를 명시적으로 설정해야 하고, 그 대가는 convolution이
+  2~3배 느려지는 것이다.
 
-### L08 — Weight averaging (SWA-lite / EMA)
+### L08 — 가중치 평균 (SWA-lite / EMA)
 
-- **Idea**: recorded 2026-07-31 as candidate `C10`.
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Relevant property confirmed at the time**: PromptMR+ contains no BatchNorm-family layers,
-  so averaged weights need no statistics recalibration. Training cost 0, inference cost 0 ms.
+- **아이디어**: 2026-07-31, 후보 `C10`으로 기록.
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **당시 확인된 관련 성질**: PromptMR+에는 BatchNorm 계열 레이어가 없으므로, 평균 낸 가중치는
+  통계 재보정이 필요 없다. 학습 비용 0, 추론 비용 0 ms.
 
-### L09 — Direct supervision on unacquired k-space lines
+### L09 — 미획득 k-space 라인에 대한 직접 감독
 
-- **Idea**: recorded 2026-07-31 as candidate `C12`.
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Enabling fact confirmed at the time**: the k-space stored in the training-pool h5 files is
-  **full** k-space, not the masked product. The ground truth for the unacquired lines is
-  therefore already on disk and currently unused.
+- **아이디어**: 2026-07-31, 후보 `C12`로 기록.
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **당시 확인된 가능 조건**: 학습 풀 h5 파일에 저장된 k-space는 마스킹된 결과물이 아니라
+  **full** k-space다. 즉 미획득 라인의 정답이 이미 디스크에 있고 현재 쓰이지 않고 있다.
 
-### L10 — Adjacent slices used for sensitivity-map estimation only (batch SME)
+### L10 — 감도맵 추정에만 인접슬라이스 사용 (batch SME)
 
-- **Idea**: recorded 2026-07-31 as candidate `C14`.
-- **Code**: `not implemented`. Verified 2026-08-01: `utils/model/promptmr/promptmr_plus.py`
-  line 547 records the deliberate choice not to use `use_sens_adj`, because the 8 GB
-  configuration estimates sensitivity per coil (`compute_sens_per_coil=True`).
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Why L06's outcome does not settle this**: L06 measured lesion-texture correlation between
-  adjacent slices. Sensitivity maps are low-frequency ACS-derived coil profiles with a
-  different correlation structure, so neither L06's refutation of the old rejection nor L06's
-  cost measurement transfers here.
-- ⚠️ **This lever's stated purpose no longer holds: memory is not the binding constraint.**
-  Batch SME was adopted (in `model_strategy.md` §3.2) as a memory optimization promising
-  ≈55% less GPU memory for sensitivity estimation. Measured peak on the current configuration
-  is **3.32 GB of 8 GB**, and L06's run peaked at **3.42 GB even with a 3× coil axis**. There
-  is no memory pressure to relieve, so if this lever is run it has to be justified by
-  *accuracy* (upstream PromptMR+ claims batch SME also improves the estimate), not by memory.
-  The same collapsed premise invalidates the reasoning behind several other reduction
-  decisions still recorded as necessary: `n_history` 3 instead of the upstream 11,
-  `num_cascades` 10, and "coil compression is mandatory". `promptmr_plus.md` still presents
-  those as forced by an 8 GB ceiling.
+- **아이디어**: 2026-07-31, 후보 `C14`로 기록.
+- **코드**: `미구현`. 2026-08-01 확인: `utils/model/promptmr/promptmr_plus.py`
+  547행이 `use_sens_adj`를 쓰지 않기로 한 의도적 선택을 기록하고 있다. 8 GB 설정에서는 감도를
+  coil별로 추정하기 때문이다(`compute_sens_per_coil=True`).
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **L06의 결론이 이걸 대신 결정하지 못하는 이유**: L06이 측정한 것은 인접슬라이스 간 병변
+  텍스처 상관이다. 감도맵은 ACS에서 유도된 저주파 coil 프로파일로 상관 구조가 다르므로,
+  L06의 기각 반박도 L06의 비용 측정도 여기로 옮겨지지 않는다.
+- ⚠️ **이 레버가 내세운 목적은 더 이상 성립하지 않는다: 메모리는 제약이 아니다.**
+  batch SME는 (`model_strategy.md` §3.2에서) 감도 추정 GPU 메모리를 약 55% 줄인다는 메모리
+  최적화로 채택됐다. 현재 설정의 실측 peak는 **8 GB 중 3.32 GB**이고, L06의 런은 **coil 축이
+  3배인 상태에서도 3.42 GB**였다. 덜어낼 메모리 압박이 없으므로, 이 레버를 돌린다면 근거는
+  메모리가 아니라 *정확도*여야 한다(상위 PromptMR+는 batch SME가 추정 자체도 개선한다고
+  주장한다). 같은 전제 붕괴가 아직 필요하다고 기록돼 있는 다른 축소 결정들의 근거도 함께
+  무효화한다: 상위값 11 대신 `n_history` 3, `num_cascades` 10, 그리고 "coil compression은
+  필수". `promptmr_plus.md`는 여전히 이들을 8 GB 상한이 강제한 것으로 서술한다.
 
-### L11 — Batch the per-coil sensitivity estimation on the inference path
+### L11 — 추론 경로의 coil별 감도 추정을 배치화
 
-- **Idea**: recorded 2026-07-31 as candidate `C17①`.
-- **Code**: `not implemented`. Verified 2026-08-01:
-  `utils/model/promptmr/adapter.py` line 37 passes `compute_sens_per_coil=True`
-  unconditionally, so the sensitivity U-Net is invoked once per coil in sequence.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: open.
-- **Claimed to be numerically identical** at the time of the 2026-07-31 review, on the basis
-  that no operation in that path mixes across the batch dimension. Gradient checkpointing is
-  already disabled at inference, so the sequential loop has no memory justification there.
-  ⚠️ The numerical-identity claim has not been re-verified since; treat it as an assumption.
+- **아이디어**: 2026-07-31, 후보 `C17①`로 기록.
+- **코드**: `미구현`. 2026-08-01 확인:
+  `utils/model/promptmr/adapter.py` 37행이 `compute_sens_per_coil=True`를 무조건 넘기므로
+  감도 U-Net이 coil마다 순차로 한 번씩 호출된다.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: open.
+- **2026-07-31 검토 당시에는 수치적으로 동일하다고 주장됐다.** 근거는 그 경로의 어떤 연산도
+  배치 차원을 섞지 않는다는 것이었다. 추론 시 gradient checkpointing은 이미 꺼져 있으므로
+  순차 루프에는 메모리상 정당화도 없다.
+  ⚠️ 수치 동일성 주장은 그 이후 재검증되지 않았다. 가정으로 취급하라.
 
-### L12 — Re-open bbox weighting by reweighting the SSIM map instead of adding a loss term
+### L12 — 손실 항 추가가 아니라 SSIM 맵 재가중으로 bbox 가중을 재개
 
-- **Idea**: recorded 2026-07-31 as candidate `C13`.
-- **Code**: `not implemented` in the reweighting form. The additive form exists:
-  `--bbox-loss-lambda` landed in `80975c5` (author date 2026-07-14 21:59).
-- **Executed**: the additive form was executed as run12 — see L15 in the closed section.
-- **Result**: `not measured` for the reweighting form.
-- **Status**: open.
+- **아이디어**: 2026-07-31, 후보 `C13`으로 기록.
+- **코드**: 재가중 형태는 `미구현`. 가산 형태는 존재한다:
+  `--bbox-loss-lambda`가 `80975c5`(author date 2026-07-14 21:59)에 들어갔다.
+- **실행**: 가산 형태는 run12로 실행됐다 — 아래 closed 절의 L15 참조.
+- **결과**: 재가중 형태는 `미측정`.
+- **상태**: open.
 
 ---
 
-## 3. Closed levers — executed or dropped, kept as history
+## 3. 닫힌 레버 — 실행됐거나 폐기됨, 내역으로 보존
 
-### L13 — Mask regeneration for the acc8 expert (`--remask 8 --remask-offset uniform`)
+### L13 — acc8 전문가용 마스크 재생성 (`--remask 8 --remask-offset uniform`)
 
-- **Idea**: the enabling observation is that training-pool k-space is full k-space, so a
-  legitimate acc8 mask can be applied to acc4 volumes to manufacture new (input, GT) pairs.
-  Recorded as candidate `C1`, and argued to be the highest-priority lever: equispaced
-  undersampling has exactly `acc` distinct aliasing phase patterns
-  (`e^{2πi·o·m/acc}`, set by the offset), the training-pool offset is deterministic
-  (`(W//2) % acc`), and the acc8 expert had only ever seen 3 of the 8 patterns while scoring
-  draws offsets at random.
-- **Code**: `9cf519c` (author date 2026-07-29 11:32) — `--remask` / `--remask-offset` in
-  `train.py`, generator `utils/data/transforms.py::equispaced_mask` and
-  `canonical_offset`, loader support in `utils/data/load_data.py`. The mask generator was
-  verified bit-exact against the competition mask family (step 4|8, centre fraction 0.08)
-  across 280 volumes of the training pool plus leaderboard.
-- **Executed**: 2026-07-31, `shell_scripting/shell28.sh` `STAGE=offset` —
-  `shell28_offset_20260731_171753.log`. The probe forces offsets 0–7 on a fixed checkpoint
-  and scores each, with zero training, so it measures the ceiling of what remask could
-  recover before spending the A/B.
-- **Result** (acc8, 20 volumes, hold-out fold 2):
+- **아이디어**: 출발 관찰은 학습 풀 k-space가 full k-space이므로, acc4 볼륨에 적법한 acc8
+  마스크를 씌워 새로운 (입력, 정답) 쌍을 만들어낼 수 있다는 것이다. 후보 `C1`로 기록되고 최우선
+  레버로 주장됐다: equispaced 언더샘플링은 정확히 `acc`개의 서로 다른 aliasing 위상 패턴을
+  갖고(`e^{2πi·o·m/acc}`, offset이 결정), 학습 풀의 offset은 결정적이며(`(W//2) % acc`),
+  acc8 전문가는 8개 패턴 중 3개만 본 적이 있는데 채점은 offset을 무작위로 뽑는다는 것이었다.
+- **코드**: `9cf519c`(author date 2026-07-29 11:32) — `train.py`의 `--remask` /
+  `--remask-offset`, 생성기 `utils/data/transforms.py::equispaced_mask`와
+  `canonical_offset`, `utils/data/load_data.py`의 로더 지원. 마스크 생성기는 대회 마스크
+  계열(step 4|8, centre fraction 0.08)과 비트 단위로 일치하는지 학습 풀 280 볼륨 + 리더보드에서
+  검증했다.
+- **실행**: 2026-07-31, `shell_scripting/shell28.sh` `STAGE=offset` —
+  `shell28_offset_20260731_171753.log`. 고정 체크포인트에 offset 0–7을 강제로 씌워 각각
+  채점하며 학습은 0이다. 즉 A/B에 비용을 쓰기 전에 remask가 회복할 수 있는 상한을 측정한다.
+- **결과** (acc8, 20 볼륨, hold-out fold 2):
 
-  | Offset group | SSIM_full | SSIM_bbox |
+  | offset 그룹 | SSIM_full | SSIM_bbox |
   |---|---|---|
-  | canonical (offsets the model trained on) | 0.9024 | 0.9201 |
-  | all other offsets | 0.9069 | 0.9272 |
-  | gap | **−0.0045** | **−0.0071** |
+  | canonical (모델이 학습한 offset) | 0.9024 | 0.9201 |
+  | 나머지 전부 | 0.9069 | 0.9272 |
+  | 격차 | **−0.0045** | **−0.0071** |
 
-  The gap is **negative**: the model scored *higher* on the offsets it had never trained on.
-  That is the opposite of the hypothesis, and it means the model is insensitive to mask
-  offset — there is no offset-coverage deficit to recover.
-- **Status**: closed-measured. The offset half of this lever is dead. The remaining
-  justification for `--remask` is the volume-count half (80 → 160 training volumes for the
-  acc8 expert), which the probe does not address and which was never separated from the
-  offset argument.
-- **Consequence recorded for other readers**: any earlier claim that a `REMASK=1` run's gain
-  demonstrates "mask diversity" must be re-read as "twice the optimizer steps", since the
-  offset mechanism is now measured to contribute nothing.
+  격차가 **음수**다: 모델은 한 번도 학습하지 않은 offset에서 *더 높은* 점수를 냈다. 가설과 정반대
+  이며, 모델이 마스크 offset에 둔감하다는 뜻이다 — 회복할 offset 커버리지 결손이 없다.
+- **상태**: closed-measured. 이 레버의 offset 쪽 절반은 죽었다. `--remask`에 남은 정당화는
+  볼륨 수 절반(acc8 전문가 학습 볼륨 80 → 160)인데, 프로브는 그쪽을 다루지 않으며 offset 논거와
+  분리된 적도 없다.
+- **다른 독자를 위해 기록하는 파생 결론**: `REMASK=1` 런의 이득이 "마스크 다양성"을 입증한다는
+  이전 주장은 전부 "optimizer step이 두 배"로 다시 읽어야 한다. offset 메커니즘의 기여는 이제
+  0으로 측정됐다.
 
-### L14 — 180° rotation augmentation
+### L14 — 180° 회전 증강
 
-- **Idea**: 2026-07-31, added as a slot by a teammate. Reasoning recorded in
-  `shell_scripting/shell29.sh`: unlike a 90° rotation, 180° does not swap the readout and
-  phase-encode axes, the mask transform is the same `roll(flip(M),1)` the existing left-right
-  flip already uses, and it is a closed form with no interpolation (measured
-  relative max error 2.2e-07). Mechanically it could have been enabled immediately; the open
-  question was only whether it produces *good* data, because the up-down component moves the
-  joint line from the upper third of the image to the lower third.
-- **Code**: `not implemented` as an augmentation. The probe script
-  `scripts/probe_orient.py` and the slot `shell_scripting/shell29.sh` were written to decide
-  whether to implement it. No `--aug-rot180` flag exists.
-- **Executed**: 2026-07-31, `shell29_20260731_190011.log` — checkpoint
-  `promptmr_moe_f2_aug_rm`, acc8, 10 volumes, four orientations scored.
-- **Result**:
+- **아이디어**: 2026-07-31, 팀원이 슬롯으로 추가. 근거는 `shell_scripting/shell29.sh`에
+  기록돼 있다: 90° 회전과 달리 180°는 readout 축과 phase-encode 축을 맞바꾸지 않고, 마스크
+  변환은 기존 좌우 flip이 이미 쓰는 `roll(flip(M),1)`과 같으며, 보간 없는 닫힌 형태다
+  (상대 최대 오차 2.2e-07 실측). 기계적으로는 즉시 켤 수 있었고, 남은 질문은 그것이 *좋은*
+  데이터를 만드는지 뿐이었다. 상하 성분이 관절선을 영상 상부 1/3에서 하부 1/3으로 옮기기
+  때문이다.
+- **코드**: 증강으로는 `미구현`. 구현할지 결정하기 위해 프로브 스크립트
+  `scripts/probe_orient.py`와 슬롯 `shell_scripting/shell29.sh`를 작성했다. `--aug-rot180`
+  플래그는 존재하지 않는다.
+- **실행**: 2026-07-31, `shell29_20260731_190011.log` — 체크포인트
+  `promptmr_moe_f2_aug_rm`, acc8, 10 볼륨, 네 방향 채점.
+- **결과**:
 
-  | Orientation | SSIM_full | SSIM_bbox | Δfull | Δbbox |
+  | 방향 | SSIM_full | SSIM_bbox | Δfull | Δbbox |
   |---|---|---|---|---|
-  | original | 0.8931 | 0.9123 | — | — |
-  | left-right flip (control) | 0.8925 | 0.9115 | +0.0006 | +0.0008 |
-  | up-down flip | 0.8904 | 0.9088 | +0.0027 | +0.0034 |
+  | 원본 | 0.8931 | 0.9123 | — | — |
+  | 좌우 flip (대조군) | 0.8925 | 0.9115 | +0.0006 | +0.0008 |
+  | 상하 flip | 0.8904 | 0.9088 | +0.0027 | +0.0034 |
   | 180° | 0.8902 | 0.9092 | +0.0029 | +0.0031 |
 
-  The left-right control gap is +0.0008, near zero as expected for a checkpoint trained with
-  left-right flip augmentation — which validates the probe. The 180° gap of +0.0031 is the
-  **ceiling** on what a 180° augmentation could teach, and it is below the 0.010 threshold the
-  slot set in advance for justifying a 60-hour A/B. Since the 180° gap ≈ the up-down gap, the
-  only new information in a 180° rotation is the up-down component.
-- **Status**: closed-measured. Not implemented; `utils/data/transforms.py` was not touched.
-- ⚠️ The gap is an upper bound on teachable information, **not** a predicted leaderboard gain.
-  The scoring set contains no inverted knees.
+  좌우 대조군 격차는 +0.0008로, 좌우 flip 증강으로 학습한 체크포인트에서 기대되는 대로 0에
+  가깝다 — 프로브 자체의 타당성이 이걸로 확인된다. 180° 격차 +0.0031은 180° 증강이 가르칠 수
+  있는 정보의 **상한**이며, 슬롯이 60시간 A/B를 정당화하기 위해 사전에 정한 0.010 문턱보다
+  낮다. 180° 격차 ≈ 상하 격차이므로, 180° 회전에 담긴 새 정보는 상하 성분뿐이다.
+- **상태**: closed-measured. 미구현이며 `utils/data/transforms.py`는 건드리지 않았다.
+- ⚠️ 이 격차는 가르칠 수 있는 정보의 상한이고, 예상 리더보드 이득이 **아니다.** 채점 세트에
+  뒤집힌 무릎은 없다.
 
-### L15 — bbox weighted loss, additive form (`--bbox-loss-lambda`)
+### L15 — bbox 가중 손실, 가산 형태 (`--bbox-loss-lambda`)
 
-- **Idea**: SSIM_bbox is the ranking axis, so weight the lesion region directly:
-  `L = (1 − SSIM_full) + λ·(1 − SSIM_bbox)`. Recorded in `model_strategy.md` §2.1.
-- **Code**: `80975c5` (author date 2026-07-14 21:59), `--bbox-loss-lambda`, default 0.0 which
-  is bit-identical to the previous behaviour. Valid-box determination matches the scoring
-  function (`utils/common/metrics.py::ssim_bbox`, `win_size=7`).
-- **Executed**: run12 — `training_anal/2026-07-18-run12-bbox-uc-analysis.md`.
-- **Result**: regressed on all three scoring axes. Default left at 0.0 (off).
-- **Status**: closed-measured, with a **caveat that keeps L12 open**: run12 changed three
-  things at once. The design document specified λ=0.1 but the run actually used λ=0.5; it was
-  combined with a second lever (UC) in the same run; and the backbone at the time was SDUM,
-  not PromptMR+. The isolated effect of bbox weighting has therefore never been measured.
+- **아이디어**: SSIM_bbox가 순위 축이므로 병변 영역에 직접 가중을 준다:
+  `L = (1 − SSIM_full) + λ·(1 − SSIM_bbox)`. `model_strategy.md` §2.1에 기록.
+- **코드**: `80975c5`(author date 2026-07-14 21:59), `--bbox-loss-lambda`, 기본값 0.0으로
+  이전 동작과 비트 단위 동일. 유효 박스 판정은 채점 함수와 일치한다
+  (`utils/common/metrics.py::ssim_bbox`, `win_size=7`).
+- **실행**: run12 — `training_anal/2026-07-18-run12-bbox-uc-analysis.md`.
+- **결과**: 채점 3축 전부에서 퇴행. 기본값을 0.0(off)으로 유지.
+- **상태**: closed-measured, 단 **L12를 열어두게 하는 유보 조건이 있다**: run12는 세 가지를
+  동시에 바꿨다. 설계 문서는 λ=0.1을 규정했는데 실제 런은 λ=0.5를 썼고, 같은 런에서 두 번째
+  레버(UC)와 결합됐고, 당시 백본은 PromptMR+가 아니라 SDUM이었다. 따라서 bbox 가중의 단독
+  효과는 한 번도 측정된 적이 없다.
 
-### L16 — Foreground-masked loss and validation (`--fg-loss`)
+### L16 — foreground 마스크 손실·검증 (`--fg-loss`)
 
-- **Idea**: compute the SSIM loss and the validation metric only inside the scoring
-  foreground mask, so that validation predicts the leaderboard instead of being inflated by
-  background. Recorded in `preprocessing.md` B5.
-- **Code**: `347fb43` (author date 2026-07-12 01:46), `--fg-loss`, reusing the scoring
-  definition `utils/common/metrics.py::foreground_mask` rather than redefining it.
-- **Executed**: run11 — `training_anal/2026-07-14-run11-fgloss-analysis.md`. Identical config
-  to run10 with only `--fg-loss` added.
-- **Result**: full 0.9161 / bbox 0.9095 / 1514 ms/slice, versus run10's
-  0.9118 / 0.9021 / 1523 ms. Improved on all three axes; the feared bbox regression did not
-  occur. Also established that foreground-masked validation predicts the leaderboard score.
-- **Status**: closed-measured — **adopted.** Every current slot passes `--fg-loss`.
+- **아이디어**: SSIM 손실과 검증 지표를 채점용 foreground 마스크 안에서만 계산해서, 검증값이
+  배경 때문에 부풀지 않고 리더보드를 예측하게 만든다. `preprocessing.md` B5에 기록.
+- **코드**: `347fb43`(author date 2026-07-12 01:46), `--fg-loss`. 정의를 새로 만들지 않고 채점
+  정의 `utils/common/metrics.py::foreground_mask`를 재사용한다.
+- **실행**: run11 — `training_anal/2026-07-14-run11-fgloss-analysis.md`. run10과 설정이 동일하고
+  `--fg-loss`만 추가했다.
+- **결과**: full 0.9161 / bbox 0.9095 / 1514 ms/slice, run10의
+  0.9118 / 0.9021 / 1523 ms 대비. 3축 전부 개선됐고, 우려했던 bbox 퇴행은 일어나지 않았다.
+  foreground 마스크 검증이 리더보드 점수를 예측한다는 것도 함께 확인됐다.
+- **상태**: closed-measured — **채택.** 현재 모든 슬롯이 `--fg-loss`를 넘긴다.
 
-### L17 — Acceleration-rate band U{7,8,9} instead of exactly 8
+### L17 — 가속률을 정확히 8이 아니라 U{7,8,9} 대역으로
 
-- **Idea**: recorded 2026-07-31 as candidate `C2`.
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: closed-unmeasured — dropped by reasoning. Scoring uses exactly acc4 or acc8.
-  Training on aliasing periodicities that never appear at scoring time trades away
-  specialization, and the only measurement available on that axis says specialization won
-  (MoE expert separation beat the shared model).
+- **아이디어**: 2026-07-31, 후보 `C2`로 기록.
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: closed-unmeasured — 추론으로 폐기. 채점은 정확히 acc4 또는 acc8을 쓴다. 채점 때
+  나타나지 않는 aliasing 주기성으로 학습하는 것은 특화를 내주는 거래이고, 그 축에서 확보된
+  유일한 측정값은 특화가 이겼다고 말한다(MoE 전문가 분리가 공유 모델을 이겼다).
 
-### L18 — Explicit mask / acceleration-rate conditioning as a replacement for MoE
+### L18 — MoE 대체로서의 명시적 마스크/가속률 조건화
 
-- **Idea**: recorded 2026-07-31 as candidate `C5`.
-- **Code**: `not implemented`.
-- **Executed**: `not executed`.
-- **Result**: `not measured`.
-- **Status**: closed-unmeasured — dropped by reasoning. MoE already consumes the same one-bit
-  condition via 100% parameter separation, which is the upper bound of conditioning on that
-  bit; a few hundred FiLM parameters have no structural route past it. The best realistic
-  outcome is a tie, whose only benefit is shipping one checkpoint instead of two — not a
-  scoring axis. This decision also retired the `acc-conditioned GRAPPA weighting` proposal
-  recorded in `confirmed_model.md` line 92 and `model_decision_points.md` line 100.
+- **아이디어**: 2026-07-31, 후보 `C5`로 기록.
+- **코드**: `미구현`.
+- **실행**: `미실행`.
+- **결과**: `미측정`.
+- **상태**: closed-unmeasured — 추론으로 폐기. MoE는 이미 같은 1비트 조건을 100% 파라미터
+  분리로 소비하고 있고, 그것이 그 비트로 조건화할 수 있는 상한이다. FiLM 파라미터 수백 개가
+  구조적으로 그걸 넘어설 경로는 없다. 현실적으로 최선의 결과는 무승부이며, 그 유일한 이득은
+  체크포인트를 둘 대신 하나 배포한다는 것 — 채점 축이 아니다. 이 결정으로
+  `confirmed_model.md` 92행과 `model_decision_points.md` 100행에 기록된
+  `acc 조건화 GRAPPA 가중` 제안도 함께 폐기됐다.
 
-### L19 — Move preprocessing into `prep_volume` to shorten the timed section
+### L19 — 전처리를 `prep_volume`으로 옮겨 시간 측정 구간을 줄이기
 
-- **Idea**: recorded 2026-07-31 as candidate `C17②`.
-- **Status**: closed-unmeasured — **rejected as measurement avoidance.** The repository owner
-  stated that preprocessing belongs inside the reported recon time. Not implemented, and not
-  to be revisited on efficiency grounds.
+- **아이디어**: 2026-07-31, 후보 `C17②`로 기록.
+- **상태**: closed-unmeasured — **측정 회피로 기각.** 레포 소유자가 전처리는 보고되는 recon
+  시간 안에 포함되어야 한다고 밝혔다. 미구현이며, 효율을 이유로 재론하지 않는다.

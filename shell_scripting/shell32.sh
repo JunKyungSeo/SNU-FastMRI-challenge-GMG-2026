@@ -107,11 +107,18 @@ if [ "$STAGE" = ceiling ] || [ "$STAGE" = all ]; then
           else if(k=="ckpt")ck=v; else if(k=="param")pa=v
           else if(k=="fwdbwd"){sub("s$","",v); fb=v}
           else if(k=="peak"){sub("GB$","",v); pk=v} }
-        he=(b>0 ? sprintf("%.1f", 4.95*fb/b) : "?")
-        printf "%s nc=%s nh=%s nf=%s ckpt=%s param=%s %ss %sGB %sh/ep\n", pk,nc,nh,nf,ck,pa,fb,pk,he }' \
-      | sort -g | cut -d' ' -f2- | column -t
+        he=(b>0 ? sprintf("%.2f", 4.95*fb/b) : 0)
+        printf "%s  nc=%-3s nh=%-3s nf=%-3s ckpt=%-5s param=%-7s %5.2fs %5.2fGB %6.2fh/ep\n",
+               pk, nc,nh,nf,ck,pa, fb+0, pk+0, he+0 }' \
+      | sort -g | sed 's/^[0-9.][0-9.]* *//'
     echo; echo "===== OOM ====="
-    if grep -q '^OOM' "$PROBE_TXT"; then grep '^OOM' "$PROBE_TXT" | column -t
+    if grep -q '^OOM' "$PROBE_TXT"; then
+        awk '$1=="OOM"{ nc=nh=nf=ck=pa="?"
+            for(i=1;i<=NF;i++){ n=split($i,kv,"="); if(n<2) continue
+              if(kv[1]=="cascades")nc=kv[2]; else if(kv[1]=="n_hist")nh=kv[2]
+              else if(kv[1]=="n_feat0")nf=kv[2]; else if(kv[1]=="ckpt")ck=kv[2]
+              else if(kv[1]=="param")pa=kv[2] }
+            printf "  nc=%-3s nh=%-3s nf=%-3s ckpt=%-5s param=%s\n", nc,nh,nf,ck,pa }' "$PROBE_TXT"
     else echo "  (없음 — 이 격자는 8GB 안에서 안 터졌다. 천장은 메모리가 아니라 시계다)"; fi
 fi
 

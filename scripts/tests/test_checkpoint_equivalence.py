@@ -49,7 +49,7 @@ def _make_batch(n_coils=N_COILS, seed=1):
     return kspace * mask, mask
 
 
-def _forward_backward(net, kspace, mask, use_checkpoint, compute_sens_per_coil):
+def _forward_backward(net, kspace, mask, use_checkpoint, compute_sens_per_coil, sens_chunk=1):
     net.zero_grad(set_to_none=True)
     out = net(
         kspace, mask,
@@ -57,6 +57,7 @@ def _forward_backward(net, kspace, mask, use_checkpoint, compute_sens_per_coil):
         mask_type=("cartesian",),
         use_checkpoint=use_checkpoint,
         compute_sens_per_coil=compute_sens_per_coil,
+        sens_chunk=sens_chunk,
     )
     out.square().mean().backward()      # 스칼라 손실이면 무엇이든 무방
     grads = {n: p.grad.detach().clone() for n, p in net.named_parameters() if p.grad is not None}
@@ -119,6 +120,30 @@ def test_sens_per_coil_matches_batched():
         torch.testing.assert_close(
             grad_per_coil[name], grad_batched[name], rtol=1e-9, atol=1e-9,
             msg=lambda m, n=name: f"param '{n}' grad 가 per-coil 여부에 따라 다름:\n{m}",
+        )
+
+
+@pytest.mark.parametrize("sens_chunk", [2, 4, 8, 15, 16])
+@pytest.mark.parametrize("use_checkpoint", [True, False])
+def test_sens_chunk_matches_per_coil(sens_chunk, use_checkpoint):
+    """--sens-chunk 는 시간·VRAM 만 바꾸고 값은 안 바꿔야 한다.
+
+    코일 15개를 하나씩 돌리는 대신 chunk 개씩 묶는 레버라, 이 등가성이 깨지면 속도 이득이
+    아니라 조용한 품질 변화다. 15로 안 나눠떨어지는 값(4·8·16)을 일부러 섞어 꼬리 청크와
+    코일 수를 넘는 청크까지 함께 잡는다.
+    """
+    kspace, mask = _make_batch()
+    net = _make_net()
+    net.train()
+    out_1, grad_1 = _forward_backward(net, kspace, mask, use_checkpoint, True, sens_chunk=1)
+    out_k, grad_k = _forward_backward(net, kspace, mask, use_checkpoint, True, sens_chunk=sens_chunk)
+
+    torch.testing.assert_close(out_1, out_k, rtol=1e-9, atol=1e-9)
+    assert grad_1.keys() == grad_k.keys()
+    for name in grad_1:
+        torch.testing.assert_close(
+            grad_1[name], grad_k[name], rtol=1e-9, atol=1e-9,
+            msg=lambda m, n=name: f"param '{n}' grad 가 sens_chunk 에 따라 다름:\n{m}",
         )
 
 

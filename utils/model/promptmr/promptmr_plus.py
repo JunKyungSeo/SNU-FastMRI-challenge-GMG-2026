@@ -603,6 +603,7 @@ class PromptMR(nn.Module):
         mask_type: Tuple[str] = ("cartesian",),
         use_checkpoint: bool = True,
         compute_sens_per_coil: bool = True, # can further reduce the memory usage
+        sens_chunk: int = 1,
     ) -> torch.Tensor:
         '''
         Args:
@@ -612,6 +613,9 @@ class PromptMR(nn.Module):
             mask_type: (str) mask type
             use_checkpoint: (bool) whether to use checkpoint for memory saving
             compute_sens_per_coil: (bool) whether to compute sensitivity maps per coil for memory saving
+            sens_chunk: (int) 감도맵 U-Net 에 한 번에 넣을 코일 수(1=기존 코드와 비트 동일).
+                VRAM 을 시간과 바꾸는 레버 — 커널 발사 횟수가 15/chunk 로 준다. chunk>1 은
+                수학적으로 같은 값이되 누산 순서가 달라 비트까지 같지는 않다(compute_sens 참고).
         '''
 
         # Shape aligning to SNU FastMRI dataloader
@@ -625,7 +629,7 @@ class PromptMR(nn.Module):
             # 코일 단위 checkpoint 를 compute_sens 안에서 직접 걸므로 바깥 통짜 wrapper 는 쓰지 않는다.
             # (겹쳐 걸면 바깥 재계산이 코일 루프를 통째로 되살려 코일 단위 절감이 무의미해진다.)
             sens_maps = self.sens_net(masked_kspace, mask, num_low_frequencies, mask_type,
-                                      compute_sens_per_coil, use_checkpoint)
+                                      compute_sens_per_coil, use_checkpoint, sens_chunk)
         else:
             self.sens_net_ckp.use_checkpoint = use_checkpoint
             sens_maps = self.sens_net_ckp(masked_kspace, mask, num_low_frequencies, mask_type, compute_sens_per_coil)
@@ -720,20 +724,28 @@ class SensitivityModel(nn.Module):
         return x.view(b, adj_coil, h, w, two)
 
     def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool,
-                     use_checkpoint: bool = False) -> torch.Tensor:
+                     use_checkpoint: bool = False, chunk: int = 1) -> torch.Tensor:
         bc = images.shape[0]  # batch_size * n_coils
         if compute_per_coil:
+            # chunk = 한 번에 U-Net 에 넣을 코일 수. 1이면 예전 코드와 **비트 동일**(images[i:i+1] 은
+            # images[i].unsqueeze(0) 과 같은 텐서다). 코일은 서로 독립이고 이 경로에 배치를 가로지르는
+            # 연산이 없어(norm 은 샘플별, BatchNorm 없음) chunk 를 바꿔도 **수학적으로 같은 값**이다.
+            # ⚠️ 다만 비트까지 같지는 않다 — 배치 크기가 바뀌면 GEMM 타일링·누산 순서가 달라져
+            #    실측 fp32 ~1e-6, fp64 ~4e-15 차가 난다(테스트는 1e-9 로 등가성만 강제).
+            #    같은 chunk 로 다시 돌리면 같은 결과가 나오므로 재현성은 유지되지만, chunk 를 바꾼
+            #    체크포인트를 예전 것과 비트 비교하지는 말 것.
+            step = max(1, int(chunk))
             output = []
-            for i in range(bc):
-                image_i = images[i].unsqueeze(0)
+            for i in range(0, bc, step):
+                images_i = images[i:i + step]
                 if use_checkpoint and self.training:
-                    # ⚠️ 코일 "하나씩" checkpoint 하는 게 핵심이다. sens_net 전체를 한 덩어리로
-                    # checkpoint 하면 순전파 peak 만 줄고, 역전파 재계산 때 이 루프가 통째로 다시
-                    # 돌면서 B*C 코일분 activation 이 동시에 살아난다(= 절감 효과가 사라짐).
-                    # 코일 단위로 끊으면 재계산 중에도 한 코일분만 살아 있다.
-                    out_i = checkpoint(lambda t: model(t)[0], image_i, use_reentrant=False)
+                    # ⚠️ 코일 "하나씩"(또는 chunk 씩) checkpoint 하는 게 핵심이다. sens_net 전체를 한
+                    # 덩어리로 checkpoint 하면 순전파 peak 만 줄고, 역전파 재계산 때 이 루프가 통째로
+                    # 다시 돌면서 B*C 코일분 activation 이 동시에 살아난다(= 절감 효과가 사라짐).
+                    # 청크 단위로 끊으면 재계산 중에도 한 청크분만 살아 있다.
+                    out_i = checkpoint(lambda t: model(t)[0], images_i, use_reentrant=False)
                 else:
-                    out_i = model(image_i)[0]
+                    out_i = model(images_i)[0]
                 output.append(out_i)
             output = torch.cat(output, dim=0)
         else:
@@ -748,6 +760,7 @@ class SensitivityModel(nn.Module):
         mask_type: Tuple[str] = ("cartesian",),
         compute_per_coil: bool = False,
         use_checkpoint: bool = False,
+        sens_chunk: int = 1,
     ) -> torch.Tensor:
 
         masked_kspace_acs = self.kspace_acs_extractor(masked_kspace, mask, num_low_frequencies, mask_type)
@@ -756,6 +769,7 @@ class SensitivityModel(nn.Module):
 
         return self.divide_root_sum_of_squares(
             self.batch_chans_to_chan_dim(
-                self.compute_sens(self.norm_unet, images, compute_per_coil, use_checkpoint), batches
+                self.compute_sens(self.norm_unet, images, compute_per_coil, use_checkpoint,
+                                  sens_chunk), batches
             )
         )

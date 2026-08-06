@@ -22,6 +22,8 @@ class PromptMRReconModel(nn.Module):
         self.net = build_promptmr_net(args)
         self.out_size = out_size
         self.use_checkpoint = bool(getattr(args, "use_checkpoint", True))
+        # 감도맵 U-Net 에 한 번에 넣을 코일 수. 1 = 기존(코일 하나씩) 과 비트 동일.
+        self.sens_chunk = max(1, int(getattr(args, "sens_chunk", 1)))
 
     def forward(self, masked_kspace: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
         B, C, H, W, two = masked_kspace.shape
@@ -35,6 +37,7 @@ class PromptMRReconModel(nn.Module):
             mask_type=("cartesian",),
             use_checkpoint=self.use_checkpoint,
             compute_sens_per_coil=True,     # 8GB VRAM 절감(코일별 감도 추정)
+            sens_chunk=self.sens_chunk,
         )
         # PromptMR.forward가 이미 RSS + center_crop(384,384) 수행 → (B,384,384).
         # 방어적으로 크기 재확인(원본이 384가 아니면 crop; 384면 idempotent).

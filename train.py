@@ -38,6 +38,11 @@ def parse():
                              'h5 읽기·코일축이 3배가 되고 VRAM·시간이 늘어난다. gap2 이상은 병변 SSIM이 '
                              '대조군 아래로 뒤집혀 5는 막아뒀다(strategy/model_strategy.md §3).')
     parser.add_argument('--use-checkpoint', action=argparse.BooleanOptionalAction, default=True, help='PromptMR+ gradient checkpointing (8GB VRAM용, 기본 on). 끄려면 --no-use-checkpoint')
+    parser.add_argument('--sens-chunk', type=int, default=1,
+                        help='감도맵 U-Net 에 한 번에 넣을 코일 수 (1=기존 학습과 비트 동일). 코일 15개를 '
+                             '하나씩 돌리는 대신 묶어 커널 발사를 15/chunk 로 줄인다 — 수학적으로 같은 '
+                             '값이지만 누산 순서가 달라 chunk>1 은 예전 체크포인트와 비트 일치는 아니다. '
+                             '최악폭 W=480 천장은 shell33.sh 로 먼저 잴 것.')
     parser.add_argument('--input-key', type=str, default='kspace', help='Name of input key')
     parser.add_argument('--target-key', type=str, default='image_label', help='Name of target key')
     parser.add_argument('--max-key', type=str, default='max', help='Name of max key in attributes')

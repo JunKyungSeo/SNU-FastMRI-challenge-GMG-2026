@@ -24,11 +24,12 @@ import torch  # noqa: E402
 from utils.model.promptmr.adapter import build_promptmr  # noqa: E402
 
 
-def probe(nc, nf, snf, nh, ckpt, H=640, W=368, C=15, with_opt=False, reps=3):
+def probe(nc, nf, snf, nh, ckpt, H=640, W=368, C=15, with_opt=False, reps=3, sens_chunk=1):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
     args = SimpleNamespace(num_cascades=nc, n_feat0=nf, sens_n_feat0=snf,
-                           n_history=nh, use_checkpoint=ckpt)
-    tag = f"cascades={nc} n_feat0={nf} sens={snf} n_hist={nh} ckpt={ckpt} coils={C} HxW={H}x{W}"
+                           n_history=nh, use_checkpoint=ckpt, sens_chunk=sens_chunk)
+    tag = (f"cascades={nc} n_feat0={nf} sens={snf} n_hist={nh} ckpt={ckpt} "
+           f"schunk={sens_chunk} coils={C} HxW={H}x{W}")
     model = build_promptmr(args).to(dev).train()
     n_param = sum(p.numel() for p in model.parameters())
     # train_part.py:398 과 동일한 optimizer — 상태 텐서 크기가 실학습과 같아야 의미가 있다.
@@ -84,7 +85,10 @@ if __name__ == "__main__":
     ap.add_argument("--with-optimizer", action="store_true",
                     help="AdamW 상태까지 할당해 peak 을 잰다. 폭 스윕에선 필수(docstring 참고)")
     ap.add_argument("--reps", type=int, default=3, help="fwd+bwd 반복 횟수. 중앙값을 시간으로 보고")
+    ap.add_argument("--sens-chunk", type=int, default=1,
+                    help="감도맵 U-Net 에 한 번에 넣을 코일 수 (1=기존). 수학적으로 같은 값 — 시간·VRAM 만 바뀐다")
     ap.set_defaults(use_checkpoint=True)
     a = ap.parse_args()
     probe(a.num_cascades, a.n_feat0, a.sens_n_feat0, a.n_history, a.use_checkpoint,
-          H=a.crop_h, W=a.width, C=a.coils, with_opt=a.with_optimizer, reps=a.reps)
+          H=a.crop_h, W=a.width, C=a.coils, with_opt=a.with_optimizer, reps=a.reps,
+          sens_chunk=a.sens_chunk)

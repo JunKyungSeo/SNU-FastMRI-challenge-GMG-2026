@@ -1,0 +1,19 @@
+==========================================================
+[START] shell31_recon   2026-08-04 02:14:56   TARGET=shared  NET=promptmrp_0801_shared
+[LOG  ] shell_scripting/logs/shell31_recon_20260804_021456.log   [채점] /root/Data/leaderboard
+==========================================================
++ python -u recon_eval.py -n promptmrp_0801_shared -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmrp_0801_shared_20260804_021456.txt
+Leaderboard SSIM_full : 0.9330
+Leaderboard SSIM_bbox : 0.9314
+Leaderboard Recon Time : 1632.24s (737.6 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9502   SSIM_full (acc8): 0.9159
+SSIM_bbox (acc4): 0.9512   SSIM_bbox (acc8): 0.9117
+Recon Time (acc4): 850.66s (746.2 ms/slice)   (acc8): 781.57s (728.4 ms/slice)
+Recon Time (total): 1632.24s
+==========================================================
+[DONE ] shell31_recon   2026-08-04 02:48:35   exit=0
+[저장] 점수: shell_scripting/results/recon_eval_promptmrp_0801_shared_20260804_021456.txt   (git add 해서 공유)
+==========================================================
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (promptmrp_0801_shared 채점 완료 (exit=0))

@@ -3,7 +3,7 @@
 # 목적: shell31_acc8more 를 MORE_EPOCH 만큼 이어서 학습 (--resume)          [shell31_acc8more_resume.sh]
 #       상수 LR 이라 check_resume_compat 이 -e 연장을 허용한다.
 #
-# 실행:  bash shell_scripting/shell31_acc8more_resume.sh              # acc8 · 4 epoch 더
+# 실행:  bash shell_scripting/shell31_acc8more_resume.sh              # acc8 · 5 epoch 더
 #        MORE_EPOCH=6 bash shell_scripting/shell31_acc8more_resume.sh
 #        ACC=4 LR=1e-5 bash shell_scripting/shell31_acc8more_resume.sh
 # ============================================================
@@ -14,7 +14,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR/.." || exit 1
 
 DATA_ROOT="$([ -d /workspace/Data ] && echo /workspace/Data || echo /root/Data)"
-ACC="${ACC:-8}"; LR="${LR:-5e-6}"; MORE="${MORE_EPOCH:-4}"
+ACC="${ACC:-8}"; LR="${LR:-5e-6}"; MORE="${MORE_EPOCH:-5}"
 NET="promptmrp_0801_acc${ACC}_ext"
 
 [ -e "../result/$NET/checkpoints/model.pt" ] || [ -e "../result/$NET/checkpoints/latest.pt" ] || {

@@ -16,6 +16,7 @@ cd "$SCRIPT_DIR/.." || exit 1
 STAGE="${STAGE:-probe}"
 CHUNKS="${CHUNKS:-1 3 5 8 15}"          # 탐침할 코일 묶음 크기. 1 = 현재 baseline
 TRAIN_CHUNKS="${TRAIN_CHUNKS:-1 5}"     # 실학습 A/B 할 값
+REPS="${REPS:-3}"                       # 탐침 반복. 2% 급을 가르려면 10 이상
 ITERS="${ITERS:-60}"
 FOLD="${FOLD:-2}"
 PROBE_ACC="${PROBE_ACC:-8}"
@@ -44,12 +45,16 @@ if [ "$STAGE" = probe ]; then
     # 최악폭 W=480. chunk=1 이 shell32 기준선(peak 3.3GB)과 맞아야 나머지가 의미 있다.
     for K in $CHUNKS; do
         python scripts/probe_oom_promptmr.py --crop-h 384 --width 480 --coils 15 \
-            --with-optimizer --reps 3 --num-cascades 10 --n-history 3 \
+            --with-optimizer --reps "$REPS" --num-cascades 10 --n-history 3 \
             --n-feat0 48 --sens-n-feat0 24 --sens-chunk "$K" 2>&1 | tee -a "$OUT/probe.txt"
     done
     echo
-    echo "===== chunk 별 fwdbwd · peak (W=480) ====="
-    grep -E '^(OK|OOM)' "$OUT/probe.txt" | column -t
+    echo "===== chunk 별 fwdbwd · peak (W=480, reps=$REPS) ====="
+    awk '/^(OK|OOM)/ { s=t=p="-"
+            for (i=1; i<=NF; i++) { split($i, kv, "=")
+                if (kv[1]=="schunk") s=kv[2]; else if (kv[1]=="fwdbwd") t=kv[2]
+                else if (kv[1]=="peak") p=kv[2] }
+            printf "%-4s chunk=%-3s %-8s %s\n", $1, s, t, p }' "$OUT/probe.txt"
 else
     for K in $TRAIN_CHUNKS; do
         NET="schunk${K}_f${FOLD}"

@@ -2,6 +2,112 @@
 
 `promptmrp_GMG_final_0807` — 체크포인트는 `../result/promptmrp_GMG_final_0807_{shared,acc4,acc8}/`.
 
+## Learning Rate 스케줄
+
+세 단계 모두 base **2e-4**, 하한 **1.8e-5**(= base × 0.09).
+[build_scheduler](../utils/learning/train_part.py#L243) 가 이미 이 모양을 그린다 —
+`[0, warmup)` linear → `[warmup, decay_start)` base 유지 → 거기서 끝까지 cosine.
+
+### shared — 30 epoch
+
+- **0~5 epoch**: 2e-4 고정 (warmup 없음)
+- **5~30 epoch**: cosine decay, 하한 1.8e-5
+
+`-e 30 -l 2e-4 --lr-decay-start-epoch 5 --lr-min-factor 0.09`
+
+### expert acc8 — 20 epoch (전역 30~50)
+
+⚠️ **epoch 번호가 두 가지로 돈다.** 사람은 전역(shared 0~30 → expert 30~50)으로 세고,
+`train.py` 의 `--lr-decay-start-epoch` 은 그 단계 안에서 0부터 세는 **로컬** 값을 받는다.
+전역에서 2 빼려면 로컬에서도 2를 뺀다 — 아래 표의 두 열이 같은 지점이다.
+
+| 구간 | 전역 | 로컬 | LR |
+|---|---|---|---|
+| linear warm-up | 30~33 | 0~3 | → 2e-4 |
+| 유지 | 33~**38** | 3~**8** | 2e-4 (5 epoch) |
+| cosine decay | **38**~50 | **8**~20 | → 1.8e-5 (12 epoch) |
+
+`-e 20 -l 2e-4 --warmup-iters 6537 --lr-decay-start-epoch 8 --lr-min-factor 0.09`
+
+**변경 이력.** 원안은 decay 시작이 전역 40(로컬 10)이었고 2026-08-07 에 **38** 로 앞당겼다.
+그만큼 상수 구간이 줄어 사진의 "10 epoch 유지" 가 **5 epoch 유지**가 된다 — 줄어든 5 epoch 이
+decay 쪽으로 넘어가 감쇠가 7 → 12 epoch 으로 길어진다. 총 20 epoch 은 그대로다.
+
+⚠️ `--warmup-iters` 는 epoch 이 아니라 **optimizer-step 단위**다
+([train_part.py:248](../utils/learning/train_part.py#L248)). 전문가 단계는
+`--max-iters 2179` · `--accum-steps 1` 이므로 3 epoch = 3 × 2179 = **6537**.
+`--max-iters` 나 `--accum-steps` 를 바꾸면 이 숫자도 같이 바꿔야 한다.
+
+### expert acc4 — 10 epoch (전역 30~40)
+
+스케줄 미정. acc8 의 warm-up → 유지 → decay 모양을 10 epoch 에 맞춰 줄일지,
+따로 정할지 결정이 필요하다.
+
+⚠️ **acc8 의 "전역 38" 을 그대로 가져오면 안 된다.** acc4 는 전역 40 에서 끝나므로 38 부터
+감쇠하면 decay 가 2 epoch 뿐이다. acc4 는 **로컬 비율로** 옮기는 게 맞다 — acc8 이
+warm-up 15% · 유지 25% · decay 60% 이니 10 epoch 이면 로컬 1.5 / 4 / 10 쯤이다.
+
+### early stopping — shared 8 · 전문가 6 · tail 0
+
+| 런 | `--early-stop-patience` | 근거 |
+|---|---|---|
+| shared (30 ep) | **8** | 상수 LR 구간 5 + 여유 3 |
+| expert acc4 · acc8 본체 | **6** | 상수 LR 구간 5 + 작은 val(20 vol · 540 slice) 몫 |
+| hold-out tail (2 ep) | **0** | val 이 계기판 역할을 못 한다 |
+
+**끄지 않는 이유.** 12.9일짜리 런에 자동 중단 장치가 하나도 없는 상태는 위험하다. `0=off`
+([train.py:77](../train.py#L77))이고, 발동해도 `best_model.pt` 는 이미 저장돼 있어 잃는 게 없다.
+
+**shell31 값(shared 6 · 전문가 3)을 그대로 쓰면 안 된다.** 특히 전문가의 3은 상수 LR 구간
+5 epoch(로컬 3~8) **안에서 발동할 수 있다.** 이 스케줄은 상수 구간에서 val 이 몇 epoch
+평평하다가 cosine 이 시작되면서 떨어지는 게 설계 의도라, patience 가 그 구간보다 짧으면
+정상 동작 중인 런을 죽인다.
+
+**과적합 보험이 아니다.** 12 epoch shared 런은 12 epoch 전부가 NewRecord 였고 val 이 한 번도
+반등하지 않았다 — 우리 조건에서 과적합은 아직 관측된 적이 없다. 위 값들은 "발동 안 하는 게
+정상, 8번 연속 안 좋아지면 진짜 사고" 라는 뜻의 바닥이다.
+
+**tail 은 반드시 0.** 그 구간의 val loss 는 방금 학습한 데이터를 재는 값이라 개선/비개선
+판정 자체가 성립하지 않는다(아래 "hold-out 을 막판에 학습에 합치기" 의 체크포인트 선택과 같은 이유).
+
+### 학습 스크립트를 단계별로 분리
+
+전문가 단계는 `train.py` 에 플래그를 얹지 말고 **파일을 따로 만든다.**
+
+- `train_expert_acc8.py`
+- `train_expert_acc4.py`
+
+### augmentation 코드도 단계별로 분리
+
+증강 설정은 **유지**한다(아래 "현재 값"이 그대로 최종값이다). 바꾸는 건 코드 배치뿐 —
+shared · expert acc4 · expert acc8 이 **각자의 augmentation 파일**을 쓰게 셋으로 나눈다.
+
+**현재 값(그대로 옮길 것).**
+
+| | flip | 마스크 |
+|---|---|---|
+| shared | `--aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0` | `--mask-aug full` |
+| expert acc4 | 위와 동일 | `--remask 4` + `--mask-aug offset` |
+| expert acc8 | 위와 동일 | `--remask 8` + `--mask-aug offset` |
+
+**지금 어디에 흩어져 있나.** 나눌 대상은 세 곳이다 —
+[transforms.py](../utils/data/transforms.py) 의 `MRIAugmentor`(flip·스케줄, 203행) ·
+`mask_aug_acc`/`remask_offset`/`equispaced_mask` 와 `DataTransform.__call__` 의 마스크 재생성
+블록([470행](../utils/data/transforms.py#L470)), 그리고 이것들을 엮는
+[load_data.py:266-368](../utils/data/load_data.py#L266).
+
+**걸리는 것 둘.**
+
+- `mask_aug` 는 resume 시 **일치를 강제하는 필드**다
+  ([train_part.py:305](../utils/learning/train_part.py#L305)). 나누면서 저장되는 args 의
+  **필드 이름이 바뀌면 기존 체크포인트에서 `--resume`·`--init-from` 이 막힌다.**
+  값도 이름도 그대로 두고 코드 위치만 옮길 것.
+- 전문가의 `--mask-aug offset` 은 **지금 배선에서 no-op** 이다 —
+  [479행](../utils/data/transforms.py#L479)이 `--remask-offset` 기본값 `uniform` 아래에서는
+  `--mask-aug` 유무와 무관하게 같은 `remask_offset(...)` 로 떨어진다(offset 재추첨은
+  `--remask` 가 이미 하고 있다). 나누면서 "이건 안 쓰네" 하고 지우면 위의 resume 이 깨진다.
+  이름값을 못 해도 남겨둘 것.
+
 ## 시간 절약 전략 (학습시)
 
 ### `UpBlock.up` 의 못 끄는 checkpoint
@@ -122,6 +228,9 @@ conv 계산법은 GEMM·FFT·Winograd 등 여러 가지고 빠를수록 workspac
 기본값([promptmr_plus.py:561](../utils/model/promptmr/promptmr_plus.py#L561))이고, 우리가
 8GB 때문에 10·3 으로 줄여 쓰던 것을 되돌리는 방향이다. 작년 수상 두 팀도 원본 config 를 썼다.
 
+2026-08-07 **재확인** — "아키텍처 무변경" 안을 검토했다가 기각했다. 바꾸는 건 이 둘뿐이고
+**폭 48 · 감도맵 24 · adj 1 은 그대로** 다.
+
 **VRAM.** [shell36](shell36.sh) 실측(crop-h 384 · W 368 · C15 · `--with-optimizer`):
 
 | cascade | n_history | param | fwd+bwd | probe peak |
@@ -139,8 +248,18 @@ cascade 는 VRAM +0.26GB 에 시간 +0.51s 다. history 버퍼가 cascade 를 �
 가산으로 보면 12:11 의 실학습 peak 는 **6.5GB 근처**. 학습셋 최대 폭 480 짜리 파일에서
 더 붙으므로 첫 epoch `[mem]` 줄을 반드시 확인할 것.
 
-**시간.** slice 당 4.71s → 5.51s(×1.17). 1 epoch 5.90h → **6.9h**, shared 50 epoch 이
-295h → **345h(14.4일)** 가 된다.
+**시간.** slice 당 4.71s → 5.51s(×1.17). 확정된 30/20/10 배분에 곱하면 이렇게 된다
+(무변경 열은 shell31 실측 — shared 1 epoch 5.89h · expert 1 epoch 2.93h):
+
+| 단계 | epoch | 10:3 (무변경) | **12:11** |
+|---|---|---|---|
+| shared | 30 | 176.7h | **207h** |
+| expert acc8 | 20 | 58.6h | **68.6h** |
+| expert acc4 | 10 | 29.3h | **34.3h** |
+| **합** | 60 | 264.6h (11.0일) | **310h (12.9일)** |
+
+용량 상향의 값은 **+45h ≈ 1.9일**이다. 8/7 에 시작하면 종료가 8/18 이 아니라 **8/20** 이므로
+남은 대회 일정이 이걸 감당하는지 먼저 확인할 것.
 
 **⚠️ 반대 증거 — 같은 시간을 주면 작은 arm 이 이겼다.**
 [shell32](shell32.sh) 가 벽시계 시간을 맞추고(train 약 2820s) 잰 값이다.
@@ -152,9 +271,13 @@ cascade 는 VRAM +0.26GB 에 시간 +0.51s 다. history 버퍼가 cascade 를 �
 | 10:11:48 | 568 | 0.145 |
 
 같은 시간이면 작은 모델이 iter 를 더 밟아 이긴다는 뜻이다. 다만 **1 epoch·600 iter·scratch**
-라 전체 2179 iter 의 27% 이고, 용량의 이득은 늦게 나오는 성질이라 50 epoch 에서 뒤집힐
+라 전체 2179 iter 의 27% 이고, 용량의 이득은 늦게 나오는 성질이라 30 epoch 에서 뒤집힐
 여지가 있다. 노이즈 바닥도 안 쟀다. **그래도 이 축의 유일한 직접 측정은 "작은 쪽이 이겼다"
-이므로, 용량을 올리는 건 그 측정을 뒤집는 데 50 epoch 을 거는 선택이라는 걸 알고 갈 것.**
+이므로, 용량을 올리는 건 그 측정을 뒤집는 데 30 epoch 을 거는 선택이라는 걸 알고 갈 것.**
+
+**첫 epoch 에서 반드시 볼 것 둘.** ① `[mem]` 줄 — 예상 6.5GB 가 8GB 안에 실제로 들어가는지.
+② 1 epoch 소요 — 위 표의 6.9h 가 맞는지. 둘 중 하나라도 어긋나면 12일짜리 런이 시작부터
+어긋난 상태로 도는 것이라, 며칠 뒤가 아니라 **첫 epoch 끝에서** 판단해야 한다.
 
 ### EMA
 
@@ -234,15 +357,37 @@ config 에서 state_dict 1979키 중 431키가 중복이다.
 데이터로 재학습"인데 shared 30 epoch 이 200시간대라 재학습은 선택지가 아니다. 그래서 후반부만
 갈아타는 값싼 버전을 쓴다 — 그 전제를 알고 쓸 것.
 
-**언제 갈아타나.** 스케줄은 그대로 두고 마지막 구간만 hold-out 을 합쳐 돈다. 그 단계 예산의
-15~20%. 계획한 30/20/10 기준으로 acc8 은 16 + **4**, acc4 는 7 + **3**.
+**언제 갈아타나.** 스케줄은 그대로 두고 **마지막 2 epoch** 만 hold-out 을 합쳐 돈다 —
+acc8 은 18 + **2**, acc4 는 8 + **2**.
+
+**무엇을 얼마나 넣나.** 한 epoch 의 총 슬라이스는 지금과 같은 **2179 장**(`--max-iters 2179`)
+으로 고정한다. 그 안에 **hold-out 은 전부** 넣고, 모자란 만큼만 기존 train 풀에서 뽑는다.
+
+| | hold-out (전부) | train 에서 추출 | 합 |
+|---|---|---|---|
+| expert acc4 | 548 (20 vol) | 1631 / 4358 | 2179 |
+| expert acc8 | 536 (20 vol) | 1643 / 4358 | 2179 |
+
+슬라이스 수는 shell31 로그의 `[K-Fold]` 줄 실측이다 — train 160 vol · 4358 slice, val fold
+40 vol · 1084 slice(acc4 20 vol 548 · acc8 20 vol 536)
+([ACC4](logs/shell31_ACC4_20260804_024838.log#L8) · [ACC8](logs/shell31_ACC8_20260805_022840.log#L8)).
+
+**추출은 epoch 마다 다시 뽑는다.** 두 epoch 이 같은 1631 장을 보면 train 풀의 나머지 2727 장은
+tail 동안 아예 안 쓰인다. 매번 다시 뽑으면 tail 이 훑는 train 커버리지가 37% → **61%** 가 된다.
+
+⚠️ **hold-out 이 볼륨 지분(20/180 = 11%)의 2.3배인 25% 를 차지한다.** "전부 넣는다" 는 결정에서
+자동으로 따라오는 결과다 — 이 2 epoch 동안 hold-out 슬라이스는 정확히 **2회**, train 슬라이스는
+평균 **0.75회** 지나간다. 새 데이터를 확실히 보여주는 게 목적이니 의도한 대로지만, 이 구간은
+hold-out 쪽으로 기운 분포에서 도는 학습이라는 걸 알고 쓸 것.
 
 **어느 단계에.** acc8·acc4 전문가에만. shared 에 붙이면 그 뒤 전문가 단계가 다시 hold-out 뺀
 데이터로 돌면서 효과가 씻긴다. shared 는 초기값일 뿐이라 정직한 val 곡선을 남겨두는 쪽이 낫다.
 
 **LR.** 갈아타는 지점의 LR 을 그대로 이어받아 계속 내린다. 데이터가 바뀌었다고 다시 올리면 앞에서
-쌓은 걸 흔든다. 20 epoch cosine 의 16번째 지점이면 base 의 1/7 쯤 — 거기서 시작해 원래 하한까지
-가면 원래 곡선의 꼬리와 거의 겹친다.
+쌓은 걸 흔든다. acc8 스케줄(로컬 8→20 cosine · 하한 0.09×base)의 로컬 18(전역 48) 지점이면
+**3.0e-5**, base 의 1/7 쯤 — 거기서 원래 하한 1.8e-5 까지 가면 원래 곡선의 꼬리와 그대로 겹친다.
+LR 을 다시 올리자는 안은 기각했다: `--grad-clip 0.1` 이 스텝 대부분을 잘라 이동량이 LR 에 정비례하는데,
+tail 2 epoch 은 LR 을 어떻게 잡아도 전체 이동량의 **2~4%** 라 손대봐야 위험만 는다.
 
 **체크포인트 선택.** 갈아탄 순간부터 val loss 는 자기가 학습한 데이터를 재는 것이라 못 믿는다.
 그 구간에선 best 자동 선택도 early stopping 도 끄고 **마지막 epoch 을 쓴다.** 애초에 이 짓의
@@ -252,11 +397,14 @@ config 에서 state_dict 1979키 중 431키가 중복이다.
 지우지 말고 따로 남겨 둘 다 채점하고 이긴 쪽을 낸다. 데이터 20% 를 더 보는 게 항상 이득은 아니고,
 이 구간엔 그걸 판별할 계기판이 없으니 백업이 판별 장치를 대신한다.
 
-**비용.** 전문가 단계는 epoch 당 iter 가 `--max-iters` 로 묶여 있어 풀이 160→200 volume 이 돼도
-시간이 안 는다. 대신 그 상한 때문에 새로 들어온 볼륨이 tail 4 epoch 동안 평균 1.6번쯤만 지나간다 —
-얇다 싶으면 상한을 올리거나 epoch 을 늘리는데, 그건 시간을 쓰는 선택이다.
+**비용.** epoch 당 슬라이스를 2179 로 고정하므로 **학습 시간이 안 는다** — tail 2 epoch 은 지금
+전문가 2 epoch 과 같은 시간이다. 값은 시간이 아니라 train 풀에서 1631~1643 장이 빠지고 그 자리를
+hold-out 이 차지하는 것이다.
 
-**걸리는 것.** hold-out 을 학습에 넣는 스위치가 지금 코드에 없다
+**걸리는 것 둘.** hold-out 을 학습에 넣는 스위치가 지금 코드에 없다
 ([load_data.py](../utils/data/load_data.py) `kfold_split` 이 `train_ids = 전체 − val_ids` 고정).
-그리고 tail 은 별도 런으로 돌려야 기존 `best_model.pt` 를 안 건드린다 — `--init-from` 경로가
-이미 SHARED→ACC4/ACC8 전환에 쓰이고 있으니 같은 방식이면 된다.
+그리고 "train 풀에서 N 장만 뽑는다" 도 없다 — `--max-iters` 는 로더를 앞에서 자를 뿐이라
+**추출이 아니라 절단**이고, 여기서 필요한 건 epoch 마다 다시 뽑는 무작위 부분집합이다.
+
+tail 은 별도 런으로 돌려야 기존 `best_model.pt` 를 안 건드린다 — `--init-from` 경로가 이미
+SHARED→ACC4/ACC8 전환에 쓰이고 있으니 같은 방식이면 된다.

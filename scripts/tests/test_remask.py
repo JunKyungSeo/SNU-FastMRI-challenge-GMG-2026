@@ -223,7 +223,8 @@ def test_flip_decisions_unchanged_by_remask():
     flipped_T = T[:, ::-1]
 
     def flip_seq(remask_acc):
-        aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5, seed=430))
+        aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5, affine=False,  # flip 스트림 순수 탐침 — affine 추첨 제외
+                                         seed=430))
         dt = make_dt(remask_acc=remask_acc, augmentor=aug)
         dt.set_epoch(2)
         return [bool(np.array_equal(dt(m, K, T, make_attrs(), "knee_acc4_1.h5", i)[2].numpy(),

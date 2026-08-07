@@ -107,7 +107,7 @@ def parse():
     # ---- 증강 (좌우 flip 하나뿐). 기본 off = 기존 학습과 동일 ----
     #   스케줄은 공식 repo(MathFLDS/MRAugment) schedule_p와 동일 형태 — delay D + 총 epoch T 정규화.
     #   mask thinning·위상·노이즈는 2026-07-28 제거(strategy/augmentation.md §0).
-    parser.add_argument('--aug-on', action='store_true', help='좌-우(phase-encode) flip 증강 켜기. 기본 off면 기존 학습과 100%% 동일(비트 동일).')
+    parser.add_argument('--aug-on', action='store_true', help='증강 켜기 — 좌-우 flip + affine(회전·확대, --no-aug-affine로 제외). 기본 off면 기존 학습과 100%% 동일(비트 동일).')
     parser.add_argument('--aug-schedule', type=str, default='exp', choices=['exp', 'ramp', 'constant'],
                         help='증강 확률 스케줄. exp=지수 점증(공식 기본), ramp=선형, constant=고정')
     parser.add_argument('--aug-max-prob', type=float, default=0.55, help='p_max — 마지막 epoch에서의 증강 확률(논문 기본 0.55)')

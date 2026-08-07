@@ -13,16 +13,10 @@ iter 당 **75회 재계산** — up block 3개 × (감도맵 코일 15 + cascade
 | 출력·grad 차이 | 0.0 | 실측(CPU), 전 파라미터 bitwise 동일 |
 | 추론 시간 이득 | 없음 | `self.training` 게이트라 eval 에선 이미 안 걸린다 |
 
-## shell34.sh
-
-[shell33.sh](shell33.sh) 의 `STAGE=train` 을 베끼되 스윕 축만 on/off 로 바꾼다.
-같은 fold·seed 로 `--max-iters 60` 두 팔, s/iter 와 `[mem]` peak 비교. **+3% 미만이면 되돌린다.**
-
+잴 때 걸리는 것 둘:
 [test_checkpoint_equivalence.py](../scripts/tests/test_checkpoint_equivalence.py) 는 UpBlock
-wrapper 를 안 건드리므로 이 레버를 못 덮는다. 등가성을 걸려면 한 판을 새로 짜야 한다.
-
-Loss 는 같은 seed 라 앞자리가 같아야 정상이다. 비트 일치를 기준 삼지 말 것 —
-`nn.Upsample(bilinear)` 의 backward 가 CUDA 에서 atomicAdd 라 원래 실행마다 흔들린다.
+wrapper 를 안 건드리므로 이 레버를 못 덮는다. 그리고 GPU 에서는 비트 일치를 기준 삼을 수 없다 —
+`nn.Upsample(bilinear)` 의 backward 가 atomicAdd 라 원래 실행마다 흔들린다.
 
 ## 곁가지 — 추론의 감도맵 코일 루프
 

@@ -85,6 +85,14 @@ def parse():
     # MoE(acc4/acc8 분리) — 학습 땐 파일명 accN 토큰으로 acc를 골라 학습, 추론 땐 마스크로 라우팅(test_part).
     parser.add_argument('--acc', type=str, default='all', choices=['all', '4', '8'], help='학습 데이터를 가속률로 필터(파일명 accN 기준). all=전체. MoE expert 학습 시 4 또는 8.')
     parser.add_argument('--init-from', type=str, default='', help='Option C 미세조정: 지정한 체크포인트의 model 가중치만 로드해 초기화(optimizer/epoch은 새로 시작). --resume과 배타적(resume 우선).')
+    parser.add_argument('--holdout-tail', action='store_true',
+                        help='tail 런: train 로더에 hold-out(val fold) 볼륨까지 넣는다. epoch당 슬라이스 수는 '
+                             '본 런과 같게 유지되고(=min(--max-iters, 전체)), 그 안에 hold-out은 **전량**, '
+                             '나머지는 train 풀에서 epoch마다 새로 뽑아 섞는다. --k-fold 전용. '
+                             '기본 off = 기존 학습과 비트 동일. ⚠️ val 로더가 학습에 들어간 데이터를 재게 되므로 '
+                             'best_model.pt·early-stop·is_new_best가 전부 거짓말이다 — 마지막 epoch을 써야 하는데 '
+                             '채점부(test_part·merge_moe)는 best_model.pt만 읽는다. tail 슬롯 스크립트가 끝에서 '
+                             'model.pt의 EMA를 best_model.pt로 옮겨 준다(그냥 cp 하면 EMA가 버려진다).')
     # 마스크 재생성 — 학습풀 kspace가 full k-space라, 딸려온 마스크 대신 대회 생성기로 만든
     #   마스크를 곱하면 같은 볼륨을 반대 가속률로 쓸 수 있다(정답은 마스크 무관). 근거: augmentation.md §0.
     parser.add_argument('--remask', type=str, default='off', choices=['off', '4', '8'],
@@ -124,6 +132,8 @@ def parse():
         parser.error(f"--mask-aug full 과 --remask {args.remask} 는 모순이다. 하나는 가속률을 "
                      "4|8로 흔들고 다른 하나는 한 값으로 고정한다 — 전문가는 한 가속률만 봐야 한다. "
                      "위상만 흔들 거면 --mask-aug offset 을 쓴다.")
+    if args.holdout_tail and args.k_fold <= 0:
+        parser.error("--holdout-tail 은 --k-fold 와 함께 쓴다 (hold-out fold 가 없으면 넣을 게 없다).")
     return args
 
 if __name__ == '__main__':

@@ -27,25 +27,34 @@
 | 유지 | 33~**38** | 3~**8** | 2e-4 (5 epoch) |
 | cosine decay | **38**~50 | **8**~20 | → 1.8e-5 (12 epoch) |
 
-`-e 20 -l 2e-4 --warmup-iters 6537 --lr-decay-start-epoch 8 --lr-min-factor 0.09`
+`-e 20 -l 2e-4 --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.09`
 
 **변경 이력.** 원안은 decay 시작이 전역 40(로컬 10)이었고 2026-08-07 에 **38** 로 앞당겼다.
 그만큼 상수 구간이 줄어 사진의 "10 epoch 유지" 가 **5 epoch 유지**가 된다 — 줄어든 5 epoch 이
 decay 쪽으로 넘어가 감쇠가 7 → 12 epoch 으로 길어진다. 총 20 epoch 은 그대로다.
 
-⚠️ `--warmup-iters` 는 epoch 이 아니라 **optimizer-step 단위**다
-([train_part.py:248](../utils/learning/train_part.py#L248)). 전문가 단계는
-`--max-iters 2179` · `--accum-steps 1` 이므로 3 epoch = 3 × 2179 = **6537**.
-`--max-iters` 나 `--accum-steps` 를 바꾸면 이 숫자도 같이 바꿔야 한다.
+⚠️ `--warmup-iters` 는 epoch 도 데이터로더 iter 도 아닌 **optimizer-step 단위**다
+([train_part.py:248](../utils/learning/train_part.py#L248)). epoch 당 optimizer step =
+`ceil(min(--max-iters, 4358) / --accum-steps)` = `ceil(2179/2)` = **1090** 이므로
+3 epoch = 3 × 1090 = **3270**. `--max-iters` 나 `--accum-steps` 를 바꾸면 같이 바꿀 것.
+
+(2026-08-07 정정 — 이 자리에 `--accum-steps 1` 로 계산한 6537 이 적혀 있었다. 실제 BASE_ARGS 는
+`--accum-steps 2` 라 6537 이면 warm-up 이 3 epoch 이 아니라 **6 epoch** 으로 늘어난다.)
 
 ### expert acc4 — 10 epoch (전역 30~40)
 
-스케줄 미정. acc8 의 warm-up → 유지 → decay 모양을 10 epoch 에 맞춰 줄일지,
-따로 정할지 결정이 필요하다.
+acc8 의 비율(warm-up 15% · 유지 25% · decay 60%)을 10 epoch 에 맞춰 축소한다.
+
+| 구간 | 전역 | 로컬 | LR |
+|---|---|---|---|
+| linear warm-up | 30~32 | 0~2 | → 2e-4 |
+| 유지 | 32~34 | 2~4 | 2e-4 |
+| cosine decay | 34~40 | 4~10 | → 1.8e-5 |
+
+`-e 10 -l 2e-4 --warmup-iters 2180 --lr-decay-start-epoch 4 --lr-min-factor 0.09`
 
 ⚠️ **acc8 의 "전역 38" 을 그대로 가져오면 안 된다.** acc4 는 전역 40 에서 끝나므로 38 부터
-감쇠하면 decay 가 2 epoch 뿐이다. acc4 는 **로컬 비율로** 옮기는 게 맞다 — acc8 이
-warm-up 15% · 유지 25% · decay 60% 이니 10 epoch 이면 로컬 1.5 / 4 / 10 쯤이다.
+감쇠하면 decay 가 2 epoch 뿐이다. 그래서 절대 지점이 아니라 비율로 옮겼다.
 
 ### early stopping — shared 8 · 전문가 6 · tail 0
 
@@ -70,31 +79,60 @@ warm-up 15% · 유지 25% · decay 60% 이니 10 epoch 이면 로컬 1.5 / 4 / 1
 **tail 은 반드시 0.** 그 구간의 val loss 는 방금 학습한 데이터를 재는 값이라 개선/비개선
 판정 자체가 성립하지 않는다(아래 "hold-out 을 막판에 학습에 합치기" 의 체크포인트 선택과 같은 이유).
 
-### 학습 스크립트를 단계별로 분리
+### 학습 스크립트 — 완료
 
-전문가 단계는 `train.py` 에 플래그를 얹지 말고 **파일을 따로 만든다.**
+단계마다 파일 하나. 위의 LR·early stop·증강 값이 전부 여기 박혀 있다.
 
-- `train_expert_acc8.py`
-- `train_expert_acc4.py`
+| 파일 | 단계 |
+|---|---|
+| [train_final_shared.sh](train_final_shared.sh) | shared 30 epoch |
+| [train_final_acc8.sh](train_final_acc8.sh) | acc8 전문가 20 epoch |
+| [train_final_acc4.sh](train_final_acc4.sh) | acc4 전문가 10 epoch |
+| [train_final_tail_acc8.sh](train_final_tail_acc8.sh) | acc8 tail 2 epoch (hold-out 합침) |
+| [train_final_tail_acc4.sh](train_final_tail_acc4.sh) | acc4 tail 2 epoch (hold-out 합침) |
+| [_final_base.sh](_final_base.sh) | 공통 인자 + 실행 함수 + `promote_last_epoch` (슬롯 아님) |
 
-### augmentation 코드도 단계별로 분리
+실행 순서: `shared` → (`acc8`, `acc4`) → (`tail_acc8`, `tail_acc4`). tail 은 본 런의
+`best_model.pt` 에서 `--init-from` 으로 출발하는 **별도 net** 이라 본 런 가중치를 안 건드린다.
 
-증강 설정은 **유지**한다(아래 "현재 값"이 그대로 최종값이다). 바꾸는 건 코드 배치뿐 —
-shared · expert acc4 · expert acc8 이 **각자의 augmentation 파일**을 쓰게 셋으로 나눈다.
+다섯 스크립트 전부 `train.py` 의 실제 파서로 파싱해 값을 확인했다(스텁 python 으로 argv 를 떠서
+`parse()` 에 그대로 먹임). tail 은 `-l` 이 두 번 들어가는데(BASE_ARGS 2e-4 + 델타) argparse 가
+뒤를 채택하는 것까지 실측했다 — 앞이 이겼으면 tail 이 2e-4 로 도는 참사다.
 
-**현재 값(그대로 옮길 것).**
+공통 인자를 `_final_base.sh` 한 곳에 둔 이유는 **세 단계의 모델 인자가 같아야 `--init-from`
+이 성립**하기 때문이다. 세 파일에 복붙했다가 한쪽만 고치면 shape mismatch 로 죽는다.
 
-| | flip | 마스크 |
-|---|---|---|
-| shared | `--aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0` | `--mask-aug full` |
-| expert acc4 | 위와 동일 | `--remask 4` + `--mask-aug offset` |
-| expert acc8 | 위와 동일 | `--remask 8` + `--mask-aug offset` |
+~~`train_expert_acc4.py` / `train_expert_acc8.py`~~ — 위 `.sh` 가 같은 역할을 이미 해서
+2026-08-07 에 안 만들기로 했다. Python 쪽은 `train.py` 하나를 계속 쓴다.
 
-**지금 어디에 흩어져 있나.** 나눌 대상은 세 곳이다 —
-[transforms.py](../utils/data/transforms.py) 의 `MRIAugmentor`(flip·스케줄, 203행) ·
-`mask_aug_acc`/`remask_offset`/`equispaced_mask` 와 `DataTransform.__call__` 의 마스크 재생성
-블록([470행](../utils/data/transforms.py#L470)), 그리고 이것들을 엮는
-[load_data.py:266-368](../utils/data/load_data.py#L266).
+### augmentation 코드도 단계별로 분리 — 완료
+
+단계마다 파일 하나. `_final_base.sh` 의 `run_final` 이 `"${AUG_ARGS[@]}"` 로 끼워 넣는다.
+
+| 파일 | 값 |
+|---|---|
+| [_aug_shared.sh](_aug_shared.sh) | flip 공통 + `--mask-aug full` |
+| [_aug_acc4.sh](_aug_acc4.sh) | flip 공통 + `--remask 4` + `--mask-aug offset` |
+| [_aug_acc8.sh](_aug_acc8.sh) | flip 공통 + `--remask 8` + `--mask-aug offset` |
+
+flip 공통 = `--aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0` (세 파일에 복붙.
+빼내면 파일이 4개가 되는데 아낀 건 4토큰뿐이다).
+
+**Python 은 안 나눴다.** 세 단계의 증강 *로직* 은 완전히 같고 값 6개만 다르다 →
+[transforms.py](../utils/data/transforms.py) 의 `MRIAugmentor`·마스크 재생성 블록과
+[load_data.py:266-368](../utils/data/load_data.py#L266) 은 그대로 두고, 갈라지는 **값 선언만**
+셋으로 뺐다. Python 모듈 셋으로 만들면 CLI 와 preset 이 같은 값을 두 곳에서 정하게 되거나
+`MRIAugmentor` 껍데기 셋이 남는다. `.sh` 로 나눈 건 `shell26.sh:113` 의 `AUG_COMMON=(...)`
+과 같은 관용구다.
+
+호출부가 `source` 를 빼먹으면 `run_final` 이 `[STOP] AUG_ARGS 없음` 으로 즉사한다(실측).
+`set -u` 에 기대지 않고 명시 가드(`[ -n "${AUG_ARGS+x}" ]`)를 둔 이유는 **bash 4.4 부터
+빈 배열의 `"${a[@]}"` 가 `set -u` 위반에서 빠졌기** 때문이다 — 여기(macOS 3.2)와
+서버(Linux 5.x)의 동작이 같다는 근거가 없는데, 증강이 조용히 빠진 채 12일을 도는 사고는
+로그로도 안 잡힌다.
+
+동결 테스트: `python3 -m pytest scripts/tests/test_final_stage_args.py -q`
+— 스텁 `python` 을 PATH 앞에 두고 세 스크립트를 실제로 돌려 증강 인자를 잡아 위 표와 대조한다.
 
 **걸리는 것 둘.**
 
@@ -393,6 +431,16 @@ tail 2 epoch 은 LR 을 어떻게 잡아도 전체 이동량의 **2~4%** 라 손
 그 구간에선 best 자동 선택도 early stopping 도 끄고 **마지막 epoch 을 쓴다.** 애초에 이 짓의
 전제가 "epoch 수는 앞의 hold-out 구간에서 이미 정했다" 이므로 마지막을 쓰는 게 맞다.
 
+⚠️ **그런데 "마지막 epoch 을 쓴다" 가 그냥은 안 된다.** 채점·병합부는 `best_model.pt` 만 읽는데
+([test_part.py:52·143](../utils/learning/test_part.py#L52) · `recon_eval.py` 는 경로 플래그 자체가
+없다 · [merge_moe.py:30](../scripts/merge_moe.py#L30)), 마지막 epoch 은 `model.pt` 에만 있다.
+그리고 `cp model.pt best_model.pt` 는 **EMA 를 조용히 버린다** — `save_model` 이
+`model.pt['model']` 에는 원본 θ 를, `best_model.pt['model']` 에는 θ_EMA 를 넣기 때문이다
+([train_part.py:385-403](../utils/learning/train_part.py#L385)). 그대로 복사하면 0.9336 을 포함한
+기존 점수가 전부 θ_EMA 기준이었는데 **다른 물건**을 제출하게 되고, 로그 어디에도 안 나타난다.
+→ `_final_base.sh` 의 `promote_last_epoch` 이 `model.pt['ema']['shadow']` 를 `best_model.pt` 로
+옮긴다. tail 슬롯이 학습 성공 시 자동으로 부른다.
+
 **판정.** leaderboard 로만 — 학습에 안 넣고 남겨둔 유일한 정직한 자다. 갈아타기 **전** 가중치를
 지우지 말고 따로 남겨 둘 다 채점하고 이긴 쪽을 낸다. 데이터 20% 를 더 보는 게 항상 이득은 아니고,
 이 구간엔 그걸 판별할 계기판이 없으니 백업이 판별 장치를 대신한다.
@@ -401,10 +449,17 @@ tail 2 epoch 은 LR 을 어떻게 잡아도 전체 이동량의 **2~4%** 라 손
 전문가 2 epoch 과 같은 시간이다. 값은 시간이 아니라 train 풀에서 1631~1643 장이 빠지고 그 자리를
 hold-out 이 차지하는 것이다.
 
-**걸리는 것 둘.** hold-out 을 학습에 넣는 스위치가 지금 코드에 없다
-([load_data.py](../utils/data/load_data.py) `kfold_split` 이 `train_ids = 전체 − val_ids` 고정).
-그리고 "train 풀에서 N 장만 뽑는다" 도 없다 — `--max-iters` 는 로더를 앞에서 자를 뿐이라
-**추출이 아니라 절단**이고, 여기서 필요한 건 epoch 마다 다시 뽑는 무작위 부분집합이다.
+**배선 — 완료 (`--holdout-tail`).** `HoldoutTailSampler`
+([load_data.py](../utils/data/load_data.py))가 hold-out 전량 + 풀에서 `n − hold` 무작위를 뽑아
+섞는다. `n` 은 `--max-iters` 에서 **유도**한다(그 값을 절단 장치로 쓰지 않는다 —
+`len(loader) ≤ max_iters` 라 `train_epoch` 의 break 가 안 걸려서, epoch 전체에 흩어진 hold-out 이
+잘려나갈 일이 없다). epoch 마다 재추첨되는 건 샘플러가 `DataLoader.generator` 를 **공유**하고
+`train()` 이 epoch 마다 `manual_seed(seed + epoch)` 를 부르기 때문 — 별도 epoch 배선이 0줄이다.
 
-tail 은 별도 런으로 돌려야 기존 `best_model.pt` 를 안 건드린다 — `--init-from` 경로가 이미
-SHARED→ACC4/ACC8 전환에 쓰이고 있으니 같은 방식이면 된다.
+검증: `python3 -m pytest scripts/tests/test_holdout_tail.py -q` (6개, GPU·데이터 불필요).
+플래그 off 면 `RandomSampler` 로 되돌아가 기존 경로와 동일한 것까지 본다.
+
+⚠️ **`--max-iters` 를 바꿔서 재개하지 말 것.** `n` 이 샘플러가 섞는 **순열의 길이**라 1만 달라져도
+epoch 구성이 통째로 바뀐다 — 중간 재개가 다른 순열에서 `skip_iters` 를 세어 hold-out 을 두 번 보거나
+아예 안 본다. `--holdout-tail` 이면 `max_iters` 도 resume 일치 필드에 넣어 막아뒀다
+([train_part.py](../utils/learning/train_part.py#L320)). 상수 LR 이라 원래는 가드 밖이었다.

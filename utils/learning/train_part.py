@@ -299,10 +299,12 @@ def check_resume_compat(saved_args, args):
                       "k_fold": 0, "val_fold": 0, "kfold_seed": 430,
                       "remask": "off", "remask_offset": "uniform", "l1_weight": 0.0,
                       "lr_decay_start_epoch": -1, "lr_min_factor": 0.0,
-                      "mask_aug": "off", "early_stop_patience": 0, "max_iters": 0}
+                      "mask_aug": "off", "early_stop_patience": 0, "max_iters": 0,
+                      "holdout_tail": False}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
               "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold",
-              "remask", "l1_weight", "lr_decay_start_epoch", "lr_min_factor", "mask_aug"]
+              "remask", "l1_weight", "lr_decay_start_epoch", "lr_min_factor", "mask_aug",
+              "holdout_tail"]
     # early_stop_patience는 일부러 뺐다 — 학습 결과를 바꾸지 않으므로 재개하면서 조정할 수 있어야 쓸모가 있다.
     # ⚠️ 위 필드명은 argparse dest 와 **글자 그대로 같아야** 한다. 어긋나면 getattr 이 양쪽 다
     #    ABSENT_DEFAULT 를 집어 항상 일치 → 가드가 영구 no-op 이 된다(조용히 학습셋이 바뀐 채 재개).
@@ -315,6 +317,12 @@ def check_resume_compat(saved_args, args):
         # max_iters도 horizon이다 — total_iters = num_epochs * ceil(steps_per_epoch(args,len)/accum)
         # 이라 --max-iters를 바꿔 재개하면 곡선과 fast-forward 눈금이 함께 어긋난다.
         fields += ["num_epochs", "max_iters"]
+    # --holdout-tail이면 상수 LR(=위 조건 거짓)이라도 max_iters를 묶는다. 그 값이 곧 샘플러의 n이고
+    # n은 HoldoutTailSampler가 섞는 순열의 **길이**라, 1만 달라져도 epoch 구성이 통째로 바뀐다
+    # → 중간 재개가 다른 순열에서 skip_iters를 세어 hold-out을 두 번 보거나 아예 안 보게 된다.
+    # (RandomSampler 시절엔 max_iters가 뒤를 자르기만 해서 무해했다.)
+    elif getattr(saved_args, "holdout_tail", False) or getattr(args, "holdout_tail", False):
+        fields += ["max_iters"]
     # n_virtual_coils는 압축이 켜져 있을 때만 입력에 영향을 준다. 압축 off끼리 재개하는데
     # 죽은 값이 다르다고 막으면 헛돈다(코일 전부 사용이 기본이 된 뒤로는 이 경우가 정상 경로다).
     if getattr(saved_args, "coil_compress", False) or getattr(args, "coil_compress", False):

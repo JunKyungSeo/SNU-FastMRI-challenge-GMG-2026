@@ -5,7 +5,7 @@ import torch
 from utils.data.transforms import (
     DataTransform, MRIAugmentor, AugmentConfig, equispaced_mask, canonical_offset,
 )
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.utils.data._utils.collate import default_collate
 from pathlib import Path
 import numpy as np
@@ -247,8 +247,33 @@ def verify_remaskable(dataset):
           f"(생성기 비트 재현 · full k-space" + (f" · non-canonical offset {noncanon}개)" if noncanon else ")"))
 
 
+class HoldoutTailSampler(Sampler):
+    """hold-out 전량 + train 풀에서 (n − hold-out)개 무작위 추출 → 둘을 섞어 n개.
+
+    epoch 마다 다시 뽑히는 근거: train_part.train() 이 epoch 마다
+    train_loader.generator.manual_seed(seed + epoch) 를 부르고, 이 샘플러가 그 generator 를
+    **공유**한다. set_epoch 같은 별도 배선이 없는 이유다(따로 만든 generator 를 주면 재추첨이
+    조용히 사라져 두 epoch 이 같은 부분집합을 본다).
+    n ≤ hold-out 개수인 퇴화 상황에서는 hold-out 에서 n 개만 낸다 — __len__ 과 실제 개수가
+    어긋나면 스케줄러 horizon 이 거짓말을 한다.
+    """
+
+    def __init__(self, hold, pool, n, generator):
+        self.hold, self.pool, self.n, self.generator = hold, pool, n, generator
+
+    def __len__(self):
+        return self.n
+
+    def __iter__(self):
+        k = max(0, self.n - len(self.hold))
+        drawn = torch.randperm(len(self.pool), generator=self.generator)[:k].tolist()
+        idx = self.hold + [self.pool[i] for i in drawn]
+        order = torch.randperm(len(idx), generator=self.generator).tolist()
+        return iter([idx[i] for i in order][:self.n])
+
+
 def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, volumes=None,
-                        acc_override=None):
+                        acc_override=None, holdout=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -385,10 +410,25 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         generator = torch.Generator()
         generator.manual_seed(int(seed))
 
+    # --holdout-tail: hold-out(val fold) 볼륨까지 학습에 넣되 epoch 당 슬라이스 수는 본 런과 같게 둔다.
+    #   n 은 --max-iters 에서 **유도**한다(그 수를 절단 장치로 쓰는 게 아니라 숫자만 빌린다) —
+    #   len(loader) ≤ max_iters 라 train_epoch 의 break 가 안 걸리고, 그래서 epoch 전체에 흩어진
+    #   hold-out 이 무작위로 잘려나갈 일이 없다. generator 는 DataLoader 와 **같은 객체**를 준다.
+    sampler = None
+    if holdout:
+        hold = [i for i, e in enumerate(data_storage.examples) if e[3] in holdout]
+        pool = [i for i, e in enumerate(data_storage.examples) if e[3] not in holdout]
+        mi = int(getattr(args, "max_iters", 0))
+        n = min(mi, len(data_storage)) if mi > 0 else len(data_storage)
+        sampler = HoldoutTailSampler(hold, pool, n, generator)
+        print(f"[holdout-tail] epoch당 {n} slice = hold-out {len(hold)} 전량 + "
+              f"train 풀 {len(pool)} 중 {max(0, n - len(hold))} 무작위 (epoch마다 재추첨)")
+
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
-        shuffle=shuffle,
+        shuffle=(shuffle and sampler is None),   # sampler 와 shuffle 은 배타(DataLoader 가 거부)
+        sampler=sampler,
         num_workers=num_workers,
         worker_init_fn=_worker_init_fn if num_workers > 0 else None,
         generator=generator,
@@ -501,9 +541,17 @@ def create_kfold_data_loaders(args):
     remask = str(getattr(args, "remask", "off"))
     val_acc = None if remask in ("off", "") else remask
 
-    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, volumes=train_ids)
+    # val 로더를 **먼저** 만든다 — --holdout-tail 의 hold-out 집합을 그 로더의 실제 구성에서
+    #   그대로 꺼내려고(acc_override 필터까지 반영된 볼륨 목록 = 중복 판정 로직 0줄).
+    #   순서를 되돌리면 holdout 이 빈 채로 train 로더가 만들어져 기능이 조용히 사라진다.
+    #   val 로더는 그대로 hold-out 만 본다(계기판 역할은 tail 런에서 어차피 포기).
     val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, volumes=val_ids,
                                      acc_override=val_acc)
+    holdout = ({e[3] for e in val_loader.dataset.examples}
+               if getattr(args, "holdout_tail", False) else None)
+    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True,
+                                       volumes=(train_ids | holdout) if holdout else train_ids,
+                                       holdout=holdout)
 
     def _vols(loader):
         """로그를 분할집합이 아니라 **로더의 실제 구성**에서 뽑는다 — acc_override 로 val 이

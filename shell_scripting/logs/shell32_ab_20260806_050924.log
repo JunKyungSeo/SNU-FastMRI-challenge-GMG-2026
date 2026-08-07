@@ -1,0 +1,110 @@
+==========================================================
+[START] shell32   2026-08-06 05:09:24   STAGE=ab
+[BR   ] jkMRplus (107069f)
+[CONF ] 기준선 nc10 nh3 nf48/sens24 · fold=2 acc=8 · data=/root/Data
+[LOG  ] shell_scripting/logs/shell32_ab_20260806_050924.log
+==========================================================
+[GPU  ] NVIDIA GeForce GTX 1080, 8192 MiB  used=2MiB
+
+=== 성능 A/B — 같은 벽시계 시간을 주고 ValLoss 비교 ===
+    (iter 를 맞추면 느린 모델에 조용히 더 많은 연산을 주는 셈이라 결과가 부풀려진다)
+
+---------- arm 10:3:48  (iter=600) ----------
++ python train.py --model promptmr --readout-crop -b 1 -l 2e-4 -r 20 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-cascades 10 --n-history 3 --n-feat0 48 --sens-n-feat0 24 -e 1 --max-iters 600 -n lever_ab_10_3_48 --run-tag lever_ab_10_3_48
++ tee shell_scripting/results/lever_20260806_050924/lever_ab_10_3_48.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_ab_10_3_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1577 Time = 5.6244s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.0695 Time = 92.6394s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.121 Time = 93.8960s
+Epoch = [  0/  1] Iter = [  60/2163] Loss = 0.1802 Time = 93.9866s
+Epoch = [  0/  1] Iter = [  80/2163] Loss = 0.09616 Time = 95.2086s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.09578 Time = 93.3609s
+Epoch = [  0/  1] Iter = [ 120/2163] Loss = 0.1736 Time = 94.1806s
+Epoch = [  0/  1] Iter = [ 140/2163] Loss = 0.1146 Time = 93.5847s
+Epoch = [  0/  1] Iter = [ 160/2163] Loss = 0.0564 Time = 93.9476s
+Epoch = [  0/  1] Iter = [ 180/2163] Loss = 0.09012 Time = 94.2470s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1317 Time = 92.8635s
+Epoch = [  0/  1] Iter = [ 220/2163] Loss = 0.1467 Time = 94.0916s
+Epoch = [  0/  1] Iter = [ 240/2163] Loss = 0.1085 Time = 94.6086s
+Epoch = [  0/  1] Iter = [ 260/2163] Loss = 0.1842 Time = 94.8328s
+Epoch = [  0/  1] Iter = [ 280/2163] Loss = 0.1247 Time = 94.1208s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.08385 Time = 93.7413s
+Epoch = [  0/  1] Iter = [ 320/2163] Loss = 0.08263 Time = 93.9748s
+Epoch = [  0/  1] Iter = [ 340/2163] Loss = 0.09099 Time = 94.2361s
+Epoch = [  0/  1] Iter = [ 360/2163] Loss = 0.118 Time = 94.2301s
+Epoch = [  0/  1] Iter = [ 380/2163] Loss = 0.1828 Time = 93.2296s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.0877 Time = 94.2211s
+Epoch = [  0/  1] Iter = [ 420/2163] Loss = 0.1201 Time = 93.1852s
+Epoch = [  0/  1] Iter = [ 440/2163] Loss = 0.1754 Time = 94.9788s
+Epoch = [  0/  1] Iter = [ 460/2163] Loss = 0.1616 Time = 93.9739s
+Epoch = [  0/  1] Iter = [ 480/2163] Loss = 0.05852 Time = 93.8541s
+Epoch = [  0/  1] Iter = [ 500/2163] Loss = 0.1669 Time = 95.2754s
+Epoch = [  0/  1] Iter = [ 520/2163] Loss = 0.05015 Time = 94.1911s
+Epoch = [  0/  1] Iter = [ 540/2163] Loss = 0.1101 Time = 93.7228s
+Epoch = [  0/  1] Iter = [ 560/2163] Loss = 0.1019 Time = 93.9532s
+Epoch = [  0/  1] Iter = [ 580/2163] Loss = 0.08632 Time = 94.8689s
+[mem] epoch 0 peak allocated = 2.92GB / reserved = 4.53GB
+loss file saved! ../result/lever_ab_10_3_48/val_loss_log_lever_ab_10_3_48
+Epoch = [   0/   1] TrainLoss = 0.1018 ValLoss = 0.135 TrainTime = 2822.2513s ValTime = 352.7056s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.4484s
+
+---------- arm 10:11:48  (iter=568) ----------
++ python train.py --model promptmr --readout-crop -b 1 -l 2e-4 -r 20 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-cascades 10 --n-history 11 --n-feat0 48 --sens-n-feat0 24 -e 1 --max-iters 568 -n lever_ab_10_11_48 --run-tag lever_ab_10_11_48
++ tee shell_scripting/results/lever_20260806_050924/lever_ab_10_11_48.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_ab_10_11_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.2813 Time = 5.6514s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.07204 Time = 96.0781s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.1233 Time = 96.9694s
+Epoch = [  0/  1] Iter = [  60/2163] Loss = 0.1906 Time = 96.8720s
+Epoch = [  0/  1] Iter = [  80/2163] Loss = 0.1029 Time = 98.2530s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.1002 Time = 96.3628s
+Epoch = [  0/  1] Iter = [ 120/2163] Loss = 0.178 Time = 97.1227s
+Epoch = [  0/  1] Iter = [ 140/2163] Loss = 0.1168 Time = 96.5440s
+Epoch = [  0/  1] Iter = [ 160/2163] Loss = 0.05872 Time = 97.0329s
+Epoch = [  0/  1] Iter = [ 180/2163] Loss = 0.0919 Time = 97.3889s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1339 Time = 95.9791s
+Epoch = [  0/  1] Iter = [ 220/2163] Loss = 0.1508 Time = 97.1395s
+Epoch = [  0/  1] Iter = [ 240/2163] Loss = 0.1095 Time = 97.5773s
+Epoch = [  0/  1] Iter = [ 260/2163] Loss = 0.1859 Time = 97.8797s
+Epoch = [  0/  1] Iter = [ 280/2163] Loss = 0.1278 Time = 97.0828s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.089 Time = 97.0501s
+Epoch = [  0/  1] Iter = [ 320/2163] Loss = 0.08595 Time = 97.1133s
+Epoch = [  0/  1] Iter = [ 340/2163] Loss = 0.09503 Time = 97.3240s
+Epoch = [  0/  1] Iter = [ 360/2163] Loss = 0.1243 Time = 97.2832s
+Epoch = [  0/  1] Iter = [ 380/2163] Loss = 0.184 Time = 96.3002s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.09061 Time = 97.2343s
+Epoch = [  0/  1] Iter = [ 420/2163] Loss = 0.1221 Time = 96.1738s
+Epoch = [  0/  1] Iter = [ 440/2163] Loss = 0.1797 Time = 97.9731s
+Epoch = [  0/  1] Iter = [ 460/2163] Loss = 0.1665 Time = 97.0746s
+Epoch = [  0/  1] Iter = [ 480/2163] Loss = 0.06064 Time = 96.7522s
+Epoch = [  0/  1] Iter = [ 500/2163] Loss = 0.1713 Time = 98.4358s
+Epoch = [  0/  1] Iter = [ 520/2163] Loss = 0.05156 Time = 97.2313s
+Epoch = [  0/  1] Iter = [ 540/2163] Loss = 0.1137 Time = 96.8063s
+Epoch = [  0/  1] Iter = [ 560/2163] Loss = 0.09793 Time = 96.9734s
+[mem] epoch 0 peak allocated = 4.22GB / reserved = 5.80GB
+loss file saved! ../result/lever_ab_10_11_48/val_loss_log_lever_ab_10_11_48
+Epoch = [   0/   1] TrainLoss = 0.1051 ValLoss = 0.145 TrainTime = 2758.4179s ValTime = 372.7581s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.5636s
+
+===== arm 별 ValLoss (낮을수록 좋다) =====
+10:3:48      ValLoss = 0.135
+10:11:48     ValLoss = 0.145
+
+==========================================================
+[DONE ] shell32   2026-08-06 06:54:48   exit=0
+[저장] shell_scripting/results/lever_20260806_025056/probe.txt · arm 로그 shell_scripting/results/lever_20260806_050924/
+[판정] 천장 = OK 로 끝나는 가장 큰 값. 단 peak > 7.0GB 면 실학습엔 쓰지 말 것(폭 변동·단편화 여유).
+       메모리보다 시계가 먼저 막는다 — h/epoch 열을 보고 남은 대회 시간으로 자를 것.
+       파라미터가 크면 추론시간(점수항)도 손해다. SSIM 이 비슷하면 작은 쪽이 이긴다.
+[다음] 고른 config 는 resume 호환 필드라 처음부터 학습이다(--init-from 도 shape 로 죽는다).
+==========================================================

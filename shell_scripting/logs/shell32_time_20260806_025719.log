@@ -1,0 +1,57 @@
+==========================================================
+[START] shell32   2026-08-06 02:57:19   STAGE=time
+[BR   ] jkMRplus (5f7f47b)
+[CONF ] 기준선 nc10 nh3 nf48/sens24 · fold=2 acc=8 · data=/root/Data
+[LOG  ] shell_scripting/logs/shell32_time_20260806_025719.log
+==========================================================
+[GPU  ] NVIDIA GeForce GTX 1080, 8192 MiB  used=2MiB
+
+=== 실측: 탐침의 시간비가 진짜 학습에 그대로 옮겨지는지 ===
+
+---------- arm 10:3:48 ----------
++ python train.py --model promptmr --readout-crop -b 1 -l 2e-4 -r 20 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-cascades 10 --n-history 3 --n-feat0 48 --sens-n-feat0 24 -e 1 --max-iters 60 -n lever_t_10_3_48 --run-tag lever_t_10_3_48
++ tee shell_scripting/results/lever_20260806_025719/lever_t_10_3_48.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_t_10_3_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1577 Time = 5.5224s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.06951 Time = 93.4429s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.121 Time = 93.9507s
+[mem] epoch 0 peak allocated = 2.85GB / reserved = 4.03GB
+loss file saved! ../result/lever_t_10_3_48/val_loss_log_lever_t_10_3_48
+Epoch = [   0/   1] TrainLoss = 0.1142 ValLoss = 0.1617 TrainTime = 282.1793s ValTime = 352.8767s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.2787s
+
+---------- arm 12:11:48 ----------
++ python train.py --model promptmr --readout-crop -b 1 -l 2e-4 -r 20 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-cascades 12 --n-history 11 --n-feat0 48 --sens-n-feat0 24 -e 1 --max-iters 60 -n lever_t_12_11_48 --run-tag lever_t_12_11_48
++ tee shell_scripting/results/lever_20260806_025719/lever_t_12_11_48.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_t_12_11_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1736 Time = 6.2003s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.0676 Time = 108.0462s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.1231 Time = 108.8967s
+[mem] epoch 0 peak allocated = 4.62GB / reserved = 5.81GB
+loss file saved! ../result/lever_t_12_11_48/val_loss_log_lever_t_12_11_48
+Epoch = [   0/   1] TrainLoss = 0.1159 ValLoss = 0.1652 TrainTime = 326.4023s ValTime = 421.6874s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.5234s
+
+===== arm 별 s/iter · [mem] 실측 peak =====
+  (로그의 Time 은 iter 당이 아니라 -r 20 간격 동안의 합이다 → 나눠서 쓴다)
+10:3:48      4.70 s/iter · 2163 iter/ep → 2.8 h/ep · [mem] epoch 0 peak allocated = 2.85GB / reserved = 4.03GB
+12:11:48     5.44 s/iter · 2163 iter/ep → 3.3 h/ep · [mem] epoch 0 peak allocated = 4.62GB / reserved = 5.81GB
+
+==========================================================
+[DONE ] shell32   2026-08-06 03:20:42   exit=0
+[저장] shell_scripting/results/lever_20260806_025719/probe.txt · arm 로그 shell_scripting/results/lever_20260806_025719/
+[판정] 천장 = OK 로 끝나는 가장 큰 값. 단 peak > 7.0GB 면 실학습엔 쓰지 말 것(폭 변동·단편화 여유).
+       메모리보다 시계가 먼저 막는다 — h/epoch 열을 보고 남은 대회 시간으로 자를 것.
+       파라미터가 크면 추론시간(점수항)도 손해다. SSIM 이 비슷하면 작은 쪽이 이긴다.
+[다음] 고른 config 는 resume 호환 필드라 처음부터 학습이다(--init-from 도 shape 로 죽는다).
+==========================================================

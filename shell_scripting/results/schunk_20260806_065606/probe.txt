@@ -1,0 +1,5 @@
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.19s peak=3.07GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=3 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.11s peak=3.07GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=5 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.12s peak=4.32GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=8 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.07s peak=6.23GB
+OOM  cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=15 coils=15 HxW=384x480 param=72.9M

@@ -1,0 +1,11 @@
+Current cuda device:  0
+[init-from] '../result/promptmrp_0801_acc8/checkpoints/best_model.pt' 의 model 가중치로 초기화 (미세조정 시작)
+[remask] 전제 검증 통과 — 160 volume (생성기 비트 재현 · full k-space)
+[remask] train 로더 마스크 재생성 — remask=8 · mask-aug=offset · offset=재추첨
+[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터=8)
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all · remask=8(val 은 acc8) (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmrp_0801_acc8_ext ...............
+[aug] epoch=0 p_flip=0.5000
+Epoch = [  0/  4] Iter = [   0/4358] Loss = 0.04627 Time = 5.9896s

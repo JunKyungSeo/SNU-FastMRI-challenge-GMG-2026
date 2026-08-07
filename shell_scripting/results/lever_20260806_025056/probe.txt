@@ -1,0 +1,19 @@
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.15s peak=3.07GB
+OOM  cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=False coils=15 HxW=384x480 param=72.9M
+OK   cascades=10 n_feat0=48 sens=24 n_hist=5 ckpt=True coils=15 HxW=384x480 param=73.5M opt=Y fwdbwd=4.20s peak=3.46GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=7 ckpt=True coils=15 HxW=384x480 param=74.0M opt=Y fwdbwd=4.26s peak=3.86GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=9 ckpt=True coils=15 HxW=384x480 param=74.6M opt=Y fwdbwd=4.32s peak=4.25GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=11 ckpt=True coils=15 HxW=384x480 param=75.2M opt=Y fwdbwd=4.38s peak=4.65GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=16 ckpt=True coils=15 HxW=384x480 param=76.6M opt=Y fwdbwd=4.51s peak=5.68GB
+OK   cascades=12 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=87.1M opt=Y fwdbwd=4.73s peak=3.35GB
+OK   cascades=16 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=115.6M opt=Y fwdbwd=5.87s peak=3.90GB
+OK   cascades=20 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=144.1M opt=Y fwdbwd=7.03s peak=4.46GB
+OK   cascades=24 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=172.5M opt=Y fwdbwd=8.29s peak=5.01GB
+OK   cascades=32 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=229.5M opt=Y fwdbwd=10.71s peak=6.11GB
+OK   cascades=10 n_feat0=56 sens=28 n_hist=3 ckpt=True coils=15 HxW=384x480 param=98.2M opt=Y fwdbwd=5.17s peak=3.70GB
+OK   cascades=10 n_feat0=64 sens=32 n_hist=3 ckpt=True coils=15 HxW=384x480 param=127.2M opt=Y fwdbwd=6.11s peak=5.95GB
+OK   cascades=10 n_feat0=80 sens=40 n_hist=3 ckpt=True coils=15 HxW=384x480 param=196.5M opt=Y fwdbwd=8.38s peak=5.76GB
+OOM  cascades=10 n_feat0=96 sens=48 n_hist=3 ckpt=True coils=15 HxW=384x480 param=280.8M
+OK   cascades=12 n_feat0=48 sens=24 n_hist=11 ckpt=True coils=15 HxW=384x480 param=89.9M opt=Y fwdbwd=5.17s peak=5.22GB
+OK   cascades=16 n_feat0=48 sens=24 n_hist=5 ckpt=True coils=15 HxW=384x480 param=116.5M opt=Y fwdbwd=6.17s peak=4.50GB
+OK   cascades=12 n_feat0=64 sens=32 n_hist=11 ckpt=True coils=15 HxW=384x480 param=157.0M opt=Y fwdbwd=6.72s peak=7.52GB

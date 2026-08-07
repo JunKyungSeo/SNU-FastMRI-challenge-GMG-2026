@@ -1,0 +1,35 @@
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_ab_12_11_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1736 Time = 6.1317s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.06759 Time = 107.9699s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.1231 Time = 108.9024s
+Epoch = [  0/  1] Iter = [  60/2163] Loss = 0.1876 Time = 108.6161s
+Epoch = [  0/  1] Iter = [  80/2163] Loss = 0.09795 Time = 110.0924s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.09968 Time = 107.9993s
+Epoch = [  0/  1] Iter = [ 120/2163] Loss = 0.1783 Time = 109.1388s
+Epoch = [  0/  1] Iter = [ 140/2163] Loss = 0.115 Time = 108.4897s
+Epoch = [  0/  1] Iter = [ 160/2163] Loss = 0.05755 Time = 108.8740s
+Epoch = [  0/  1] Iter = [ 180/2163] Loss = 0.09378 Time = 108.9002s
+Epoch = [  0/  1] Iter = [ 200/2163] Loss = 0.1315 Time = 107.6996s
+Epoch = [  0/  1] Iter = [ 220/2163] Loss = 0.1518 Time = 108.7638s
+Epoch = [  0/  1] Iter = [ 240/2163] Loss = 0.1114 Time = 109.4989s
+Epoch = [  0/  1] Iter = [ 260/2163] Loss = 0.1851 Time = 109.6633s
+Epoch = [  0/  1] Iter = [ 280/2163] Loss = 0.1304 Time = 109.0932s
+Epoch = [  0/  1] Iter = [ 300/2163] Loss = 0.08664 Time = 108.6443s
+Epoch = [  0/  1] Iter = [ 320/2163] Loss = 0.08346 Time = 108.8116s
+Epoch = [  0/  1] Iter = [ 340/2163] Loss = 0.08797 Time = 109.1829s
+Epoch = [  0/  1] Iter = [ 360/2163] Loss = 0.12 Time = 109.2238s
+Epoch = [  0/  1] Iter = [ 380/2163] Loss = 0.1827 Time = 107.9998s
+Epoch = [  0/  1] Iter = [ 400/2163] Loss = 0.08916 Time = 109.1194s
+Epoch = [  0/  1] Iter = [ 420/2163] Loss = 0.1208 Time = 107.9982s
+Epoch = [  0/  1] Iter = [ 440/2163] Loss = 0.1768 Time = 109.7935s
+Epoch = [  0/  1] Iter = [ 460/2163] Loss = 0.1631 Time = 108.9820s
+Epoch = [  0/  1] Iter = [ 480/2163] Loss = 0.0595 Time = 108.6268s
+[mem] epoch 0 peak allocated = 4.77GB / reserved = 6.31GB
+loss file saved! ../result/lever_ab_12_11_48/val_loss_log_lever_ab_12_11_48
+Epoch = [   0/   1] TrainLoss = 0.1048 ValLoss = 0.1377 TrainTime = 2618.4708s ValTime = 421.6253s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 4.1484s

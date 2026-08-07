@@ -218,6 +218,12 @@ class AugmentConfig:
         self.affine = kw.get("affine", True)               # --aug-on 아래 기본 on. False면 flip 추첨 스트림까지 구버전 동일
         self.rot_max = kw.get("rot_max", 5.0)              # 회전 최대각(도) — U(-rot_max, +rot_max)
         self.scale_max = kw.get("scale_max", 1.1)          # 확대 상한 — U(1.0, scale_max). 축소는 빈 띠가 생겨 안 쓴다
+        # 변환별 최대확률(2026-08-08) — None이면 max_prob로 fallback(기존 셸 인자 100% 호환).
+        # 0.0은 "그 변환만 확률 0"인 유효값이므로 `or` 대신 None 검사로 해석한다.
+        v = kw.get("flip_max_prob", None)
+        self.flip_max_prob = float(self.max_prob if v is None else v)
+        v = kw.get("affine_max_prob", None)
+        self.affine_max_prob = float(self.max_prob if v is None else v)
         self.seed = kw.get("seed", 430)
 
 
@@ -233,15 +239,18 @@ class MRIAugmentor:
         self.epoch = int(epoch)
 
     # ---- 스케줄 ----
-    def prob(self):
-        """이번 epoch에서 flip이 걸릴 확률. 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
+    def prob(self, p_max=None):
+        """이번 epoch에서 증강이 걸릴 확률. 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
         MRAugment 공식 schedule_p와 동일: D=delay, T=total_epochs, c=exp_decay/(T-D).
         p(t<D)=0이고 p(T)=p_max로 정규화되므로 런 길이가 달라도 증강량이 일관된다.
-        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)"""
+        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)
+        p_max 인자(2026-08-08): 변환별 도달점(cfg.flip_max_prob/affine_max_prob)으로 같은
+        곡선을 스케일할 때 쓴다. None이면 cfg.max_prob(기존 동작 — 스케줄 테스트가 이 계약을 쓴다)."""
         c = self.cfg
         if not c.on:
             return 0.0
-        D, T, t, p_max = int(c.delay), int(c.total_epochs), self.epoch, float(c.max_prob)
+        D, T, t = int(c.delay), int(c.total_epochs), self.epoch
+        p_max = float(c.max_prob if p_max is None else p_max)
         if t < D:
             return 0.0
         if c.schedule == "constant":
@@ -328,22 +337,23 @@ class MRIAugmentor:
         M = (mask >= 1).astype(mask.dtype)
         if (not self.cfg.on) or (target is None):
             return kspace_c * M, M, target, bbox, grappa
-        p = self.prob()
-        if p <= 0.0:
+        p_flip = self.prob(self.cfg.flip_max_prob)
+        p_affine = self.prob(self.cfg.affine_max_prob) if self.cfg.affine else 0.0
+        if p_flip <= 0.0 and p_affine <= 0.0:
             return kspace_c * M, M, target, bbox, grappa
         rng = self._rng(fname, sl)
         tgt = target
 
         # 1) affine(회전+확대) — full k-space에서. cfg.affine=False면 rng를 소비하지
         #    않아(and 단락) flip 추첨 스트림이 구버전과 비트 동일하게 유지된다.
-        if self.cfg.affine and (rng.random() < p):
+        if self.cfg.affine and (rng.random() < p_affine):
             assert not bbox, "affine 증강은 bbox 변환 미구현 — --bbox-loss-lambda와 같이 켤 수 없다"
             assert grappa is None, "affine 증강은 GRAPPA 워프 미구현 — GRAPPA 입력과 같이 켤 수 없다"
             kspace_c, tgt = self._affine(kspace_c, (384, 384), rng)
 
         K = kspace_c * M
         # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기 (기존 그대로, 독립 추첨)
-        if rng.random() < p:
+        if rng.random() < p_flip:
             K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
         return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox, grappa
 

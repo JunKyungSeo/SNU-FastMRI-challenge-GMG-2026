@@ -370,3 +370,47 @@ def test_lanczos_retains_more_highfreq_than_bilinear():
     wl = cv2.warpAffine(img, mat, (W, H), flags=cv2.INTER_LANCZOS4)
     wb = cv2.warpAffine(img, mat, (W, H), flags=cv2.INTER_LINEAR)
     assert hf_energy(wl) > hf_energy(wb)
+
+
+# ---------------------------------------------------------------------------
+# 변환별 최대확률 분리(--flip-max-prob/--affine-max-prob) — 2026-08-08
+# ---------------------------------------------------------------------------
+
+def test_split_max_prob_falls_back_to_shared():
+    """미지정(None)이면 기존 --aug-max-prob와 동일 — 기존 셸 인자 100% 호환 계약."""
+    cfg = affine_cfg(max_prob=0.5)
+    aug = MRIAugmentor(cfg)
+    assert cfg.flip_max_prob == 0.5 and cfg.affine_max_prob == 0.5
+    assert aug.prob(cfg.flip_max_prob) == 0.5
+    assert aug.prob() == 0.5                     # 무인자 = 기존 동작(스케줄 테스트 보호)
+
+
+def test_split_max_prob_gates_independently():
+    """flip 1.0/affine 0.0 → flip만, flip 0.0/affine 1.0 → affine만 발동해야 한다.
+    (0.0은 유효값 — None fallback과 혼동해 max_prob로 되살아나면 이 테스트가 잡는다)"""
+    K, _ = make_phantom_kspace()
+    M = make_mask(W=368)
+    T = make_target()
+    Mb = (M >= 1).astype(M.dtype)
+
+    flip_only = MRIAugmentor(affine_cfg(flip_max_prob=1.0, affine_max_prob=0.0))
+    out = flip_only(K, M, T, None, None, "p.h5", 0)
+    exp = flip_only._flip_lr(K * Mb, T, None, Mb)[1]     # affine 미발동이라 K 원본 기준
+    assert np.array_equal(out[2], np.ascontiguousarray(exp))
+
+    aff_only = MRIAugmentor(affine_cfg(flip_max_prob=0.0, affine_max_prob=1.0))
+    out2 = aff_only(K, M, T, None, None, "p.h5", 0)
+    assert np.array_equal(np.asarray(out2[1]), M)        # flip 미발동 — 마스크 원본 그대로
+    assert out2[2].shape == (384, 384) and not np.array_equal(out2[2], T)  # affine은 발동(재생성)
+
+
+def test_split_max_prob_scales_schedule_shape():
+    """스케줄 곡선은 공유, 도달점만 다름 — 두 확률의 비가 epoch 내내 일정해야 한다."""
+    cfg = affine_cfg(schedule="exp", delay=2, total_epochs=10,
+                     flip_max_prob=0.4, affine_max_prob=0.1)
+    aug = MRIAugmentor(cfg)
+    for e in range(3, 10):
+        aug.set_epoch(e)
+        pf, pa = aug.prob(cfg.flip_max_prob), aug.prob(cfg.affine_max_prob)
+        assert pf > 0.0
+        assert pa == pytest.approx(pf * 0.25, rel=1e-9)

@@ -125,6 +125,10 @@ def parse():
                         help='회전+확대 증강(--aug-on 아래 기본 on). --no-aug-affine이면 flip만(구버전 재현)')
     parser.add_argument('--aug-rot-max', type=float, default=5.0, help='affine 회전 최대각(도) — U(-x,+x)')
     parser.add_argument('--aug-scale-max', type=float, default=1.1, help='affine 확대 상한 — U(1.0,x). 축소 미지원(빈 띠)')
+    parser.add_argument('--flip-max-prob', type=float, default=None,
+                        help='flip 전용 p_max. 미지정이면 --aug-max-prob를 따른다')
+    parser.add_argument('--affine-max-prob', type=float, default=None,
+                        help='affine 전용 p_max. 미지정이면 --aug-max-prob를 따른다. 0이면 affine만 확률 0')
 
     args = parser.parse_args()
 

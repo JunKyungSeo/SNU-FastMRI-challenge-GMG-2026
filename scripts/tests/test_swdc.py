@@ -86,3 +86,28 @@ def test_swdc_map_receives_grad():
         assert g is not None, f"cascade {i}: dc_weight_map grad 없음"
         # 샘플된 열에만 잔차가 있으므로 grad는 그 열에서 0이 아니어야 한다
         assert g.abs().sum() > 0, f"cascade {i}: dc_weight_map grad 전부 0"
+
+
+def test_swdc_checkpoint_equivalence():
+    """swdc 경로에서 checkpoint on/off가 출력·모든 grad에서 일치해야 한다(float64)."""
+    kspace, mask = _make_batch()
+
+    def run(use_checkpoint):
+        net = _make_net(swdc=True)
+        net.train()
+        net.zero_grad(set_to_none=True)
+        out = _forward(net, kspace, mask, use_checkpoint=use_checkpoint)
+        out.square().mean().backward()
+        grads = {n: p.grad.detach().clone() for n, p in net.named_parameters()
+                 if p.grad is not None}
+        return out.detach(), grads
+
+    out_ckp, grad_ckp = run(True)
+    out_raw, grad_raw = run(False)
+    torch.testing.assert_close(out_ckp, out_raw, rtol=1e-9, atol=1e-9)
+    assert grad_ckp.keys() == grad_raw.keys()
+    assert any(n.endswith("dc_weight_map") for n in grad_ckp), "map grad가 안 잡혔다"
+    for name in grad_ckp:
+        torch.testing.assert_close(
+            grad_ckp[name], grad_raw[name], rtol=1e-9, atol=1e-9,
+            msg=lambda m, n=name: f"param '{n}' grad가 checkpoint 여부에 따라 다름:\n{m}")

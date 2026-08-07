@@ -477,12 +477,20 @@ class NormPromptUnet(nn.Module):
         return x, latent, history_feat
 
 class PromptMRBlock(nn.Module):
-    def __init__(self, model: nn.Module, num_adj_slices: int = 1):
+    def __init__(self, model: nn.Module, num_adj_slices: int = 1, swdc: bool = True):
 
         super().__init__()
         self.model = model
         self.num_adj_slices = num_adj_slices   # DC(sens_expand/reduce)가 슬라이스 그룹을 알아야 한다
-        self.dc_weight = nn.Parameter(torch.ones(1))
+        self.swdc = swdc
+        if swdc:
+            # SWDC(SDUM §3.4): 스칼라 η 대신 k-space 위치별 학습 가중치 지도. (640, 480) =
+            # readout-crop 없는 H 최대 × 학습셋 W 최대 — 실제 (H, W)로 중앙 crop해 쓴다.
+            # ones 초기화라 학습 시작 시점엔 η=1 스칼라와 수학적으로 동일(테스트로 강제).
+            self.dc_weight_map = nn.Parameter(torch.ones(1, 1, 640, 480, 1))
+        else:
+            # 테스트 전용 비교 기준(등가성). CLI/config에서 이 분기로 못 들어온다.
+            self.dc_weight = nn.Parameter(torch.ones(1))
 
     def forward(
         self,
@@ -491,7 +499,8 @@ class PromptMRBlock(nn.Module):
         latent: torch.Tensor,
         mask: torch.Tensor,
         sens_maps: torch.Tensor,
-        history_feat: Optional[Tuple[torch.Tensor, ...]] = None
+        history_feat: Optional[Tuple[torch.Tensor, ...]] = None,
+        masked_kspace: Optional[torch.Tensor] = None,
     ):
         zero = torch.zeros(1, 1, 1, 1, 1).to(current_img)
         current_kspace = fastmri.sens_expand(current_img, sens_maps, self.num_adj_slices)
@@ -502,8 +511,20 @@ class PromptMRBlock(nn.Module):
             buffer = torch.cat([ffx, latent, img_zf] + [ffx-img_zf]*(self.model.n_buffer-3), dim=1)
         else:
             buffer = None
-            
-        soft_dc = (ffx - img_zf) * self.dc_weight
+
+        if self.swdc:
+            # soft_dc = A^H(W ⊙ (M·A·x − k0)). W는 A^H **앞**(k-space)에서 곱해야 주파수별
+            # 의미가 생긴다 — (ffx − img_zf)에 곱하면 이미지 도메인 가중이라 다른 물건이다.
+            # k0(masked_kspace)는 mask 밖이 0이라 where 하나로 잔차가 닫힌다.
+            assert masked_kspace is not None, "swdc=True면 masked_kspace를 넘겨야 한다"
+            _, _, h, w, _ = current_kspace.shape
+            assert h <= 640 and w <= 480, f"dc_weight_map(640x480)보다 큰 k-space {h}x{w}"
+            wmap = self.dc_weight_map[:, :, (640 - h) // 2: (640 - h) // 2 + h,
+                                      (480 - w) // 2: (480 - w) // 2 + w, :]
+            k_res = torch.where(mask != 0, current_kspace - masked_kspace, zero)
+            soft_dc = fastmri.sens_reduce(wmap * k_res, sens_maps, self.num_adj_slices)
+        else:
+            soft_dc = (ffx - img_zf) * self.dc_weight
         model_term, latent, history_feat = self.model(current_img, history_feat, buffer)
         img_pred = current_img - soft_dc - model_term
         return img_pred, latent, history_feat
@@ -539,6 +560,7 @@ class PromptMR(nn.Module):
         n_buffer: int = 4,             # Plus
         n_history: int = 11,           # Plus
         num_adj_slices: int = 1,       # 2.5D 인접 슬라이스 (1=단일, 3=±1). 상류 원본과 동일 규약
+        swdc: bool = True,             # SWDC(SDUM §3.4). False는 테스트 전용 — CLI/config 배선 없음
     ):
         # 인접 슬라이스 규약(상류 promptmr_v2.py와 동일):
         #   masked_kspace 코일축은 **슬라이스-major** 배열 — (B, adj*C, H, W, 2) 에서
@@ -591,6 +613,7 @@ class PromptMR(nn.Module):
                     n_history=n_history
                 ),
                 num_adj_slices=num_adj_slices,
+                swdc=swdc,
             ) for _ in range(num_cascades)
         ])
 
@@ -645,11 +668,12 @@ class PromptMR(nn.Module):
                 # ·complex_mul). 코일 압축을 없애면 C=15 라 이게 cascade 수만큼 그대로 쌓인다.
                 # cascade 단위로 끊으면 역전파 때 한 cascade 분만 재현되므로 nc 를 늘려도 평평해진다.
                 img_pred, latent, history_feat = checkpoint(
-                    cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat,
+                    cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat, masked_kspace,
                     use_reentrant=False,
                 )
             else:
-                img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
+                img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps,
+                                                         history_feat, masked_kspace)
 
         # 인접 슬라이스면 **중앙 슬라이스만** 최종 출력이다(상류와 동일). img_pred는 (B,adj,H,W,2),
         # sens_maps는 (B,adj*C,H,W,2) — 각각 adj로 chunk해 center를 꺼낸 뒤 coil-combine한다.

@@ -1,3 +1,7 @@
+## 최종 run 이름
+
+`promptmrp_GMG_final_0807` — 체크포인트는 `../result/promptmrp_GMG_final_0807_{shared,acc4,acc8}/`.
+
 ## 시간 절약 전략 (학습시)
 
 ### `UpBlock.up` 의 못 끄는 checkpoint

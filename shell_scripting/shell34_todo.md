@@ -1,5 +1,3 @@
-# shell34_todo.md — 슬롯 34 할 일
-
 ## 시간 절약 전략
 
 ### `UpBlock.up` 의 못 끄는 checkpoint

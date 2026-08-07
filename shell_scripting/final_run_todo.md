@@ -338,7 +338,7 @@ cascade 는 VRAM +0.26GB 에 시간 +0.51s 다. history 버퍼가 cascade 를 �
 
 → b27c2d8 로 구현됨. 그런데 원복이 깨진다. 아래.
 
-### EMA swap 이 별칭 파라미터에서 원복 실패 — 최종 run 전 필수
+### EMA swap 이 별칭 파라미터에서 원복 실패 — ✅ 수정됨 (2026-08-07)
 
 **현상.** [train_part.py:44](../utils/learning/train_part.py#L44) 의 `swap` 이 `state_dict()` 를
 순회하며 제자리 교환을 한다. `state_dict()` 는 `named_parameters` 와 달리 **중복 제거를 안 한다.**
@@ -360,29 +360,46 @@ config 에서 state_dict 1979키 중 431키가 중복이다.
 그대로 넣고, `load_state_dict` 는 등록 순서상 뒤쪽 키가 이긴다 → `best_model.pt` 는 **감도맵만 θ,
 나머지는 θ_EMA 인 하이브리드**다. 커밋이 약속한 "best 는 θ_EMA" 가 감도맵에 한해 거짓이다.
 
-**계획.** 570행 삭제는 안 된다 — 기존 ckpt 가 `strict=True` 에서 깨진다. 소비자 쪽에서 접는다.
-`EMA.__init__` 이 `data_ptr` 로 대표 키를 뽑아 두고 `update`·`swap`·`load_state_dict` 가 대표 키만
-돌게 한다. 저장물 키 집합은 그대로라 체크포인트·resume 호환이 안 변한다.
+**한 일.** 570행은 안 건드렸다(기존 ckpt 가 `strict=True` 에서 깨진다). 소비자 쪽에서 접었다 —
+`EMA.__init__` 이 `data_ptr` 로 대표 키(`_keys`)를 뽑고 **별칭 키의 shadow 를 대표와 같은 객체로**
+둔다. `update`·`swap`·`load_state_dict` 는 대표만 돈다. 저장물 키 집합은 그대로다.
 
-**걸리는 것.** [test_ema.py:26](../scripts/tests/test_ema.py#L26) `test_swap_is_involution` 은
-`nn.Sequential` 이라 별칭이 없어 이 버그를 **원리적으로** 못 잡는다. 별칭 있는 케이스를 더해야 한다.
+**실측(실제 모델, cascade 2 축소판).** state_dict 635키 / 고유 텐서 412 / 중복에 걸린 키 223.
+`EMA._keys` 412 · `shadow` 635키 유지 · `swap` 두 번 뒤 θ 와 다른 키 **0개**.
+
+**테스트.** [test_ema.py](../scripts/tests/test_ema.py) 에 별칭 케이스 4개 추가
+(`_Aliased` 가 모듈 이중 등록 + PReLU 공유 두 모양을 재현). 옛 구현으로 되돌리면 그중
+`test_swap_is_involution_with_aliases`·`test_alias_shadow_entries_stay_in_sync` 둘이 실패한다 —
+버그를 실제로 잡는 테스트인지 그렇게 확인했다. 기존 `test_swap_is_involution` 은
+`nn.Sequential` 이라 별칭이 없어 **원리적으로** 못 잡으므로 그대로 두고 옆에 붙였다.
 
 **영향 범위.** EMA 커밋은 08-07 03:42 UTC, 이 체크아웃 최신 로그는 08-06 17:47 UTC → 저장소
 기록상 EMA 시대에 완주한 run 이 없다. 0.9336 포함 기존 체크포인트는 깨끗하다. 서버는 확인 못 했다 —
 `../result/*/checkpoints/model.pt` 에 `'ema'` 키가 non-None 인 게 있는지만 사람이 보면 결판난다.
 
-### MoE 추론에서 acc4 전문가가 acc8 의 PReLU 로 돈다 — 지금 점수에 이미 먹혔다
+### MoE 추론에서 acc4 전문가가 acc8 의 PReLU 로 돈다 — ✅ 수정됨 (2026-08-07)
 
 **현상.** 위 공유 PReLU 가 **인스턴스 경계도 넘는다**(실측: 모델 둘을 따로 만들어도 같은 저장소.
 모델2 를 0.99 로 덮으면 모델1 도 0.99, 독립이면 0.25). [test_part.py:58-59](../utils/learning/test_part.py#L58)
 가 한 프로세스에서 전문가 둘을 만들고 [46행](../utils/learning/test_part.py#L46)이 각각 로드하므로
 **나중에 로드한 acc8 이 이긴다.**
 
-**계획.** `import copy` 후 전문가 하나를 `copy.deepcopy`. deepcopy 는 모델 **내부** 공유는 보존하면서
-바깥 공유만 끊는다.
+**한 일.** `load_model` 이 acc4 전문가를 `copy.deepcopy` 한다
+([test_part.py](../utils/learning/test_part.py)). deepcopy 는 모델 **내부** 공유는 보존하면서
+인스턴스 **바깥** 공유만 끊는다.
 
-**범위.** `promptmrp_0801_moe`(0.9336) 는 이 상태로 채점된 값이다. 고치면 모델이 실제로 달라지므로
-**재채점이 필요하다.** 크기는 두 체크포인트의 slope 차이에 달려 미지수, 방향은 train/test 정합 쪽.
+**실측(실제 모델).** 두 인스턴스가 저장소를 공유하는 키 **98개**. 수정 전에는 acc4 로 0.11 을
+넣고 acc8 로 0.88 을 넣으면 acc4 도 0.88 이 됐다. 수정 후 acc4=0.11 · acc8=0.88 이고,
+deepcopy 한 모델의 내부 별칭은 그대로다(635키 / 고유 412).
+
+**테스트.** [test_moe_expert_isolation.py](../scripts/tests/test_moe_expert_isolation.py) 3개.
+"인스턴스 간 공유가 아직 존재한다"는 전제까지 같이 검사한다 — 나중에 근본 수정이 들어가면
+거기가 먼저 깨져서 deepcopy 가 불필요해졌음을 알려준다.
+
+⚠️ **재채점 필요.** `promptmrp_0801_moe`(0.9336) 는 버그가 있는 상태로 채점된 값이다. 이제 모델이
+실제로 달라지므로 그 숫자를 그대로 들고 가면 안 된다 — `bash shell_scripting/shell31_recon.sh`
+같은 채점 슬롯을 한 번 다시 돌려야 한다. 방향은 train/test 정합 쪽이라 오를 가능성이 높지만,
+크기는 두 체크포인트의 slope 차이에 달려 미지수다.
 
 **하지 말 것.** 277행을 `act=None` 으로 고치는 근본 수정. 키 이름이 안 바뀌어 로드는 호환이지만
 **학습 의미가 바뀐다**(전역 1개 slope → CAB 마다 1개). 최종 run 앞두고 0.9336 과의 비교가능성이

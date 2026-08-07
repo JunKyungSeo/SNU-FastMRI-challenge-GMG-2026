@@ -29,13 +29,35 @@ class EMA:
     def __init__(self, model, decay=EMA_DECAY):
         self.decay = decay
         self.updates = 0
-        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        # ⚠️ state_dict()는 named_parameters()와 달리 **중복 제거를 안 한다.** 한 텐서가 두 이름으로
+        # 등록돼 있으면 m개 키로 나온다(프로덕션 config에서 1979키 중 431키가 중복):
+        #   promptmr_plus.py:570 self.sens_net_ckp = ReentrantWrapper(self.sens_net) — 모듈 이중 등록
+        #   promptmr_plus.py:277 act=nn.PReLU() mutable default — 스칼라 1개가 306 경로에 공유
+        # 그래서 shadow도 **같은 텐서를 가리키게** 만들고(_keys = 대표 키만) update·swap이 대표만 돈다.
+        # 이걸 안 하면 swap이 별칭을 m번 교환해 자기 역원이 아니게 되고(m=2면 위수 3 순열:
+        # (θ, s₁, s₂) → (s₂, θ, s₁)), 검증 뒤 학습이 θ가 아니라 **θ_EMA에서 재개**된다.
+        # 키 집합 자체는 그대로 저장되므로 기존 체크포인트·resume 호환이 안 변한다.
+        self.shadow = {}
+        self._keys = []
+        rep_of = {}
+        for k, v in model.state_dict().items():
+            ptr = v.data_ptr() if v.numel() else None   # 빈 텐서는 data_ptr이 0으로 겹칠 수 있다
+            rep = rep_of.get(ptr) if ptr is not None else None
+            if rep is None:
+                if ptr is not None:
+                    rep_of[ptr] = k
+                self._keys.append(k)
+                self.shadow[k] = v.detach().clone()
+            else:
+                self.shadow[k] = self.shadow[rep]   # 별칭은 대표와 같은 객체를 공유
 
     @torch.no_grad()
     def update(self, model):
         self.updates += 1
         d = min(self.decay, (1 + self.updates) / (10 + self.updates))
-        for k, v in model.state_dict().items():
+        sd = model.state_dict()
+        for k in self._keys:
+            v = sd[k]
             if v.dtype.is_floating_point:
                 self.shadow[k].mul_(d).add_(v, alpha=1 - d)
             else:
@@ -44,8 +66,11 @@ class EMA:
     @torch.no_grad()
     def swap(self, model):
         """모델 가중치 ↔ shadow 제자리 교환(자기 역원). 검증 전후 한 번씩 — 백업 사본이
-        따로 없어 상주 메모리는 shadow 한 벌뿐이다."""
-        for k, v in model.state_dict().items():
+        따로 없어 상주 메모리는 shadow 한 벌뿐이다.
+        대표 키만 도는 게 자기 역원의 조건이다 — 별칭까지 돌면 같은 텐서를 m번 교환한다."""
+        sd = model.state_dict()
+        for k in self._keys:
+            v = sd[k]
             tmp = v.detach().clone()
             v.copy_(self.shadow[k])
             self.shadow[k].copy_(tmp)
@@ -55,8 +80,8 @@ class EMA:
 
     def load_state_dict(self, sd):
         self.updates = int(sd["updates"])
-        for k, v in self.shadow.items():
-            v.copy_(sd["shadow"][k])   # copy_라 ckpt(cpu)→현재 device 이동이 자동
+        for k in self._keys:                # 별칭은 대표와 같은 객체라 자동으로 따라온다
+            self.shadow[k].copy_(sd["shadow"][k])   # copy_라 ckpt(cpu)→현재 device 이동이 자동
 
 
 def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None,

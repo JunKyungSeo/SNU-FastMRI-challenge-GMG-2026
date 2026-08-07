@@ -36,85 +36,79 @@ W=480 슬라이스에서 단편화가 겹치면 터질 수 있다 — 예비용�
 
 **안전.** 값은 비트 동일이라 성능 확인이 필요 없다.
 
-## 시간 절약 전략 (reconstruct시)
+## 시간 절약 전략 (추론시)
 
-전제 둘: **모델은 안 건드린다**(cascade 수·폭·`n_history` 축소는 여기서 제외), **SSIM 은 유지한다**.
-현재 747.3 ms/slice(`promptmrp_0801_moe`). 채점 시간은 `recon_slice` 호출 전체를 재므로
-CPU 전처리와 H2D 전송도 안에 들어간다.
+전제 둘: **모델은 안 건드린다**, **SSIM 은 유지한다**. 현재 747.3 ms/slice(`promptmrp_0801_moe`),
+VRAM 여유 약 3.5GB. 채점 시간은 `recon_slice` 호출 전체를 재므로 CPU 전처리와 H2D 도 안에 들어간다.
 
-⚠️ 전처리를 `prep_volume` 으로 **옮기는** 건 `next_levers.md` L19 에서 이미 기각됐다 —
-소유자가 전처리도 보고 시간에 포함돼야 한다고 정했다. 아래 항목은 옮기는 게 아니라
-같은 자리에서 싸게 하는 것이라 그 결정과 무관하다.
+⚠️ 전처리를 `prep_volume` 으로 **옮기는** 건 `next_levers.md` L19 에서 기각됐다 — 전처리도 보고
+시간에 포함돼야 한다는 소유자 결정. 아래는 옮기는 게 아니라 같은 자리에서 싸게 하는 것이다.
 
-### 프로파일링 (선행)
+### 0. 프로파일링 (선행)
 
-**현상.** 747ms 가 감도맵 / cascade U-Net / FFT / CPU 전처리 / H2D 중 어디에 얼마나 쓰이는지
-잰 기록이 없다. 아래 항목의 기대치가 전부 추정이다.
+747ms 가 감도맵 / cascade U-Net / FFT / CPU 전처리 / H2D 중 어디에 쓰이는지 잰 적이 없다.
+아래 기대치는 전부 추정이다. [probe_recon_vram.py](../scripts/probe_recon_vram.py) 가 이미
+`load_model → prep_volume → recon_slice` 를 그대로 부르니 `torch.profiler` 만 붙이면 된다.
+이걸 먼저 해야 나머지 순서가 정해진다.
 
-**계획.** [probe_recon_vram.py](../scripts/probe_recon_vram.py) 가 이미
-`load_model → prep_volume → recon_slice` 를 그대로 부르므로 여기에 `torch.profiler` 를 붙인다.
+### 1. cudnn.benchmark — 남는 VRAM 이 실제로 값을 하는 지점
 
-**범위.** 모델도 학습도 안 건드린다. 이걸 먼저 해야 나머지 순서가 정해진다.
+conv 계산법은 GEMM·FFT·Winograd 등 여러 가지고 빠를수록 workspace 를 크게 먹는다. 메모리가
+빠듯하면 그 할당이 실패해 빠른 후보가 목록에서 빠지고 느린 게 선택된다. **즉 benchmark 를 켜는
+것과 VRAM 을 비워두는 건 한 세트다.** `load_model` 에서 켠다 — 볼륨 안 shape 이 고정이고
+하네스가 볼륨마다 5슬라이스를 warmup 으로 버려 autotune 비용이 거기 흡수된다.
 
-**참고.** cuFFT 는 크기가 2^a·3^b·5^c·7^d 일 때 빠르다. 우리 W 는 368(=2⁴×23)·372(=2²×3×31)
-가 대부분이라 큰 소인수가 끼어 있고 480(=2⁵×3×5)만 좋은 크기다. 패딩하면 출력이 바뀌니 고칠
-수는 없고, FFT 비중을 볼 때 참고만 한다.
+- **VRAM 증가**: workspace 는 conv 하나 도는 동안만 사는 임시 버퍼라 peak 증가 ≈ 가장 큰 것 하나.
+  최대 중간 텐서가 72ch × 384×480 fp32 ≈ 53MB 이니 **수백 MB, 많아야 0.5GB** 로 본다(추정).
+- **위험 없음**: autotune 은 할당 실패하면 그 알고리즘을 후보에서 뺄 뿐이라 OOM 으로 안 죽는다.
+  안 되면 지금과 같은 선택으로 돌아간다.
+- `torch.backends.cudnn.benchmark_limit` 로 시도 개수도 올릴 수 있다.
 
-### 감도맵 배치화
+### 2. 감도맵 배치화
 
-**현상.** [adapter.py:39](../utils/model/promptmr/adapter.py#L39) 가 `compute_sens_per_coil=True`
-를 무조건 넘겨 감도 U-Net 이 코일마다 순차로 15번 호출된다. 추론은 checkpointing 이 이미 꺼져
-있어 메모리 명분이 없다. `next_levers.md` L11 로 등록돼 있다.
+[adapter.py:39](../utils/model/promptmr/adapter.py#L39) 가 `compute_sens_per_coil=True` 를 무조건
+넘겨 감도 U-Net 이 코일마다 15번 순차 호출된다. 추론은 checkpointing 이 꺼져 있어 메모리 명분이
+없다(`next_levers.md` L11). 추론에서만 `sens_chunk=15`.
 
-**계획.** 추론에서만 `compute_sens_per_coil=False` 또는 `sens_chunk=15`.
+- **기대치**: 3% 안팎. shell33 에서 학습 기준 chunk 8 이 4.19→4.07s(−2.9%).
+- **VRAM 증가**: sens U-Net 중간 텐서가 전부 15배 → **1GB 안팎**(추정). 1번과 합치면 1.5GB 근처.
+- **걸리는 것**: 수치 동일 주장이 L11 기록상 2026-07-31 이후 재검증되지 않았다. 가정으로 취급.
 
-**기대치.** 3% 안팎. shell33 에서 학습 기준 chunk 8 이 4.19→4.07s(−2.9%)였다.
-학습에서 chunk 15 는 OOM 이었지만 추론은 메모리가 남는다.
+### 3. `recon_slice` CPU 전처리 — 비트 동일하게 줄일 수 있는 넷
 
-**걸리는 것.** 수치 동일 주장(코일이 독립이고 배치를 섞는 연산이 없다)이
-L11 기록상 2026-07-31 이후 재검증되지 않았다. 가정으로 취급할 것.
-
-### `recon_slice` CPU 전처리
-
-**계획.** 비트 동일하게 줄일 수 있는 게 넷이다.
-
-- [test_part.py:86](../utils/learning/test_part.py#L86) 의 마스크 곱을 `readout_crop` 뒤로.
-  마스크는 W 축이라 H crop 과 교환 가능 → H 640 대신 384 에 곱하니 곱셈량 −40%.
-- `readout_crop` 이 complex128 로 승격시켜 [99행](../utils/learning/test_part.py#L99) 의
-  `astype` 으로 되돌린다 — 전체 복사 1회.
-- `torch.stack((real, imag), -1)` 복사. complex64 는 실/허가 메모리상 인접이라
-  `.view(np.float32)` 로 복사 없이 `(…,2)` 를 얻을 수 있다.
+- [test_part.py:86](../utils/learning/test_part.py#L86) 마스크 곱을 `readout_crop` 뒤로.
+  마스크는 W 축이라 H crop 과 교환 가능 → H 640 대신 384 에 곱하니 −40%.
+- `readout_crop` 의 complex128 승격 → [99행](../utils/learning/test_part.py#L99) `astype` 복사 1회.
+- `torch.stack((real, imag), -1)` 복사. complex64 는 실/허가 인접이라 `.view(np.float32)` 로 무복사.
 - `mask_t` 를 슬라이스마다 재생성한다. 볼륨 안에서 안 변한다.
 
-**기대치.** 미측정. 프로파일링 뒤에 판단.
+### 4. 할당자 — 측정 구간 안에서 `cudaMalloc` 이 안 터지게
 
-### cudnn.benchmark
+볼륨마다 W 가 바뀌어 블록 크기가 달라지면 새 할당이 생길 수 있고 `cudaMalloc` 은 동기화를
+동반한다. `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` 면 세그먼트가 하나의 연속 가상
+주소로 자라 블록이 이웃과 합쳐진다. 메모리가 남을 때 특히 안전하다.
 
-**계획.** `load_model` 에서 켠다. 볼륨 안에서 shape 이 고정이고 하네스가 볼륨마다 5슬라이스를
-warmup 으로 버리므로 autotune 비용이 거기 흡수된다.
+### 5. CUDA Graphs
 
-**기대치.** 미측정. 어느 문서에도 없던 항목이다.
+수천 개 커널 호출을 warmup 에서 한 번 캡처해 통째로 재생. batch=1 의 표준 해법이고, 전용 정적
+메모리 풀이 필요한데 지금은 VRAM 이 남아 감당된다.
 
-### CUDA Graphs
-
-**계획.** 수천 개의 커널 호출을 warmup 구간에서 한 번 캡처해 통째로 재생한다.
-batch=1 에서 커널 발사 오버헤드를 없애는 표준 해법이다.
-
-**기대치.** 한 자릿수 %. 발사 오버헤드가 병목이 아니라는 신호가 우리 측정에 있다 —
-shell33 에서 발사 횟수를 15회→2회로 줄였는데 −2.9% 였다. 747ms 면 연산 바운드일 공산이 크다.
-
-**걸리는 것.** 캡처 중 host 동기화가 있으면 안 된다.
-[promptmr_plus.py:233-247](../utils/model/promptmr/promptmr_plus.py#L233-L247) 의 argmin 결과를
-인덱스로 쓰는 부분과 MoE 라우팅이 둘 다 동기화를 건다. 둘 다 볼륨 안에서 상수라 미리 뽑아두면 풀린다.
+- **기대치**: 한 자릿수 %. 발사 오버헤드가 병목이 아니라는 신호가 있다 — shell33 에서 발사를
+  15회→2회로 줄였는데 −2.9%. 747ms 면 연산 바운드일 공산이 크다.
+- **걸리는 것**: 캡처 중 host 동기화 금지.
+  [promptmr_plus.py:233-247](../utils/model/promptmr/promptmr_plus.py#L233-L247) 의 argmin 결과
+  인덱싱과 MoE 라우팅이 동기화를 건다. 둘 다 볼륨 안 상수라 미리 뽑아두면 풀린다.
 
 ### 배제한 것
 
 | 후보 | 사유 |
 |---|---|
-| Torch-TensorRT | FP32 유지 시 이득이 없다. 1080 은 FP16 이 FP32 와 같은 속도, INT8 은 느린 폴백. |
-| cuFFT plan cache 확대 | 기본 용량이 CUDA 10 이상에서 4096. 우리 shape 종류는 몇 개뿐이라 thrashing 이 안 난다. |
-| channels_last | 이득이 tensor core 와 묶여 있어 Pascal 에서 근거가 없다. 한 줄이라 재보는 건 싸다. |
-| `--coil-compress` | 재학습이 필요하고, SSIM 중립 근거가 논문 인용이지 우리 실측이 아니다. |
+| Torch-TensorRT | FP32 유지 시 이득 없음. 1080 은 FP16 이 FP32 와 동속, INT8 은 느린 폴백. |
+| cuFFT plan cache 확대 | 기본 4096(CUDA 10+). 우리 shape 종류는 몇 개뿐이라 thrashing 이 안 난다. |
+| channels_last | 이득이 tensor core 와 묶여 Pascal 에선 근거 없음. 한 줄이라 재보는 건 싸다. |
+| 슬라이스 배치화 | 한 호출에서 여러 장 계산해 캐시하면 L19 와 같은 측정 회피. |
+| `--coil-compress` | 재학습 필요, SSIM 중립 근거가 논문 인용이지 우리 실측이 아님. |
+| k-space W 패딩 | cuFFT 는 2^a·3^b·5^c·7^d 가 빠른데 우리 W 는 368(2⁴×23)·372(2²×3×31)가 대부분. 패딩하면 출력이 바뀐다. FFT 비중 볼 때 참고만. |
 
 ## 점수 개선
 

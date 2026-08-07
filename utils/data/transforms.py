@@ -1,5 +1,6 @@
 import json
 import zlib
+import cv2
 import numpy as np
 import torch
 
@@ -30,8 +31,9 @@ def to_tensor(data):
 #     치역이 대회 마스크 가족과 동일하고(step 4|8 · cf 0.08, 학습풀+leaderboard 280볼륨 비트정확
 #     재현), 학습 중인 전문가의 가속률과 마스크가 CLI로 강제 일치해 라우터도 안 흔든다.
 #     지우기 전에 augmentation.md §0의 "마스크 재생성" 절을 읽을 것 — 한 번 지워진 전례가 있다.
-#   미채택(기록): 위-아래(readout) 플립 = 무릎 뼈 위치가 뒤바뀌는 비현실 형태.
-#     translation = target이 384 center-crop으로 제공되는데 모델은 640×W에서 크롭해 정렬 불가.
+#   미채택(기록): 위-아래(readout) 플립 = 무릎 뼈 위치가 뒤바뀌는 비현실 형태 (shell29 실측 상한 +0.003).
+#   affine(회전±5°+확대≤1.1, 2026-08-07 채택): translation 미채택 사유였던 "384 crop과 정렬 불가"를
+#     target 재생성(full k-space 워프 → RSS)으로 해소했다 — 아래 MRIAugmentor._affine 참고.
 #   스케줄: MRAugment schedule_p 형태 — delay D까지 off, T(=총 epoch)로 정규화한 exp/ramp/constant 증가.
 #   epoch 전달(train_part.py set_epoch)·args 정의(train.py --aug-*)는 배선 완료.
 #     --aug-on 기본값이 off라, 켜지 않으면 기존 학습과 동일하게 동작.
@@ -184,6 +186,21 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     return np.ascontiguousarray(kc)
 
 
+def _rss_crop(imgs, hw=(384, 384)):
+    """코일 복소 영상 → RSS → 중앙 crop(부족한 축은 0-pad) → float32.
+    affine 증강의 target 재생성 규약 — 제공 label과의 정합은
+    scripts/verify_affine_target.py가 실데이터 전수로 확인한다(corr≥0.9999)."""
+    rss = np.sqrt((np.abs(imgs) ** 2).sum(axis=0)).astype(np.float32)
+    H, W = rss.shape
+    th, tw = hw
+    out = np.zeros(hw, dtype=np.float32)
+    sh, dh = max((H - th) // 2, 0), max((th - H) // 2, 0)
+    sw, dw = max((W - tw) // 2, 0), max((tw - W) // 2, 0)
+    ch, cw = min(H, th), min(W, tw)
+    out[dh:dh + ch, dw:dw + cw] = rss[sh:sh + ch, sw:sw + cw]
+    return out
+
+
 class AugmentConfig:
     """증강 설정. train.py args에서 채워지며(없으면 getattr 기본값), 기본은 off.
     증강이 좌우 flip 하나뿐이라 변환 선택 스위치·가중치 필드는 없다 — on/off는 `on` 하나."""
@@ -197,6 +214,10 @@ class AugmentConfig:
         self.total_epochs = kw.get("total_epochs", 1)      # T: args.num_epochs (load_data가 채움)
         self.exp_decay = kw.get("exp_decay", 5.0)          # 논문/공식 repo 기본 c=5.0
         self.max_prob = kw.get("max_prob", 0.55)           # 논문 기본 p_max=0.55
+        # affine(회전+확대) — 2026-08-07 채택(사용자 확정: shear 없음·확대만·±5°).
+        self.affine = kw.get("affine", True)               # --aug-on 아래 기본 on. False면 flip 추첨 스트림까지 구버전 동일
+        self.rot_max = kw.get("rot_max", 5.0)              # 회전 최대각(도) — U(-rot_max, +rot_max)
+        self.scale_max = kw.get("scale_max", 1.1)          # 확대 상한 — U(1.0, scale_max). 축소는 빈 띠가 생겨 안 쓴다
         self.seed = kw.get("seed", 430)
 
 
@@ -270,23 +291,60 @@ class MRIAugmentor:
         g = None if grappa is None else np.ascontiguousarray(grappa[..., ::-1])
         return K2, tgt, M2, bbox, g
 
+    def _affine(self, kspace_c, target_hw, rng):
+        """회전 U(-rot_max,+rot_max)° + 확대 U(1,scale_max)를 '환자 통째로' 적용하고
+        target을 재생성한다 (MRAugment 방식). 반환: (warped_kspace_c, new_target).
+
+        왜 label 재사용이 아니라 재생성인가: label은 384² 고정 크롭이라 기하 변환 시
+        프레임 밖 정보가 없다. 학습 h5의 kspace는 full(remask에서 170/170 실측)이므로
+        코일별 IFFT→워프→FFT로 '변형된 환자의 획득'을 만들고 정답도 같은 워프 영상의
+        RSS에서 뽑으면 입력·정답이 구성상 정합한다(label↔full recon RSS corr 1.0 — remask 검증).
+
+        보간: INTER_LANCZOS4 — bilinear 대비 고주파 보존(테스트로 강제. 채점이 SSIM이라
+        블러가 곧 손해다). 회전 모서리 공백은 0 채움 — 입력·정답이 같은 공백을 공유하므로
+        오지도(誤指導)가 없다. 코일 감도는 환자와 '함께 도는' 셈이 되는데, 이는 다른 코일
+        배치의 유효한 획득이고 감도는 sens_net이 슬라이스별로 재추정하므로 문제없다.
+        ⚠️ 2.5D(인접 슬라이스 입력)를 켜는 날에는 '한 입력 안의 슬라이스들은 같은 변형'
+        제약이 새로 생긴다 — 지금은 슬라이스 1장 입력이라 해당 없음."""
+        deg = float(rng.uniform(-self.cfg.rot_max, self.cfg.rot_max))
+        s = float(rng.uniform(1.0, self.cfg.scale_max))
+        C, H, W = kspace_c.shape
+        mat = cv2.getRotationMatrix2D(((W - 1) / 2.0, (H - 1) / 2.0), deg, s)
+        imgs = _ifftc(kspace_c)
+        out = np.empty_like(imgs)
+        for c in range(C):
+            ch2 = np.stack([imgs[c].real, imgs[c].imag], axis=-1).astype(np.float32, copy=False)
+            w = cv2.warpAffine(ch2, mat, (W, H), flags=cv2.INTER_LANCZOS4,
+                               borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+            out[c] = w[..., 0] + 1j * w[..., 1]
+        return _fftc(out), _rss_crop(out, target_hw)
+
     def __call__(self, kspace_c, mask, target, bbox, grappa, fname, sl):
-        """kspace_c:(coils,H,W) complex(raw) · mask:(W,) · target:(384,384) or None
-        · grappa:(384,384) magnitude or None(GRAPPA 보조 입력, 확정: 영상 도메인 유지).
+        """kspace_c:(coils,H,W) complex(raw full) · mask:(W,) · target:(384,384) or None
+        · grappa:(384,384) magnitude or None.
         반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
-        GRAPPA에도 flip(기하)을 동기 적용한다 — 두 입력의 해부 정렬이 어긋나면 안 되므로."""
+        순서: affine(mask 곱 전, full k-space + target 재생성) → mask 곱 → flip(기존).
+        affine이 안 걸리면 target은 제공 label 그대로다(재생성은 걸린 샘플만)."""
         M = (mask >= 1).astype(mask.dtype)
-        K = kspace_c * M                       # 제공 언더샘플 적용
         if (not self.cfg.on) or (target is None):
-            return K, M, target, bbox, grappa
+            return kspace_c * M, M, target, bbox, grappa
         p = self.prob()
         if p <= 0.0:
-            return K, M, target, bbox, grappa
-        if self._rng(fname, sl).random() >= p:
-            return K, M, target, bbox, grappa
+            return kspace_c * M, M, target, bbox, grappa
+        rng = self._rng(fname, sl)
+        tgt = target
 
-        # 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
-        K, tgt, M, bbox, grappa = self._flip_lr(K, target, bbox, M, grappa)
+        # 1) affine(회전+확대) — full k-space에서. cfg.affine=False면 rng를 소비하지
+        #    않아(and 단락) flip 추첨 스트림이 구버전과 비트 동일하게 유지된다.
+        if self.cfg.affine and (rng.random() < p):
+            assert not bbox, "affine 증강은 bbox 변환 미구현 — --bbox-loss-lambda와 같이 켤 수 없다"
+            assert grappa is None, "affine 증강은 GRAPPA 워프 미구현 — GRAPPA 입력과 같이 켤 수 없다"
+            kspace_c, tgt = self._affine(kspace_c, (384, 384), rng)
+
+        K = kspace_c * M
+        # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기 (기존 그대로, 독립 추첨)
+        if rng.random() < p:
+            K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
         return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox, grappa
 
 

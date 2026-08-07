@@ -15,8 +15,52 @@ from utils.model.varnet import VarNet
 
 import os
 
+EMA_DECAY = 0.999
+
+
+class EMA:
+    """가중치 지수이동평균(θ_EMA ← d·θ_EMA + (1−d)·θ). 학습은 원본 θ로 하고, 검증과
+    best_model.pt의 'model' 키만 θ_EMA로 남긴다 — 채점·--init-from 쪽은 무변경.
+
+    d = min(EMA_DECAY, (1+n)/(10+n)) — 초반 보정. 없으면 shadow가 수백 step 동안
+    초기 가중치에 끌려 첫 epoch val이 원본보다 나빠 보인다.
+    """
+
+    def __init__(self, model, decay=EMA_DECAY):
+        self.decay = decay
+        self.updates = 0
+        self.shadow = {k: v.detach().clone() for k, v in model.state_dict().items()}
+
+    @torch.no_grad()
+    def update(self, model):
+        self.updates += 1
+        d = min(self.decay, (1 + self.updates) / (10 + self.updates))
+        for k, v in model.state_dict().items():
+            if v.dtype.is_floating_point:
+                self.shadow[k].mul_(d).add_(v, alpha=1 - d)
+            else:
+                self.shadow[k].copy_(v)   # int buffer(카운터 등)는 평균이 무의미 → 최신값
+
+    @torch.no_grad()
+    def swap(self, model):
+        """모델 가중치 ↔ shadow 제자리 교환(자기 역원). 검증 전후 한 번씩 — 백업 사본이
+        따로 없어 상주 메모리는 shadow 한 벌뿐이다."""
+        for k, v in model.state_dict().items():
+            tmp = v.detach().clone()
+            v.copy_(self.shadow[k])
+            self.shadow[k].copy_(tmp)
+
+    def state_dict(self):
+        return {"updates": self.updates, "shadow": self.shadow}
+
+    def load_state_dict(self, sd):
+        self.updates = int(sd["updates"])
+        for k, v in self.shadow.items():
+            v.copy_(sd["shadow"][k])   # copy_라 ckpt(cpu)→현재 device 이동이 자동
+
+
 def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None,
-                skip_iters=0, best_val_loss=1.):
+                skip_iters=0, best_val_loss=1., ema=None):
     """skip_iters: epoch 중간 재개 시 건너뛸 마이크로배치 수(latest.pt의 'iter').
 
     건너뛰기는 data_loader를 그냥 돌리는 방식이라 h5 읽기·SVD 비용은 그대로 든다. 대신 GPU
@@ -40,6 +84,8 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
         optimizer.zero_grad(set_to_none=True)   # 0으로 채우지 말고 버퍼째 해제(그만큼 VRAM 반환)
         if scheduler is not None:
             scheduler.step()   # optimizer-step당 1회 (warmup→cosine)
+        if ema is not None:
+            ema.update(model)   # optimizer-step 경계에서만 — 누적 중간 가중치는 안 섞인다
 
     optimizer.zero_grad(set_to_none=True)
     if torch.cuda.is_available():
@@ -107,7 +153,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
         # 마이크로배치들의 gradient가 재개 시 사라진다. '>= ckpt_every'라서 accum과 ckpt_every가
         # 서로 안 나누어떨어져도 첫 step 경계에서 정확히 한 번 걸린다.
         if CKPT_EVERY_ITERS > 0 and pending == 0 and (iter + 1) - last_saved >= CKPT_EVERY_ITERS:
-            save_latest(args, args.exp_dir, epoch, iter + 1, model, optimizer, best_val_loss)
+            save_latest(args, args.exp_dir, epoch, iter + 1, model, optimizer, best_val_loss, ema=ema)
             last_saved = iter + 1
 
         if iter % args.report_interval == 0:
@@ -320,20 +366,27 @@ def load_val_log(file_path):
     return np.load(p) if os.path.exists(p) else np.empty((0, 2))
 
 
-def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
-    torch.save(
-        {
-            'epoch': epoch,
-            'args': args,
-            'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'best_val_loss': best_val_loss,
-            'exp_dir': exp_dir
-        },
-        f=exp_dir / 'model.pt'
-    )
+def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best, ema=None):
+    ckpt = {
+        'epoch': epoch,
+        'args': args,
+        'model': model.state_dict(),
+        'ema': ema.state_dict() if ema is not None else None,   # resume용 — 'model'은 원본 θ 유지
+        'optimizer': optimizer.state_dict(),
+        'best_val_loss': best_val_loss,
+        'exp_dir': exp_dir
+    }
+    torch.save(ckpt, f=exp_dir / 'model.pt')
     if is_new_best:
-        shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
+        if ema is not None:
+            # 채점(test_part)·--init-from은 best_model.pt의 'model'을 읽는다 → 검증에 쓴 θ_EMA를
+            # 그 자리에 넣는다. 'ema'는 이때 'model'과 동일이라 뺀다(~파라미터×4B 디스크 절약).
+            # resume은 model.pt/latest.pt만 보므로 best의 'ema' 부재는 안전하다.
+            ckpt['model'] = ema.shadow
+            ckpt['ema'] = None
+            torch.save(ckpt, f=exp_dir / 'best_model.pt')
+        else:
+            shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
 
 
 # epoch 단위 저장(model.pt)만으로는 컨테이너가 죽을 때 그 epoch 진행분을 통째로 잃는다
@@ -341,7 +394,7 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
 CKPT_EVERY_ITERS = 500     # 0이면 iter 단위 저장 off
 
 
-def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss):
+def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss, ema=None):
     """epoch 중간 체크포인트를 latest.pt에 원자적으로 저장.
 
     model.pt와 별도 파일이다 — 저장 도중 죽어도 epoch 단위 체크포인트는 멀쩡해야 한다.
@@ -359,6 +412,7 @@ def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss
             'iter': iter_done,
             'args': args,
             'model': model.state_dict(),
+            'ema': ema.state_dict() if ema is not None else None,
             'optimizer': optimizer.state_dict(),
             'best_val_loss': best_val_loss,
             'exp_dir': exp_dir,
@@ -392,6 +446,13 @@ def train(args):
         init_ckpt = torch.load(args.init_from, map_location='cpu', weights_only=False)
         model.load_state_dict(init_ckpt["model"])
         print(f"[init-from] '{args.init_from}' 의 model 가중치로 초기화 (미세조정 시작)")
+
+    # EMA는 항상 켠다(끄는 레버 없음). resume이면 저장된 shadow 복원, EMA 이전의 옛 ckpt면
+    # 현재 가중치에서 새로 시작(그 시점부터의 평균 — 정확하진 않지만 이어갈 수 있는 최선).
+    ema = EMA(model)
+    if resume_ckpt is not None and resume_ckpt.get("ema") is not None:
+        ema.load_state_dict(resume_ckpt["ema"])
+        print(f"[resume] EMA shadow 복원 (updates={ema.updates})")
 
     loss_type = SSIMLoss().to(device=device)
     if getattr(args, "model", "varnet") == "promptmr":
@@ -469,8 +530,10 @@ def train(args):
 
         skip = start_iter if epoch == start_epoch else 0   # 중간 재개는 첫 epoch에만 적용
         train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler,
-                                             skip_iters=skip, best_val_loss=best_val_loss)
+                                             skip_iters=skip, best_val_loss=best_val_loss, ema=ema)
+        ema.swap(model)   # 검증·best 판정·val 재구성 저장은 전부 θ_EMA로
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
+        ema.swap(model)   # 원상복귀 — 다음 epoch 학습은 원본 θ로
         
         val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
@@ -483,7 +546,7 @@ def train(args):
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
-        save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
+        save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best, ema=ema)
         print(
             f'Epoch = [{epoch:4d}/{args.num_epochs:4d}] TrainLoss = {train_loss:.4g} '
             f'ValLoss = {val_loss:.4g} TrainTime = {train_time:.4f}s ValTime = {val_time:.4f}s',

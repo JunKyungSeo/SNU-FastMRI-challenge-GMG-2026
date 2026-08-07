@@ -517,7 +517,9 @@ def train(args):
             tf.set_epoch(epoch)
         augmentor = getattr(tf, "augmentor", None) if tf is not None else None
         if augmentor is not None:
-            print(f"[aug] epoch={epoch} p_flip={augmentor.prob():.4f}")
+            p = augmentor.prob()
+            p_aff = p if augmentor.cfg.affine else 0.0
+            print(f"[aug] epoch={epoch} p_flip={p:.4f} p_affine={p_aff:.4f}")
         elif getattr(args, "aug_on", False):
             raise RuntimeError("--aug-on 인데 augmentor가 배선되지 않았다 "
                                "(train_loader.dataset.transform.augmentor is None) — 증강 0회로 학습될 뻔했다.")

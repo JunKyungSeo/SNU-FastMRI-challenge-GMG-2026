@@ -275,6 +275,9 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         total_epochs=int(getattr(args, "num_epochs", 1)),   # T = 런 길이 → 스케줄이 자동 스케일
         exp_decay=getattr(args, "aug_exp_decay", 5.0),
         max_prob=getattr(args, "aug_max_prob", 0.55),
+        affine=getattr(args, "aug_affine", True),
+        rot_max=getattr(args, "aug_rot_max", 5.0),
+        scale_max=getattr(args, "aug_scale_max", 1.1),
         seed=getattr(args, "seed", 430),
     )
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None

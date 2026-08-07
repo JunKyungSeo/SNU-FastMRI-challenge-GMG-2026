@@ -113,6 +113,10 @@ def parse():
     parser.add_argument('--aug-max-prob', type=float, default=0.55, help='p_max — 마지막 epoch에서의 증강 확률(논문 기본 0.55)')
     parser.add_argument('--aug-delay', type=int, default=0, help='앞쪽 몇 epoch을 증강 없이 보낼지(D). 과적합이 시작되는 epoch 직전에 두는 것이 목적')
     parser.add_argument('--aug-exp-decay', type=float, default=5.0, help='--aug-schedule exp의 감쇠 계수 c (공식 기본 5.0)')
+    parser.add_argument('--aug-affine', action=argparse.BooleanOptionalAction, default=True,
+                        help='회전+확대 증강(--aug-on 아래 기본 on). --no-aug-affine이면 flip만(구버전 재현)')
+    parser.add_argument('--aug-rot-max', type=float, default=5.0, help='affine 회전 최대각(도) — U(-x,+x)')
+    parser.add_argument('--aug-scale-max', type=float, default=1.1, help='affine 확대 상한 — U(1.0,x). 축소 미지원(빈 띠)')
 
     args = parser.parse_args()
 

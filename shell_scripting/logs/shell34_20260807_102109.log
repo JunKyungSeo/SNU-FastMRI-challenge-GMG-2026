@@ -1,0 +1,20 @@
+[START] shell34   2026-08-07 10:21:09   NET=gnorm_probe
+[LOG  ] shell_scripting/logs/shell34_20260807_102109.log
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 --l1-weight 0.1 --acc all -e 1 -l 2e-4 --max-iters 300 -t /root/Data/train/ -v /root/Data/val/ -n gnorm_probe --run-tag gnorm_probe
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    40 vol (acc4 20 · acc8 20) · 1084 slice
+Epoch # 0 ............... gnorm_probe ...............
+[aug] epoch=0 p_flip=0.5000
+Epoch = [  0/  1] Iter = [   0/4358] Loss = 0.1615 Time = 5.8209s
+Epoch = [  0/  1] Iter = [  50/4358] Loss = 0.04702 |g| = 0.197 Time = 242.5824s
+Epoch = [  0/  1] Iter = [ 100/4358] Loss = 0.1833 |g| = 0.229 Time = 244.0071s
+Epoch = [  0/  1] Iter = [ 150/4358] Loss = 0.06586 |g| = 0.315 Time = 244.4306s
+Epoch = [  0/  1] Iter = [ 200/4358] Loss = 0.1121 |g| = 0.133 Time = 244.3940s
+Epoch = [  0/  1] Iter = [ 250/4358] Loss = 0.1236 |g| = 0.46 Time = 244.6721s
+[gnorm] epoch 0 n=150 med=0.22 p90=0.636 max=2.27 clip(0.1) 발동 90.0%
+[mem] epoch 0 peak allocated = 3.31GB / reserved = 4.46GB
+Terminated
+[DONE ] shell34   2026-08-07 10:52:53   exit=143
+[볼 것] 로그의 [gnorm] 줄 — med / p90 / max / 발동%

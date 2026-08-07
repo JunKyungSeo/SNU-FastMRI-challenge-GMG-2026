@@ -1,0 +1,12 @@
+[START] shell36   2026-08-07 10:53:04   crop-h=384  width=368  coils=15
+--- cascade=10  n_history=3 ---
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x368 param=76.0M opt=Y fwdbwd=3.54s peak=2.65GB
+--- cascade=12  n_history=3 ---
+OK   cascades=12 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x368 param=90.8M opt=Y fwdbwd=4.05s peak=2.91GB
+--- cascade=10  n_history=11 ---
+OK   cascades=10 n_feat0=48 sens=24 n_hist=11 ckpt=True schunk=1 coils=15 HxW=384x368 param=78.3M opt=Y fwdbwd=3.76s peak=3.86GB
+--- cascade=12  n_history=11 ---
+OK   cascades=12 n_feat0=48 sens=24 n_hist=11 ckpt=True schunk=1 coils=15 HxW=384x368 param=93.6M opt=Y fwdbwd=4.34s peak=4.34GB
+[DONE ] shell36   2026-08-07 10:54:04
+[해석] peak 이 8GB 에 붙으면 그 config 는 못 쓴다. fwdbwd 비율 × 5.90h = 새 1 epoch 시간.
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (shell36 탐침 완료)

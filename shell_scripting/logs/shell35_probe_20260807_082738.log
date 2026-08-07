@@ -1,0 +1,8 @@
+[START] shell35 probe   2026-08-07 08:27:38   2426fc0
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x480 param=76.0M opt=Y fwdbwd=4.37s peak=3.17GB
+[비교] 스칼라 DC 기준 fwdbwd=4.15s (shell32 실측) — 위 fwdbwd와 비 = ab 의 iter 스케일
+
+[DONE ] shell35 probe   2026-08-07 08:27:55   exit=0
+[저장] shell_scripting/results/swdc_20260807_082738/
+[판정] probe: peak>7.0GB면 폐기·롤백. ab: ValLoss가 0.135를 같은 벽시계에서 못 이기면 롤백.
+       이겨도 추론시간이 점수항 — fwdbwd 비(B0 대비)만큼 recon도 느려진다고 보고 손익 계산.

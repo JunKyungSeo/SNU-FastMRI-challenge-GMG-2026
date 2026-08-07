@@ -116,6 +116,46 @@ conv 계산법은 GEMM·FFT·Winograd 등 여러 가지고 빠를수록 workspac
 
 ## 점수 개선
 
+### 용량 상향 — cascade 10→12 · n_history 3→11
+
+**결정.** 최종 run 은 `--num-cascades 12 --n-history 11` 로 간다. 둘 다 PromptMR+ 원본
+기본값([promptmr_plus.py:561](../utils/model/promptmr/promptmr_plus.py#L561))이고, 우리가
+8GB 때문에 10·3 으로 줄여 쓰던 것을 되돌리는 방향이다. 작년 수상 두 팀도 원본 config 를 썼다.
+
+**VRAM.** [shell36](shell36.sh) 실측(crop-h 384 · W 368 · C15 · `--with-optimizer`):
+
+| cascade | n_history | param | fwd+bwd | probe peak |
+|---|---|---|---|---|
+| 10 | 3 (현재) | 76.0M | 3.54s | 2.65GB |
+| 12 | 3 | 90.8M | 4.05s | 2.91GB |
+| 10 | 11 | 78.3M | 3.76s | 3.86GB |
+| **12** | **11** | **93.6M** | **4.34s** | **4.34GB** |
+
+두 레버의 비용이 반대다 — `n_history` 는 VRAM 을 +1.21GB 먹고 시간은 +0.22s 뿐인데,
+cascade 는 VRAM +0.26GB 에 시간 +0.51s 다. history 버퍼가 cascade 를 가로질러 사는
+상주 텐서라 gradient checkpointing 으로 안 줄어드는 게 이유다.
+
+**8GB 여유.** probe peak 2.65GB 와 실학습 peak 4.87GB 의 차 2.2GB 가 로더·단편화 몫이다.
+가산으로 보면 12:11 의 실학습 peak 는 **6.5GB 근처**. 학습셋 최대 폭 480 짜리 파일에서
+더 붙으므로 첫 epoch `[mem]` 줄을 반드시 확인할 것.
+
+**시간.** slice 당 4.71s → 5.51s(×1.17). 1 epoch 5.90h → **6.9h**, shared 50 epoch 이
+295h → **345h(14.4일)** 가 된다.
+
+**⚠️ 반대 증거 — 같은 시간을 주면 작은 arm 이 이겼다.**
+[shell32](shell32.sh) 가 벽시계 시간을 맞추고(train 약 2820s) 잰 값이다.
+
+| arm | iter | ValLoss |
+|---|---|---|
+| **10:3:48** | 600 | **0.132 / 0.135** |
+| 12:11:48 | 481 | 0.1377 |
+| 10:11:48 | 568 | 0.145 |
+
+같은 시간이면 작은 모델이 iter 를 더 밟아 이긴다는 뜻이다. 다만 **1 epoch·600 iter·scratch**
+라 전체 2179 iter 의 27% 이고, 용량의 이득은 늦게 나오는 성질이라 50 epoch 에서 뒤집힐
+여지가 있다. 노이즈 바닥도 안 쟀다. **그래도 이 축의 유일한 직접 측정은 "작은 쪽이 이겼다"
+이므로, 용량을 올리는 건 그 측정을 뒤집는 데 50 epoch 을 거는 선택이라는 걸 알고 갈 것.**
+
 ### EMA
 
 **현상.** PromptMR+ 원 논문의 EMA 가 우리 코드에 없다. `ema`·moving average·SWA 어느 이름으로도
@@ -220,33 +260,3 @@ config 에서 state_dict 1979키 중 431키가 중복이다.
 ([load_data.py](../utils/data/load_data.py) `kfold_split` 이 `train_ids = 전체 − val_ids` 고정).
 그리고 tail 은 별도 런으로 돌려야 기존 `best_model.pt` 를 안 건드린다 — `--init-from` 경로가
 이미 SHARED→ACC4/ACC8 전환에 쓰이고 있으니 같은 방식이면 된다.
-
-## 배제: DeepSpeed
-
-작년 수상팀([gates02/fastmri-2-1000](https://github.com/gates02/fastmri-2-1000))이 같은 제약
-(FP32·단일 GPU·batch1)에서 ZeRO stage 1 + `offload_optimizer(cpu)` + `DeepSpeedCPUAdam` 을 썼다.
-검토했고 안 쓴다.
-
-world_size=1 이면 ZeRO stage 1 은 항등원이라(나눌 rank 가 없다) 실이득은 offload 하나뿐이다.
-학습 파라미터 67.67M → AdamW m·v **516.3MB**, 8GB 의 6.3%. gradient(258.1MB)는 stage 2 몫이라 잔류.
-
-**쓸 데가 없다.** 현재 실peak allocated 3.33GB / reserved 4.72GB — readout-crop + per-cascade
-checkpointing 이 7월 OOM 을 이미 해결했고 coil compression 도 뺐다. probe 상 nc=32·nh=16·nf=80 이
-전부 이미 들어가고, 정작 유일한 VRAM→속도 환전소인 cascade checkpoint 해제(1.395GB/개)는 0.36개밖에
-못 산다. 게다가 시간 맞춘 A/B 에서 **가장 작은 arm 이 이겼다**(nc10·nh3 ValLoss 0.132 vs
-nc12·nh11 0.1377 vs nc10·nh11 0.145) — VRAM 은 지금 점수의 구속조건이 아니다.
-
-**대가.** step 마다 grad 258MB D2H + param H2D + CPU Adam(실측 상한 84ms) → step 당 100~280ms.
-`--accum-steps 2` · 4.7 s/iter 면 optimizer step 간격이 9.4s 라 **학습시간 +1.1~3.0%**. 추론시간은
-**0** — 엔진이 학습에만 붙고 `test_part` 는 평범한 state dict 를 읽는다. 얻는 것보다 잃는 게 크다.
-
-**같은 이득을 더 싸게, 순서대로.**
-
-1. `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` — 슬롯 env 한 줄. reserved−allocated 1.4GB
-   단편화를 코드·수치 변화 0 으로 친다. 성공 판정은 `[mem]` reserved 하락 + allocated·Loss 불변.
-2. `AdamW(..., foreach=False)` — [train_part.py:459](../utils/learning/train_part.py#L459). 인자 하나로
-   step 중 full-size 임시버퍼 수백 MB.
-3. EMA shadow → CPU pinned. 284.7MB, 의존성 0. s/iter 는 +0.5~1%.
-
-재검토 조건은 둘뿐이다. 다중 GPU 로 옮겨 ZeRO 가 항등원이 아니게 되거나, 1~3 을 다 하고도 500MB
-이상 모자라면서 fp32 AdamW 수치를 반드시 보존해야 할 때.

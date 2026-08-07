@@ -76,10 +76,11 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     l1_w = float(getattr(args, "l1_weight", 0.0))             # C11: >0이면 (1-w)·SSIM + w·L1
     accum = max(1, int(getattr(args, "accum_steps", 1)))      # gradient accumulation
     grad_clip = float(getattr(args, "grad_clip", 0.0))        # gradient clipping max_norm (0=off)
+    gnorms = []   # 자르기 전 총 grad norm — clip 값이 실제로 발동하는지 보려고 모은다
 
     def _do_step():
         if grad_clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            gnorms.append(float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)))
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)   # 0으로 채우지 말고 버퍼째 해제(그만큼 VRAM 반환)
         if scheduler is not None:
@@ -161,13 +162,20 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
                 f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
                 f'Iter = [{iter:4d}/{len(data_loader):4d}] '
                 f'Loss = {loss.item():.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
+                + (f'|g| = {gnorms[-1]:.3g} ' if gnorms else '')
+                + f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
             start_iter = time.perf_counter()
 
     if pending > 0:      # 꼬리: 남은 누적분 step (epoch 끝/max-iters 경계)
         _do_step()
     total_loss = total_loss / max(1, processed)
+    if gnorms:
+        g = sorted(gnorms)
+        over = sum(1 for x in g if x > grad_clip)
+        print(f'[gnorm] epoch {epoch} n={len(g)} med={g[len(g) // 2]:.3g} '
+              f'p90={g[int(len(g) * 0.9)]:.3g} max={g[-1]:.3g} '
+              f'clip({grad_clip}) 발동 {100 * over / len(g):.1f}%')
     if torch.cuda.is_available():
         # 코일 압축을 뺀 뒤로는 peak 이 8GB에 얼마나 붙어 있는지가 상시 관심사 → epoch마다 남긴다.
         print(f'[mem] epoch {epoch} peak allocated = '

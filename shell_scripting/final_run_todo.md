@@ -130,3 +130,119 @@ conv 계산법은 GEMM·FFT·Winograd 등 여러 가지고 빠를수록 workspac
 [test_part.py:145](../utils/learning/test_part.py#L145) 가 `checkpoint['model']` 만 읽으므로
 별도 키로 가면 recon 쪽도 같이 고쳐야 한다. `--resume` 은 EMA 상태까지 복원해야 이어학습이 맞는다.
 그리고 decay 값과 초반 warmup 을 정해야 한다.
+
+→ b27c2d8 로 구현됨. 그런데 원복이 깨진다. 아래.
+
+### EMA swap 이 별칭 파라미터에서 원복 실패 — 최종 run 전 필수
+
+**현상.** [train_part.py:44](../utils/learning/train_part.py#L44) 의 `swap` 이 `state_dict()` 를
+순회하며 제자리 교환을 한다. `state_dict()` 는 `named_parameters` 와 달리 **중복 제거를 안 한다.**
+같은 텐서가 m개 키로 나오면 m번 교환되고, m≥2 면 swap 은 자기 역원이 아니라 위수 3 순열
+(모델, shadow₁, shadow₂) → (shadow₂, 모델, shadow₁) 이 된다. 46행 docstring 의 "자기 역원" 이
+거짓이다. 결과로 검증 뒤 학습이 θ 가 아니라 **θ_EMA 에서 재개**되고 shadow 두 벌이 epoch 마다 벌어진다.
+
+별칭은 둘, 둘 다 [promptmr_plus.py](../utils/model/promptmr/promptmr_plus.py) 안이다. 프로덕션
+config 에서 state_dict 1979키 중 431키가 중복이다.
+
+- [555 / 570행](../utils/model/promptmr/promptmr_plus.py#L570) `self.sens_net_ckp = ReentrantWrapper(self.sens_net)`
+  — 같은 모듈을 두 이름으로 등록. 126 param × 2키.
+- [277행](../utils/model/promptmr/promptmr_plus.py#L277) `act=nn.PReLU()` mutable default argument
+  — import 때 만들어진 PReLU 하나를 전 모델이 공유. 스칼라 1개가 306 경로. cascades 까지 걸친다.
+
+177행 `self.up = ReentrantWrapper(self.up)` 는 같은 이름 재대입이라 별칭이 아니다(대조군).
+
+**결과 2.** `save_model` 이 [385행](../utils/learning/train_part.py#L385)에서 desync 된 shadow 를
+그대로 넣고, `load_state_dict` 는 등록 순서상 뒤쪽 키가 이긴다 → `best_model.pt` 는 **감도맵만 θ,
+나머지는 θ_EMA 인 하이브리드**다. 커밋이 약속한 "best 는 θ_EMA" 가 감도맵에 한해 거짓이다.
+
+**계획.** 570행 삭제는 안 된다 — 기존 ckpt 가 `strict=True` 에서 깨진다. 소비자 쪽에서 접는다.
+`EMA.__init__` 이 `data_ptr` 로 대표 키를 뽑아 두고 `update`·`swap`·`load_state_dict` 가 대표 키만
+돌게 한다. 저장물 키 집합은 그대로라 체크포인트·resume 호환이 안 변한다.
+
+**걸리는 것.** [test_ema.py:26](../scripts/tests/test_ema.py#L26) `test_swap_is_involution` 은
+`nn.Sequential` 이라 별칭이 없어 이 버그를 **원리적으로** 못 잡는다. 별칭 있는 케이스를 더해야 한다.
+
+**영향 범위.** EMA 커밋은 08-07 03:42 UTC, 이 체크아웃 최신 로그는 08-06 17:47 UTC → 저장소
+기록상 EMA 시대에 완주한 run 이 없다. 0.9336 포함 기존 체크포인트는 깨끗하다. 서버는 확인 못 했다 —
+`../result/*/checkpoints/model.pt` 에 `'ema'` 키가 non-None 인 게 있는지만 사람이 보면 결판난다.
+
+### MoE 추론에서 acc4 전문가가 acc8 의 PReLU 로 돈다 — 지금 점수에 이미 먹혔다
+
+**현상.** 위 공유 PReLU 가 **인스턴스 경계도 넘는다**(실측: 모델 둘을 따로 만들어도 같은 저장소.
+모델2 를 0.99 로 덮으면 모델1 도 0.99, 독립이면 0.25). [test_part.py:58-59](../utils/learning/test_part.py#L58)
+가 한 프로세스에서 전문가 둘을 만들고 [46행](../utils/learning/test_part.py#L46)이 각각 로드하므로
+**나중에 로드한 acc8 이 이긴다.**
+
+**계획.** `import copy` 후 전문가 하나를 `copy.deepcopy`. deepcopy 는 모델 **내부** 공유는 보존하면서
+바깥 공유만 끊는다.
+
+**범위.** `promptmrp_0801_moe`(0.9336) 는 이 상태로 채점된 값이다. 고치면 모델이 실제로 달라지므로
+**재채점이 필요하다.** 크기는 두 체크포인트의 slope 차이에 달려 미지수, 방향은 train/test 정합 쪽.
+
+**하지 말 것.** 277행을 `act=None` 으로 고치는 근본 수정. 키 이름이 안 바뀌어 로드는 호환이지만
+**학습 의미가 바뀐다**(전역 1개 slope → CAB 마다 1개). 최종 run 앞두고 0.9336 과의 비교가능성이
+깨진다. 대회 끝나고.
+
+### hold-out 을 막판에 학습에 합치기
+
+**현상.** 지금은 fold 하나(200 volume 중 40)를 끝까지 빼둔다. val 곡선을 보려면 그래야 하지만,
+제출 가중치는 결국 데이터의 80% 만 본 물건이 된다. 교과서 해법은 "하이퍼파라미터 확정 후 100%
+데이터로 재학습"인데 shared 30 epoch 이 200시간대라 재학습은 선택지가 아니다. 그래서 후반부만
+갈아타는 값싼 버전을 쓴다 — 그 전제를 알고 쓸 것.
+
+**언제 갈아타나.** 스케줄은 그대로 두고 마지막 구간만 hold-out 을 합쳐 돈다. 그 단계 예산의
+15~20%. 계획한 30/20/10 기준으로 acc8 은 16 + **4**, acc4 는 7 + **3**.
+
+**어느 단계에.** acc8·acc4 전문가에만. shared 에 붙이면 그 뒤 전문가 단계가 다시 hold-out 뺀
+데이터로 돌면서 효과가 씻긴다. shared 는 초기값일 뿐이라 정직한 val 곡선을 남겨두는 쪽이 낫다.
+
+**LR.** 갈아타는 지점의 LR 을 그대로 이어받아 계속 내린다. 데이터가 바뀌었다고 다시 올리면 앞에서
+쌓은 걸 흔든다. 20 epoch cosine 의 16번째 지점이면 base 의 1/7 쯤 — 거기서 시작해 원래 하한까지
+가면 원래 곡선의 꼬리와 거의 겹친다.
+
+**체크포인트 선택.** 갈아탄 순간부터 val loss 는 자기가 학습한 데이터를 재는 것이라 못 믿는다.
+그 구간에선 best 자동 선택도 early stopping 도 끄고 **마지막 epoch 을 쓴다.** 애초에 이 짓의
+전제가 "epoch 수는 앞의 hold-out 구간에서 이미 정했다" 이므로 마지막을 쓰는 게 맞다.
+
+**판정.** leaderboard 로만 — 학습에 안 넣고 남겨둔 유일한 정직한 자다. 갈아타기 **전** 가중치를
+지우지 말고 따로 남겨 둘 다 채점하고 이긴 쪽을 낸다. 데이터 20% 를 더 보는 게 항상 이득은 아니고,
+이 구간엔 그걸 판별할 계기판이 없으니 백업이 판별 장치를 대신한다.
+
+**비용.** 전문가 단계는 epoch 당 iter 가 `--max-iters` 로 묶여 있어 풀이 160→200 volume 이 돼도
+시간이 안 는다. 대신 그 상한 때문에 새로 들어온 볼륨이 tail 4 epoch 동안 평균 1.6번쯤만 지나간다 —
+얇다 싶으면 상한을 올리거나 epoch 을 늘리는데, 그건 시간을 쓰는 선택이다.
+
+**걸리는 것.** hold-out 을 학습에 넣는 스위치가 지금 코드에 없다
+([load_data.py](../utils/data/load_data.py) `kfold_split` 이 `train_ids = 전체 − val_ids` 고정).
+그리고 tail 은 별도 런으로 돌려야 기존 `best_model.pt` 를 안 건드린다 — `--init-from` 경로가
+이미 SHARED→ACC4/ACC8 전환에 쓰이고 있으니 같은 방식이면 된다.
+
+## 배제: DeepSpeed
+
+작년 수상팀([gates02/fastmri-2-1000](https://github.com/gates02/fastmri-2-1000))이 같은 제약
+(FP32·단일 GPU·batch1)에서 ZeRO stage 1 + `offload_optimizer(cpu)` + `DeepSpeedCPUAdam` 을 썼다.
+검토했고 안 쓴다.
+
+world_size=1 이면 ZeRO stage 1 은 항등원이라(나눌 rank 가 없다) 실이득은 offload 하나뿐이다.
+학습 파라미터 67.67M → AdamW m·v **516.3MB**, 8GB 의 6.3%. gradient(258.1MB)는 stage 2 몫이라 잔류.
+
+**쓸 데가 없다.** 현재 실peak allocated 3.33GB / reserved 4.72GB — readout-crop + per-cascade
+checkpointing 이 7월 OOM 을 이미 해결했고 coil compression 도 뺐다. probe 상 nc=32·nh=16·nf=80 이
+전부 이미 들어가고, 정작 유일한 VRAM→속도 환전소인 cascade checkpoint 해제(1.395GB/개)는 0.36개밖에
+못 산다. 게다가 시간 맞춘 A/B 에서 **가장 작은 arm 이 이겼다**(nc10·nh3 ValLoss 0.132 vs
+nc12·nh11 0.1377 vs nc10·nh11 0.145) — VRAM 은 지금 점수의 구속조건이 아니다.
+
+**대가.** step 마다 grad 258MB D2H + param H2D + CPU Adam(실측 상한 84ms) → step 당 100~280ms.
+`--accum-steps 2` · 4.7 s/iter 면 optimizer step 간격이 9.4s 라 **학습시간 +1.1~3.0%**. 추론시간은
+**0** — 엔진이 학습에만 붙고 `test_part` 는 평범한 state dict 를 읽는다. 얻는 것보다 잃는 게 크다.
+
+**같은 이득을 더 싸게, 순서대로.**
+
+1. `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` — 슬롯 env 한 줄. reserved−allocated 1.4GB
+   단편화를 코드·수치 변화 0 으로 친다. 성공 판정은 `[mem]` reserved 하락 + allocated·Loss 불변.
+2. `AdamW(..., foreach=False)` — [train_part.py:459](../utils/learning/train_part.py#L459). 인자 하나로
+   step 중 full-size 임시버퍼 수백 MB.
+3. EMA shadow → CPU pinned. 284.7MB, 의존성 0. s/iter 는 +0.5~1%.
+
+재검토 조건은 둘뿐이다. 다중 GPU 로 옮겨 ZeRO 가 항등원이 아니게 되거나, 1~3 을 다 하고도 500MB
+이상 모자라면서 fp32 AdamW 수치를 반드시 보존해야 할 때.

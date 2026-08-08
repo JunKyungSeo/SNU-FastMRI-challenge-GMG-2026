@@ -16,7 +16,8 @@ RUN = "promptmrp_GMG_final_0807"
 # 증강 도메인 = 이 접두사로 시작하는 플래그. 나머지는 이 테스트의 관심 밖.
 # --flip/--affine 은 변환별 확률(--flip-max-prob·--affine-max-prob) 몫이다. 접두사에서 빠뜨리면
 # 그 값이 바뀌거나 사라져도 이 테스트가 초록불이라, 동결이 이름만 남는다.
-AUG_PREFIXES = ("--aug", "--mask-aug", "--remask", "--flip", "--affine")
+# --no-aug-* 부정형도 잡는다 — --no-aug-affine 은 affine 을 통째로 끄는데 "--aug" 로는 안 걸린다.
+AUG_PREFIXES = ("--aug", "--no-aug", "--mask-aug", "--remask", "--flip", "--affine")
 
 EXPECTED = {
     "shared": {"--aug-on": True, "--aug-schedule": "constant", "--aug-max-prob": "0.5",

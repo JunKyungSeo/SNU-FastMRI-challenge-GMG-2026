@@ -14,14 +14,20 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 RUN = "promptmrp_GMG_final_0807"
 
 # 증강 도메인 = 이 접두사로 시작하는 플래그. 나머지는 이 테스트의 관심 밖.
-AUG_PREFIXES = ("--aug", "--mask-aug", "--remask")
+# --flip/--affine 은 변환별 확률(--flip-max-prob·--affine-max-prob) 몫이다. 접두사에서 빠뜨리면
+# 그 값이 바뀌거나 사라져도 이 테스트가 초록불이라, 동결이 이름만 남는다.
+AUG_PREFIXES = ("--aug", "--mask-aug", "--remask", "--flip", "--affine")
 
 EXPECTED = {
     "shared": {"--aug-on": True, "--aug-schedule": "constant", "--aug-max-prob": "0.5",
                "--aug-delay": "0", "--mask-aug": "full"},
     "acc4": {"--aug-on": True, "--aug-schedule": "constant", "--aug-max-prob": "0.5",
+             "--flip-max-prob": "0.5", "--affine-max-prob": "0.5",
+             "--affine-delay": "3", "--affine-peak-epoch": "5",
              "--aug-delay": "0", "--mask-aug": "offset", "--remask": "4"},
     "acc8": {"--aug-on": True, "--aug-schedule": "constant", "--aug-max-prob": "0.5",
+             "--flip-max-prob": "0.5", "--affine-max-prob": "0.5",
+             "--affine-delay": "5", "--affine-peak-epoch": "10",
              "--aug-delay": "0", "--mask-aug": "offset", "--remask": "8"},
 }
 

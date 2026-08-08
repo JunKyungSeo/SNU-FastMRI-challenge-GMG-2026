@@ -414,3 +414,75 @@ def test_split_max_prob_scales_schedule_shape():
         pf, pa = aug.prob(cfg.flip_max_prob), aug.prob(cfg.affine_max_prob)
         assert pf > 0.0
         assert pa == pytest.approx(pf * 0.25, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# affine 후반 상승(코사인 램프) — 2026-08-09. flip은 constant 유지, affine만 갈라진다.
+# ---------------------------------------------------------------------------
+
+def test_affine_peak_epoch_absent_keeps_shared_curve():
+    """미지정이면 지금까지대로 flip과 같은 곡선 — 하위호환 계약."""
+    cfg = affine_cfg(schedule="constant", max_prob=0.5, affine_max_prob=0.3)
+    aug = MRIAugmentor(cfg)
+    assert cfg.affine_peak_epoch is None
+    for e in (0, 3, 9):
+        aug.set_epoch(e)
+        assert aug.affine_prob() == aug.prob(cfg.affine_max_prob) == 0.3
+
+
+def test_affine_cosine_ramp_shape():
+    """delay 전 0 · peak에서 max · 이후 유지 · 그 사이는 단조증가하는 코사인."""
+    cfg = affine_cfg(schedule="constant", flip_max_prob=0.5, affine_max_prob=0.5,
+                     affine_delay=5, affine_peak_epoch=10, total_epochs=20)
+    aug = MRIAugmentor(cfg)
+
+    for e in (0, 4, 5):                       # delay까지(포함) 0
+        aug.set_epoch(e)
+        assert aug.affine_prob() == 0.0
+    aug.set_epoch(10)
+    assert aug.affine_prob() == pytest.approx(0.5)
+    aug.set_epoch(19)                          # peak 이후 유지
+    assert aug.affine_prob() == pytest.approx(0.5)
+
+    ps = []
+    for e in range(5, 11):
+        aug.set_epoch(e)
+        ps.append(aug.affine_prob())
+    assert all(b > a for a, b in zip(ps[:-1], ps[1:])), f"단조증가가 아니다: {ps}"
+
+    # 코사인 램프의 대칭성 p(D+k) + p(P−k) = p_max. (중점 u=0.5는 t=7.5라 정수 epoch에
+    # 안 떨어진다 — 그래서 한 점이 아니라 대칭쌍으로 못박는다. 아래 총노출이 정확히
+    # 떨어지는 근거이기도 하다.)
+    def at(e):
+        aug.set_epoch(e)
+        return aug.affine_prob()
+    assert at(6) + at(9) == pytest.approx(0.5)
+    assert at(7) + at(8) == pytest.approx(0.5)
+
+
+def test_affine_ramp_leaves_flip_constant():
+    """flip은 --aug-schedule(constant)을 그대로 따른다 — affine 램프에 딸려가면 안 된다.
+    (딸려가면 shared 내내 0.5였던 flip이 전문가 시작에서 0으로 떨어져 더 큰 계단이 생긴다)"""
+    cfg = affine_cfg(schedule="constant", flip_max_prob=0.5, affine_max_prob=0.5,
+                     affine_delay=5, affine_peak_epoch=10, total_epochs=20)
+    aug = MRIAugmentor(cfg)
+    for e in (0, 5, 10, 19):
+        aug.set_epoch(e)
+        assert aug.prob(cfg.flip_max_prob) == 0.5
+
+
+def test_affine_exposure_matches_design_numbers():
+    """실전 값의 총노출(epoch 환산)을 못박는다 — A/B 없이 도는 런이라 의도를 테스트에 남긴다.
+    acc8(20ep, 5→10): 6.0 = 기존 0.3 고정과 동일(재배치). acc4(10ep, 3→5): 2.75 ≈ 기존 3.0."""
+    def exposure(total, delay, peak):
+        cfg = affine_cfg(schedule="constant", affine_max_prob=0.5, total_epochs=total,
+                         affine_delay=delay, affine_peak_epoch=peak)
+        aug = MRIAugmentor(cfg)
+        s = 0.0
+        for e in range(total):
+            aug.set_epoch(e)
+            s += aug.affine_prob()
+        return s
+
+    assert exposure(20, 5, 10) == pytest.approx(6.0)      # = 0.3 × 20
+    assert exposure(10, 3, 5) == pytest.approx(2.75)      # ≈ 0.3 × 10

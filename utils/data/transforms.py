@@ -224,6 +224,13 @@ class AugmentConfig:
         self.flip_max_prob = float(self.max_prob if v is None else v)
         v = kw.get("affine_max_prob", None)
         self.affine_max_prob = float(self.max_prob if v is None else v)
+        # affine 전용 스케줄(2026-08-09) — peak_epoch을 지정하면 delay~peak을 코사인으로 올라간
+        # 뒤 유지한다(--aug-schedule과 무관). 미지정이면 flip과 같은 곡선(기존 동작).
+        # delay 미지정이면 공통 delay를 따른다.
+        v = kw.get("affine_delay", None)
+        self.affine_delay = int(self.delay if v is None else v)
+        v = kw.get("affine_peak_epoch", None)
+        self.affine_peak_epoch = None if v is None else int(v)
         self.seed = kw.get("seed", 430)
 
 
@@ -261,6 +268,26 @@ class MRIAugmentor:
             return p_max * (t - D) / (T - D)
         k = c.exp_decay / (T - D)
         return float(p_max / (1.0 - np.exp(-(T - D) * k)) * (1.0 - np.exp(-(t - D) * k)))
+
+    def affine_prob(self):
+        """affine 전용 확률. peak_epoch 미지정이면 flip과 같은 곡선(기존 동작).
+        지정하면 delay(D)부터 peak(P)까지 **코사인으로 올라가 이후 p_max를 유지**한다:
+            p(t<D)=0 · p(t≥P)=affine_max_prob · 그 사이 p = p_max·(1−cos(πu))/2, u=(t−D)/(P−D)
+        양 끝 기울기가 0이라 계단도, 꺾임도 없다. --aug-schedule(flip 곡선)과 독립인 이유:
+        flip은 shared 30 epoch 내내 0.5였으므로 전문가에서 같이 0부터 올리면 없애려던 계단보다
+        큰 계단(0.5→0→0.5)이 새로 생긴다. epoch은 **단계 내 로컬**(전역 = 30 + 로컬)."""
+        c = self.cfg
+        if (not c.on) or (not c.affine):
+            return 0.0
+        if c.affine_peak_epoch is None:
+            return self.prob(c.affine_max_prob)
+        D, P, t = int(c.affine_delay), int(c.affine_peak_epoch), self.epoch
+        if t < D:
+            return 0.0
+        if (t >= P) or (P - D <= 0):
+            return float(c.affine_max_prob)
+        u = (t - D) / (P - D)
+        return float(c.affine_max_prob * (1.0 - np.cos(np.pi * u)) / 2.0)
 
     def _rng(self, fname, sl):
         """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨.
@@ -338,7 +365,7 @@ class MRIAugmentor:
         if (not self.cfg.on) or (target is None):
             return kspace_c * M, M, target, bbox, grappa
         p_flip = self.prob(self.cfg.flip_max_prob)
-        p_affine = self.prob(self.cfg.affine_max_prob) if self.cfg.affine else 0.0
+        p_affine = self.affine_prob()
         if p_flip <= 0.0 and p_affine <= 0.0:
             return kspace_c * M, M, target, bbox, grappa
         rng = self._rng(fname, sl)

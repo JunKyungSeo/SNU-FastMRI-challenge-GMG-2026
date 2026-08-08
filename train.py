@@ -129,6 +129,11 @@ def parse():
                         help='flip 전용 p_max. 미지정이면 --aug-max-prob를 따른다')
     parser.add_argument('--affine-max-prob', type=float, default=None,
                         help='affine 전용 p_max. 미지정이면 --aug-max-prob를 따른다. 0이면 affine만 확률 0')
+    parser.add_argument('--affine-delay', type=int, default=None,
+                        help='affine이 오르기 시작하는 epoch(단계 내 로컬). 미지정이면 --aug-delay')
+    parser.add_argument('--affine-peak-epoch', type=int, default=None,
+                        help='affine이 --affine-max-prob에 도달하는 epoch(이후 유지). 지정하면 '
+                             'delay~peak 코사인 상승. 미지정이면 flip과 같은 곡선')
 
     args = parser.parse_args()
 

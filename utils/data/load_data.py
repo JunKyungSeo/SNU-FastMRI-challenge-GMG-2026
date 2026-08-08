@@ -305,6 +305,8 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         scale_max=getattr(args, "aug_scale_max", 1.1),
         flip_max_prob=getattr(args, "flip_max_prob", None),
         affine_max_prob=getattr(args, "affine_max_prob", None),
+        affine_delay=getattr(args, "affine_delay", None),
+        affine_peak_epoch=getattr(args, "affine_peak_epoch", None),
         seed=getattr(args, "seed", 430),
     )
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None

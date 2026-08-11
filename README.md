@@ -138,6 +138,7 @@ pip3 install -r requirements.txt
 bash final_run_train.sh
 ```
 가중치는 `../result/<net_name>/checkpoints/`(repo 바깥의 `result` 폴더)에, epoch별 validation loss는 `../result/<net_name>/val_loss_log*.npy`에 쌓입니다. seed는 430 고정이라 같은 인자로 다시 돌리면 같은 결과가 나옵니다.  
+
 채점:
 ```bash
 LEADERBOARD_DATA_DIR="" bash recon_eval.sh

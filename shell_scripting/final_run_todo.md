@@ -15,19 +15,30 @@
 
 `-e 30 -l 2e-4 --lr-decay-start-epoch 5 --lr-min-factor 0.09`
 
-### expert acc8 — 20 epoch (전역 30~50)
+### expert acc8 — 20 epoch (전역 30~50) = 본 런 18 + tail 2
 
 ⚠️ **epoch 번호가 두 가지로 돈다.** 사람은 전역(shared 0~30 → expert 30~50)으로 세고,
 `train.py` 의 `--lr-decay-start-epoch` 은 그 단계 안에서 0부터 세는 **로컬** 값을 받는다.
 전역에서 2 빼려면 로컬에서도 2를 뺀다 — 아래 표의 두 열이 같은 지점이다.
 
-| 구간 | 전역 | 로컬 | LR |
-|---|---|---|---|
-| linear warm-up | 30~33 | 0~3 | → 2e-4 |
-| 유지 | 33~**38** | 3~**8** | 2e-4 (5 epoch) |
-| cosine decay | **38**~50 | **8**~20 | → 1.8e-5 (12 epoch) |
+| 구간 | 전역 | 로컬 | LR | 슬롯 |
+|---|---|---|---|---|
+| linear warm-up | 30~33 | 0~3 | → 2e-4 | 본 런 |
+| 유지 | 33~**38** | 3~**8** | 2e-4 (5 epoch) | 본 런 |
+| cosine decay | **38**~48 | **8**~18 | → 3.019e-5 (10 epoch) | 본 런 |
+| cosine 꼬리 | 48~50 | — | 3.019e-5 → 1.8e-5 | tail |
 
-`-e 20 -l 2e-4 --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.09`
+`-e 18 -l 2e-4 --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.151`
+
+⚠️ **`--lr-min-factor` 가 다른 단계(0.09)와 다른 건 오타가 아니다.** 마지막 2 epoch 은 tail
+슬롯이 hold-out 을 합쳐 도니까 본 런은 18 에서 멈춘다. 그런데 cosine horizon 은
+`--num-epochs` 에서만 온다(`total_iters = num_epochs × steps`,
+[train_part.py:288](../utils/learning/train_part.py#L288)) — 곡선만 20 으로 두고 18 만 도는
+방법이 없다. 그래서 곡선 자체를 18 에 맞춰 다시 그리고, **하한을 tail 의 시작 LR 로 잡았다**:
+`0.151 = 0.09 + 0.91·0.5·(1+cos(π·10/12))` = 원래 20-epoch 곡선의 로컬 18 지점(3.019e-5).
+시작·끝 LR 은 원안과 같고 감쇠 구간만 12 → 10 epoch 으로 짧아진다(중간이 최대 13% 낮다).
+2026-08-11 결정 — `--sched-epochs` 같은 새 인자를 넣는 대신 인자 두 개로 끝냈다.
+**`-e` 를 바꾸면 `--lr-min-factor` 도 같이 다시 계산할 것.**
 
 **변경 이력.** 원안은 decay 시작이 전역 40(로컬 10)이었고 2026-08-07 에 **38** 로 앞당겼다.
 그만큼 상수 구간이 줄어 사진의 "10 epoch 유지" 가 **5 epoch 유지**가 된다 — 줄어든 5 epoch 이
@@ -41,17 +52,21 @@ decay 쪽으로 넘어가 감쇠가 7 → 12 epoch 으로 길어진다. 총 20 e
 (2026-08-07 정정 — 이 자리에 `--accum-steps 1` 로 계산한 6537 이 적혀 있었다. 실제 BASE_ARGS 는
 `--accum-steps 2` 라 6537 이면 warm-up 이 3 epoch 이 아니라 **6 epoch** 으로 늘어난다.)
 
-### expert acc4 — 10 epoch (전역 30~40)
+### expert acc4 — 10 epoch (전역 30~40) = 본 런 8 + tail 2
 
 acc8 의 비율(warm-up 15% · 유지 25% · decay 60%)을 10 epoch 에 맞춰 축소한다.
 
-| 구간 | 전역 | 로컬 | LR |
-|---|---|---|---|
-| linear warm-up | 30~32 | 0~2 | → 2e-4 |
-| 유지 | 32~34 | 2~4 | 2e-4 |
-| cosine decay | 34~40 | 4~10 | → 1.8e-5 |
+| 구간 | 전역 | 로컬 | LR | 슬롯 |
+|---|---|---|---|---|
+| linear warm-up | 30~32 | 0~2 | → 2e-4 | 본 런 |
+| 유지 | 32~34 | 2~4 | 2e-4 | 본 런 |
+| cosine decay | 34~38 | 4~8 | → 6.350e-5 | 본 런 |
+| cosine 꼬리 | 38~40 | — | 6.350e-5 → 1.8e-5 | tail |
 
-`-e 10 -l 2e-4 --warmup-iters 2180 --lr-decay-start-epoch 4 --lr-min-factor 0.09`
+`-e 8 -l 2e-4 --warmup-iters 2180 --lr-decay-start-epoch 4 --lr-min-factor 0.3175`
+
+⚠️ acc8 과 **같은 이유**로 하한이 0.09 가 아니다(위 설명 참조).
+`0.3175 = 0.09 + 0.91·0.5·(1+cos(π·4/6))` = 원래 10-epoch 곡선의 로컬 8 지점(6.350e-5).
 
 ⚠️ **acc8 의 "전역 38" 을 그대로 가져오면 안 된다.** acc4 는 전역 40 에서 끝나므로 38 부터
 감쇠하면 decay 가 2 epoch 뿐이다. 그래서 절대 지점이 아니라 비율로 옮겼다.
@@ -86,8 +101,8 @@ acc8 의 비율(warm-up 15% · 유지 25% · decay 60%)을 10 epoch 에 맞춰 �
 | 파일 | 단계 |
 |---|---|
 | [train_final_shared.sh](train_final_shared.sh) | shared 30 epoch |
-| [train_final_acc8.sh](train_final_acc8.sh) | acc8 전문가 20 epoch |
-| [train_final_acc4.sh](train_final_acc4.sh) | acc4 전문가 10 epoch |
+| [train_final_acc8.sh](train_final_acc8.sh) | acc8 전문가 18 epoch (+tail 2 = 20) |
+| [train_final_acc4.sh](train_final_acc4.sh) | acc4 전문가 8 epoch (+tail 2 = 10) |
 | [train_final_tail_acc8.sh](train_final_tail_acc8.sh) | acc8 tail 2 epoch (hold-out 합침) |
 | [train_final_tail_acc4.sh](train_final_tail_acc4.sh) | acc4 tail 2 epoch (hold-out 합침) |
 | [_final_base.sh](_final_base.sh) | 공통 인자 + 실행 함수 + `promote_last_epoch` (슬롯 아님) |

@@ -10,13 +10,82 @@ import copy
 from collections import defaultdict
 from utils.data.load_data import create_data_loaders
 from utils.common.utils import save_reconstructions, ssim_loss
-from utils.common.loss_function import SSIMLoss, bbox_ssim_loss
+from utils.common.loss_function import SSIMLoss, bbox_ssim_loss, masked_l1_loss
 from utils.model.varnet import VarNet
 
 import os
 
+EMA_DECAY = 0.999
+
+
+class EMA:
+    """가중치 지수이동평균(θ_EMA ← d·θ_EMA + (1−d)·θ). 학습은 원본 θ로 하고, 검증과
+    best_model.pt의 'model' 키만 θ_EMA로 남긴다 — 채점·--init-from 쪽은 무변경.
+
+    d = min(EMA_DECAY, (1+n)/(10+n)) — 초반 보정. 없으면 shadow가 수백 step 동안
+    초기 가중치에 끌려 첫 epoch val이 원본보다 나빠 보인다.
+    """
+
+    def __init__(self, model, decay=EMA_DECAY):
+        self.decay = decay
+        self.updates = 0
+        # ⚠️ state_dict()는 named_parameters()와 달리 **중복 제거를 안 한다.** 한 텐서가 두 이름으로
+        # 등록돼 있으면 m개 키로 나온다(프로덕션 config에서 1979키 중 431키가 중복):
+        #   promptmr_plus.py:570 self.sens_net_ckp = ReentrantWrapper(self.sens_net) — 모듈 이중 등록
+        #   promptmr_plus.py:277 act=nn.PReLU() mutable default — 스칼라 1개가 306 경로에 공유
+        # 그래서 shadow도 **같은 텐서를 가리키게** 만들고(_keys = 대표 키만) update·swap이 대표만 돈다.
+        # 이걸 안 하면 swap이 별칭을 m번 교환해 자기 역원이 아니게 되고(m=2면 위수 3 순열:
+        # (θ, s₁, s₂) → (s₂, θ, s₁)), 검증 뒤 학습이 θ가 아니라 **θ_EMA에서 재개**된다.
+        # 키 집합 자체는 그대로 저장되므로 기존 체크포인트·resume 호환이 안 변한다.
+        self.shadow = {}
+        self._keys = []
+        rep_of = {}
+        for k, v in model.state_dict().items():
+            ptr = v.data_ptr() if v.numel() else None   # 빈 텐서는 data_ptr이 0으로 겹칠 수 있다
+            rep = rep_of.get(ptr) if ptr is not None else None
+            if rep is None:
+                if ptr is not None:
+                    rep_of[ptr] = k
+                self._keys.append(k)
+                self.shadow[k] = v.detach().clone()
+            else:
+                self.shadow[k] = self.shadow[rep]   # 별칭은 대표와 같은 객체를 공유
+
+    @torch.no_grad()
+    def update(self, model):
+        self.updates += 1
+        d = min(self.decay, (1 + self.updates) / (10 + self.updates))
+        sd = model.state_dict()
+        for k in self._keys:
+            v = sd[k]
+            if v.dtype.is_floating_point:
+                self.shadow[k].mul_(d).add_(v, alpha=1 - d)
+            else:
+                self.shadow[k].copy_(v)   # int buffer(카운터 등)는 평균이 무의미 → 최신값
+
+    @torch.no_grad()
+    def swap(self, model):
+        """모델 가중치 ↔ shadow 제자리 교환(자기 역원). 검증 전후 한 번씩 — 백업 사본이
+        따로 없어 상주 메모리는 shadow 한 벌뿐이다.
+        대표 키만 도는 게 자기 역원의 조건이다 — 별칭까지 돌면 같은 텐서를 m번 교환한다."""
+        sd = model.state_dict()
+        for k in self._keys:
+            v = sd[k]
+            tmp = v.detach().clone()
+            v.copy_(self.shadow[k])
+            self.shadow[k].copy_(tmp)
+
+    def state_dict(self):
+        return {"updates": self.updates, "shadow": self.shadow}
+
+    def load_state_dict(self, sd):
+        self.updates = int(sd["updates"])
+        for k in self._keys:                # 별칭은 대표와 같은 객체라 자동으로 따라온다
+            self.shadow[k].copy_(sd["shadow"][k])   # copy_라 ckpt(cpu)→현재 device 이동이 자동
+
+
 def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler=None,
-                skip_iters=0, best_val_loss=1.):
+                skip_iters=0, best_val_loss=1., ema=None):
     """skip_iters: epoch 중간 재개 시 건너뛸 마이크로배치 수(latest.pt의 'iter').
 
     건너뛰기는 data_loader를 그냥 돌리는 방식이라 h5 읽기·SVD 비용은 그대로 든다. 대신 GPU
@@ -29,16 +98,20 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
     lam = float(getattr(args, "bbox_loss_lambda", 0.0))   # C1: >0이면 tuple 맨 끝에 bbox가 붙고 λ항을 더함
     use_bbox = lam > 0
     area_weight = bool(getattr(args, "area_weight", False))   # PromptMR+: masked SSIM × sqrt(면적비)
+    l1_w = float(getattr(args, "l1_weight", 0.0))             # C11: >0이면 (1-w)·SSIM + w·L1
     accum = max(1, int(getattr(args, "accum_steps", 1)))      # gradient accumulation
     grad_clip = float(getattr(args, "grad_clip", 0.0))        # gradient clipping max_norm (0=off)
+    gnorms = []   # 자르기 전 총 grad norm — clip 값이 실제로 발동하는지 보려고 모은다
 
     def _do_step():
         if grad_clip > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+            gnorms.append(float(torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)))
         optimizer.step()
         optimizer.zero_grad(set_to_none=True)   # 0으로 채우지 말고 버퍼째 해제(그만큼 VRAM 반환)
         if scheduler is not None:
             scheduler.step()   # optimizer-step당 1회 (warmup→cosine)
+        if ema is not None:
+            ema.update(model)   # optimizer-step 경계에서만 — 누적 중간 가중치는 안 섞인다
 
     optimizer.zero_grad(set_to_none=True)
     if torch.cuda.is_available():
@@ -81,6 +154,11 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
 
         output = model(kspace, mask)
         loss = loss_type(output, target, maximum, mask=fg_mask) if fg else loss_type(output, target, maximum)
+        if l1_w > 0:
+            # 볼록 결합이라 총 스케일이 기존과 같게 유지된다(항을 더하는 bbox 방식과 다른 점).
+            # area_weight보다 **먼저** 섞어 두 항이 같은 면적 가중을 받게 한다.
+            loss = (1 - l1_w) * loss + l1_w * masked_l1_loss(
+                output, target, maximum, mask=(fg_mask if fg else None))
         if area_weight and fg:
             # masked SSIM × sqrt(foreground 면적비). foreground 작은 슬라이스 손실을 낮춰 가중(작년 팀 방식).
             area_ratio = fg_mask.float().mean().clamp_min(1e-6)   # batch=1 → 스칼라
@@ -101,7 +179,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
         # 마이크로배치들의 gradient가 재개 시 사라진다. '>= ckpt_every'라서 accum과 ckpt_every가
         # 서로 안 나누어떨어져도 첫 step 경계에서 정확히 한 번 걸린다.
         if CKPT_EVERY_ITERS > 0 and pending == 0 and (iter + 1) - last_saved >= CKPT_EVERY_ITERS:
-            save_latest(args, args.exp_dir, epoch, iter + 1, model, optimizer, best_val_loss)
+            save_latest(args, args.exp_dir, epoch, iter + 1, model, optimizer, best_val_loss, ema=ema)
             last_saved = iter + 1
 
         if iter % args.report_interval == 0:
@@ -109,13 +187,20 @@ def train_epoch(args, epoch, model, data_loader, optimizer, loss_type, scheduler
                 f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
                 f'Iter = [{iter:4d}/{len(data_loader):4d}] '
                 f'Loss = {loss.item():.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
+                + (f'|g| = {gnorms[-1]:.3g} ' if gnorms else '')
+                + f'Time = {time.perf_counter() - start_iter:.4f}s',
             )
             start_iter = time.perf_counter()
 
     if pending > 0:      # 꼬리: 남은 누적분 step (epoch 끝/max-iters 경계)
         _do_step()
     total_loss = total_loss / max(1, processed)
+    if gnorms:
+        g = sorted(gnorms)
+        over = sum(1 for x in g if x > grad_clip)
+        print(f'[gnorm] epoch {epoch} n={len(g)} med={g[len(g) // 2]:.3g} '
+              f'p90={g[int(len(g) * 0.9)]:.3g} max={g[-1]:.3g} '
+              f'clip({grad_clip}) 발동 {100 * over / len(g):.1f}%')
     if torch.cuda.is_available():
         # 코일 압축을 뺀 뒤로는 peak 이 8GB에 얼마나 붙어 있는지가 상시 관심사 → epoch마다 남긴다.
         print(f'[mem] epoch {epoch} peak allocated = '
@@ -181,45 +266,88 @@ def steps_per_epoch(args, len_loader):
 
 
 def build_scheduler(optimizer, args, len_loader):
-    """promptmr & warmup_iters>0이면 linear warmup→cosine LambdaLR, 아니면 None(상수 LR).
-    warmup_iters·total_iters는 optimizer-step 단위(accum_steps로 나눔)로 해석한다."""
-    if getattr(args, "model", "varnet") != "promptmr" or getattr(args, "warmup_iters", 0) <= 0:
+    """promptmr에서 warmup 또는 cosine 감쇠가 켜져 있으면 LambdaLR, 아니면 None(상수 LR).
+
+    곡선은 세 구간이다 — [0, warmup) linear warmup → [warmup, decay_start) **base_lr 유지**
+    → [decay_start, total) cosine 감쇠(하한 = base_lr × --lr-min-factor).
+    warmup_iters·total_iters·decay_start는 전부 optimizer-step 단위(accum_steps로 나눔)다.
+    --lr-decay-start-epoch < 0 이면 decay_start = warmup → 기존 동작(warmup 직후부터 전 구간 cosine).
+    """
+    if getattr(args, "model", "varnet") != "promptmr":
+        return None
+    warmup = int(getattr(args, "warmup_iters", 0))
+    decay_start_epoch = int(getattr(args, "lr_decay_start_epoch", -1))
+    if warmup <= 0 and decay_start_epoch < 0:
         return None
     accum = max(1, int(getattr(args, "accum_steps", 1)))
     # epoch당 optimizer step = ceil(len/accum) (train_epoch 꼬리 step 포함). floor면 스케줄이 어긋남.
-    total_iters = args.num_epochs * math.ceil(len_loader / accum)   # optimizer-step 수
-    warmup = args.warmup_iters
+    # ⚠️ len_loader가 아니라 steps_per_epoch()를 쓴다 — train_epoch은 --max-iters에서 break 하므로
+    #    실제로 밟는 step이 그만큼 적다. len_loader를 쓰면 horizon이 길어져 cosine이 중간에서 끝나고,
+    #    resume fast-forward(아래 train())는 steps_per_epoch()를 써서 눈금까지 어긋난다.
+    opt_steps_per_epoch = math.ceil(steps_per_epoch(args, len_loader) / accum)
+    total_iters = args.num_epochs * opt_steps_per_epoch   # optimizer-step 수
+    decay_start = decay_start_epoch * opt_steps_per_epoch if decay_start_epoch >= 0 else warmup
+    f_min = float(getattr(args, "lr_min_factor", 0.0))
 
     def lr_lambda(step):
         if step < warmup:
             return (step + 1) / warmup
-        progress = (step - warmup) / max(1, total_iters - warmup)
-        return 0.5 * (1.0 + math.cos(math.pi * progress))
+        if step < decay_start:
+            return 1.0
+        progress = (step - decay_start) / max(1, total_iters - decay_start)
+        # min(progress, 1.0) 필수 — horizon을 넘겨 밟으면 cos가 다시 올라가 LR이 역주행한다.
+        return f_min + (1.0 - f_min) * 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
 
     return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
 
 
+def should_early_stop(val_loss_log, patience):
+    """val이 patience epoch 연속 개선되지 않았으면 True (patience<=0이면 항상 False).
+
+    카운터를 따로 들고 다니지 않고 val_loss_log((n,2) = [epoch, val_loss])에서 **파생**한다 —
+    체크포인트에 새 필드를 넣을 필요가 없고, resume 시 load_val_log가 복원해 주므로 공짜로 이어진다.
+    """
+    if patience <= 0 or len(val_loss_log) == 0:
+        return False
+    return len(val_loss_log) - 1 - int(np.argmin(val_loss_log[:, 1])) >= patience
+
+
 def check_resume_compat(saved_args, args):
     """resume 시 저장 config와 현재 config가 일치해야 함(아키텍처·cosine horizon).
-    num_epochs는 cosine 스케줄 horizon(total_iters=num_epochs*len)에만 영향 → cosine 활성
-    (warmup_iters>0)일 때만 일치를 요구한다. 상수 LR에선 num_epochs 증가(=학습 연장)를 허용:
+    num_epochs·max_iters는 cosine horizon(total_iters=num_epochs*ceil(steps_per_epoch/accum))에만
+    영향 → cosine 활성(warmup_iters>0 또는 lr_decay_start_epoch>=0)일 때만 일치를 요구한다.
+    상수 LR에선 num_epochs 증가(=학습 연장)를 허용:
     루프 range(start_epoch, num_epochs)만 늘어날 뿐 LR 곡선이 바뀌지 않아 안전."""
     # 신규 필드가 없는 옛 체크포인트는 "기능 부재 시의 기본값"으로 간주(현재 값이 아님 — 그러면
     # 압축 없이 학습한 ckpt를 압축 켜고 재개하는 걸 잘못 허용). 압축 off(False)/nvc 8이 부재 기본.
     ABSENT_DEFAULT = {"coil_compress": False, "n_virtual_coils": 8,
                       "k_fold": 0, "val_fold": 0, "kfold_seed": 430,
-                      "remask": "off", "remask_offset": "uniform"}
+                      "remask": "off", "remask_offset": "uniform", "l1_weight": 0.0,
+                      "lr_decay_start_epoch": -1, "lr_min_factor": 0.0,
+                      "mask_aug": "off", "early_stop_patience": 0, "max_iters": 0,
+                      "holdout_tail": False}
     fields = ["model", "num_cascades", "n_feat0", "sens_n_feat0", "n_history",
               "warmup_iters", "lr", "accum_steps", "coil_compress", "k_fold",
-              "remask"]
+              "remask", "l1_weight", "lr_decay_start_epoch", "lr_min_factor", "mask_aug",
+              "holdout_tail"]
+    # early_stop_patience는 일부러 뺐다 — 학습 결과를 바꾸지 않으므로 재개하면서 조정할 수 있어야 쓸모가 있다.
     # ⚠️ 위 필드명은 argparse dest 와 **글자 그대로 같아야** 한다. 어긋나면 getattr 이 양쪽 다
     #    ABSENT_DEFAULT 를 집어 항상 일치 → 가드가 영구 no-op 이 된다(조용히 학습셋이 바뀐 채 재개).
     # K-Fold에서 분할이 달라지면 train/val 경계가 바뀐다 → 재개하는 순간 이전 val 볼륨으로 학습하게 된다
     # (조용히 새는 leakage라 로그만 봐선 못 잡는다). 분할에 영향을 주는 값은 k-fold일 때만 확인한다.
     if int(getattr(saved_args, "k_fold", 0)) > 0 or int(getattr(args, "k_fold", 0)) > 0:
         fields += ["val_fold", "kfold_seed"]
-    if int(getattr(args, "warmup_iters", 0)) > 0:   # cosine horizon 있을 때만 num_epochs 고정
-        fields.append("num_epochs")
+    if (int(getattr(args, "warmup_iters", 0)) > 0
+            or int(getattr(args, "lr_decay_start_epoch", -1)) >= 0):   # cosine horizon 있을 때만 고정
+        # max_iters도 horizon이다 — total_iters = num_epochs * ceil(steps_per_epoch(args,len)/accum)
+        # 이라 --max-iters를 바꿔 재개하면 곡선과 fast-forward 눈금이 함께 어긋난다.
+        fields += ["num_epochs", "max_iters"]
+    # --holdout-tail이면 상수 LR(=위 조건 거짓)이라도 max_iters를 묶는다. 그 값이 곧 샘플러의 n이고
+    # n은 HoldoutTailSampler가 섞는 순열의 **길이**라, 1만 달라져도 epoch 구성이 통째로 바뀐다
+    # → 중간 재개가 다른 순열에서 skip_iters를 세어 hold-out을 두 번 보거나 아예 안 보게 된다.
+    # (RandomSampler 시절엔 max_iters가 뒤를 자르기만 해서 무해했다.)
+    elif getattr(saved_args, "holdout_tail", False) or getattr(args, "holdout_tail", False):
+        fields += ["max_iters"]
     # n_virtual_coils는 압축이 켜져 있을 때만 입력에 영향을 준다. 압축 off끼리 재개하는데
     # 죽은 값이 다르다고 막으면 헛돈다(코일 전부 사용이 기본이 된 뒤로는 이 경우가 정상 경로다).
     if getattr(saved_args, "coil_compress", False) or getattr(args, "coil_compress", False):
@@ -228,6 +356,10 @@ def check_resume_compat(saved_args, args):
     if (str(getattr(saved_args, "remask", "off")) != "off"
             or str(getattr(args, "remask", "off")) != "off"):
         fields += ["remask_offset", "seed"]
+    # --mask-aug 도 마스크를 (seed, epoch, volume, slice)에서 뽑는다 → seed가 바뀌면 입력이 바뀐다.
+    elif (str(getattr(saved_args, "mask_aug", "off")) != "off"
+            or str(getattr(args, "mask_aug", "off")) != "off"):
+        fields.append("seed")
     for f in fields:
         fallback = ABSENT_DEFAULT.get(f, None)
         s, c = getattr(saved_args, f, fallback), getattr(args, f, fallback)
@@ -275,20 +407,27 @@ def load_val_log(file_path):
     return np.load(p) if os.path.exists(p) else np.empty((0, 2))
 
 
-def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best):
-    torch.save(
-        {
-            'epoch': epoch,
-            'args': args,
-            'model': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'best_val_loss': best_val_loss,
-            'exp_dir': exp_dir
-        },
-        f=exp_dir / 'model.pt'
-    )
+def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_best, ema=None):
+    ckpt = {
+        'epoch': epoch,
+        'args': args,
+        'model': model.state_dict(),
+        'ema': ema.state_dict() if ema is not None else None,   # resume용 — 'model'은 원본 θ 유지
+        'optimizer': optimizer.state_dict(),
+        'best_val_loss': best_val_loss,
+        'exp_dir': exp_dir
+    }
+    torch.save(ckpt, f=exp_dir / 'model.pt')
     if is_new_best:
-        shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
+        if ema is not None:
+            # 채점(test_part)·--init-from은 best_model.pt의 'model'을 읽는다 → 검증에 쓴 θ_EMA를
+            # 그 자리에 넣는다. 'ema'는 이때 'model'과 동일이라 뺀다(~파라미터×4B 디스크 절약).
+            # resume은 model.pt/latest.pt만 보므로 best의 'ema' 부재는 안전하다.
+            ckpt['model'] = ema.shadow
+            ckpt['ema'] = None
+            torch.save(ckpt, f=exp_dir / 'best_model.pt')
+        else:
+            shutil.copyfile(exp_dir / 'model.pt', exp_dir / 'best_model.pt')
 
 
 # epoch 단위 저장(model.pt)만으로는 컨테이너가 죽을 때 그 epoch 진행분을 통째로 잃는다
@@ -296,7 +435,7 @@ def save_model(args, exp_dir, epoch, model, optimizer, best_val_loss, is_new_bes
 CKPT_EVERY_ITERS = 500     # 0이면 iter 단위 저장 off
 
 
-def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss):
+def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss, ema=None):
     """epoch 중간 체크포인트를 latest.pt에 원자적으로 저장.
 
     model.pt와 별도 파일이다 — 저장 도중 죽어도 epoch 단위 체크포인트는 멀쩡해야 한다.
@@ -314,6 +453,7 @@ def save_latest(args, exp_dir, epoch, iter_done, model, optimizer, best_val_loss
             'iter': iter_done,
             'args': args,
             'model': model.state_dict(),
+            'ema': ema.state_dict() if ema is not None else None,
             'optimizer': optimizer.state_dict(),
             'best_val_loss': best_val_loss,
             'exp_dir': exp_dir,
@@ -348,6 +488,13 @@ def train(args):
         model.load_state_dict(init_ckpt["model"])
         print(f"[init-from] '{args.init_from}' 의 model 가중치로 초기화 (미세조정 시작)")
 
+    # EMA는 항상 켠다(끄는 레버 없음). resume이면 저장된 shadow 복원, EMA 이전의 옛 ckpt면
+    # 현재 가중치에서 새로 시작(그 시점부터의 평균 — 정확하진 않지만 이어갈 수 있는 최선).
+    ema = EMA(model)
+    if resume_ckpt is not None and resume_ckpt.get("ema") is not None:
+        ema.load_state_dict(resume_ckpt["ema"])
+        print(f"[resume] EMA shadow 복원 (updates={ema.updates})")
+
     loss_type = SSIMLoss().to(device=device)
     if getattr(args, "model", "varnet") == "promptmr":
         optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=1e-3)
@@ -375,8 +522,15 @@ def train(args):
 
     scheduler = build_scheduler(optimizer, args, len(train_loader))
     if scheduler is not None:
-        print(f"[scheduler] warmup={args.warmup_iters} → cosine, "
-              f"total_iters={args.num_epochs * len(train_loader)}, base_lr={args.lr}")
+        # build_scheduler와 같은 식으로 찍는다 — accum·--max-iters를 안 반영하면 로그가
+        # 실제 horizon과 달라져, 스케줄이 의도대로 걸렸는지 확인할 유일한 계기판이 거짓말을 한다.
+        _acc = max(1, int(getattr(args, "accum_steps", 1)))
+        _spe = math.ceil(steps_per_epoch(args, len(train_loader)) / _acc)
+        _de = int(getattr(args, "lr_decay_start_epoch", -1))
+        print(f"[scheduler] warmup={args.warmup_iters} → "
+              f"decay_start={_de * _spe if _de >= 0 else args.warmup_iters} step 부터 cosine "
+              f"(하한 {float(getattr(args, 'lr_min_factor', 0.0))}×base), "
+              f"total_iters={args.num_epochs * _spe}, base_lr={args.lr}")
 
     if resume_ckpt is not None:
         optimizer.load_state_dict(resume_ckpt["optimizer"])   # scheduler 생성 후에 로드(initial_lr=base 유지)
@@ -404,7 +558,9 @@ def train(args):
             tf.set_epoch(epoch)
         augmentor = getattr(tf, "augmentor", None) if tf is not None else None
         if augmentor is not None:
-            print(f"[aug] epoch={epoch} p_flip={augmentor.prob():.4f}")
+            p_flip = augmentor.prob(augmentor.cfg.flip_max_prob)
+            p_aff = augmentor.affine_prob()
+            print(f"[aug] epoch={epoch} p_flip={p_flip:.4f} p_affine={p_aff:.4f}")
         elif getattr(args, "aug_on", False):
             raise RuntimeError("--aug-on 인데 augmentor가 배선되지 않았다 "
                                "(train_loader.dataset.transform.augmentor is None) — 증강 0회로 학습될 뻔했다.")
@@ -417,8 +573,10 @@ def train(args):
 
         skip = start_iter if epoch == start_epoch else 0   # 중간 재개는 첫 epoch에만 적용
         train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, loss_type, scheduler,
-                                             skip_iters=skip, best_val_loss=best_val_loss)
+                                             skip_iters=skip, best_val_loss=best_val_loss, ema=ema)
+        ema.swap(model)   # 검증·best 판정·val 재구성 저장은 전부 θ_EMA로
         val_loss, num_subjects, reconstructions, targets, inputs, val_time = validate(args, model, val_loader)
+        ema.swap(model)   # 원상복귀 — 다음 epoch 학습은 원본 θ로
         
         val_loss = val_loss / num_subjects   # §5-A: per-subject 평균으로 정규화(저장 전). 이전엔 미정규화 SUM을 저장했음
         val_loss_log = np.append(val_loss_log, np.array([[epoch, val_loss]]), axis=0)
@@ -431,7 +589,7 @@ def train(args):
         is_new_best = val_loss < best_val_loss
         best_val_loss = min(best_val_loss, val_loss)
 
-        save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best)
+        save_model(args, args.exp_dir, epoch + 1, model, optimizer, best_val_loss, is_new_best, ema=ema)
         print(
             f'Epoch = [{epoch:4d}/{args.num_epochs:4d}] TrainLoss = {train_loss:.4g} '
             f'ValLoss = {val_loss:.4g} TrainTime = {train_time:.4f}s ValTime = {val_time:.4f}s',
@@ -444,3 +602,11 @@ def train(args):
             print(
                 f'ForwardTime = {time.perf_counter() - start:.4f}s',
             )
+
+        # early stopping — 저장이 다 끝난 뒤에 판정한다(best_model.pt는 위에서 이미 남았으므로 추가 저장 없음).
+        patience = int(getattr(args, "early_stop_patience", 0))
+        if should_early_stop(val_loss_log, patience):
+            best_ep = int(val_loss_log[int(np.argmin(val_loss_log[:, 1])), 0])
+            print(f"[early-stop] epoch {best_ep} 이후 {patience} epoch 연속 val 개선 없음 → 학습 중단 "
+                  f"(best_val={float(val_loss_log[:, 1].min()):.4g})")
+            break

@@ -1,0 +1,12 @@
+==========================================================
+[START] shell31_recon   2026-08-06 16:58:46   TARGET=merged  NET=promptmrp_0801_moe
+[LOG  ] shell_scripting/logs/shell31_recon_20260806_165846.log   [채점] /root/Data/leaderboard
+==========================================================
++ python -u recon_eval.py -n promptmrp_0801_moe -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmrp_0801_moe_20260806_165846.txt
+Terminated
+==========================================================
+[DONE ] shell31_recon   2026-08-06 17:10:40   exit=143
+[저장] 점수: shell_scripting/results/recon_eval_promptmrp_0801_moe_20260806_165846.txt   (git add 해서 공유)
+==========================================================
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (promptmrp_0801_moe 채점 완료 (exit=143))

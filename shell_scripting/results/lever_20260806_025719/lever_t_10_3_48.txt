@@ -1,0 +1,13 @@
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... lever_t_10_3_48 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1577 Time = 5.5224s
+Epoch = [  0/  1] Iter = [  20/2163] Loss = 0.06951 Time = 93.4429s
+Epoch = [  0/  1] Iter = [  40/2163] Loss = 0.121 Time = 93.9507s
+[mem] epoch 0 peak allocated = 2.85GB / reserved = 4.03GB
+loss file saved! ../result/lever_t_10_3_48/val_loss_log_lever_t_10_3_48
+Epoch = [   0/   1] TrainLoss = 0.1142 ValLoss = 0.1617 TrainTime = 282.1793s ValTime = 352.8767s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.2787s

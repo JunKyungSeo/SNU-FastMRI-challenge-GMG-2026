@@ -1,0 +1,67 @@
+==========================================================
+[START] shell30   2026-07-31 18:10:35
+[BR   ] jkMRplus (12bbe7e)
+[CONF ] fold=2 acc=8 iters=120 arms='1 3'  data=/root/Data
+[근거 ] model_strategy §3 재측정 — 옛 기각 근거(bbox blur) 반증. a=1 한정.
+==========================================================
+[GPU  ] used=2MiB
+
+---------- arm: --num-adj-slices 1  (net=promptmr_probe_adj1_f2) ----------
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-adj-slices 1 -e 1 --max-iters 120 -n promptmr_probe_adj1_f2 --run-tag probe_adj1
++ tee shell_scripting/results/adj_probe_20260731_181035/adj1.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_probe_adj1_f2 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1715 Time = 5.6493s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.0561 Time = 233.0691s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.1046 Time = 234.1906s
+[mem] epoch 0 peak allocated = 2.85GB / reserved = 4.53GB
+loss file saved! ../result/promptmr_probe_adj1_f2/val_loss_log_probe_adj1
+Epoch = [   0/   1] TrainLoss = 0.1224 ValLoss = 0.1543 TrainTime = 561.9884s ValTime = 351.6841s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.5440s
+[arm adj=1] exit=0
+
+---------- arm: --num-adj-slices 3  (net=promptmr_probe_adj3_f2) ----------
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --num-adj-slices 3 -e 1 --max-iters 120 -n promptmr_probe_adj3_f2 --run-tag probe_adj3
++ tee shell_scripting/results/adj_probe_20260731_181035/adj3.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... promptmr_probe_adj3_f2 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.2154 Time = 11.9604s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.05961 Time = 450.7736s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.1083 Time = 452.3916s
+[mem] epoch 0 peak allocated = 3.35GB / reserved = 5.14GB
+loss file saved! ../result/promptmr_probe_adj3_f2/val_loss_log_probe_adj3
+Epoch = [   0/   1] TrainLoss = 0.1273 ValLoss = 0.1566 TrainTime = 1087.5505s ValTime = 664.1641s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.3214s
+[arm adj=3] exit=0
+
+==========================================================
+===== 결과: 손실 궤적 (같은 손실 함수라 나란히 비교 가능) =====
+--- adj=1 ---
+  iter 0  loss 0.1715
+  iter 50  loss 0.0561
+  iter 100  loss 0.1046
+  [시간] Time = 561.9884s Time = 351.6841s Time = 3.5440s 
+  [VRAM] [mem] epoch 0 peak allocated = 2.85GB / reserved = 4.53GB
+  [Val ] ValLoss = 0.1543
+--- adj=3 ---
+  iter 0  loss 0.2154
+  iter 50  loss 0.05961
+  iter 100  loss 0.1083
+  [시간] Time = 1087.5505s Time = 664.1641s Time = 3.3214s 
+  [VRAM] [mem] epoch 0 peak allocated = 3.35GB / reserved = 5.14GB
+  [Val ] ValLoss = 0.1566
+==========================================================
+[DONE ] shell30   2026-07-31 18:55:19   exit=0
+[저장] arm 로그: shell_scripting/results/adj_probe_20260731_181035/adj*.txt
+[판정] ① 안 터짐 ② 궤적 안 튐 ③ iter 시간 배수 ④ ValLoss 비교.
+       ③이 3배 이상이면 본실험 60h→180h — --num-workers 상향으로 회수되는지 먼저 볼 것.
+       ④가 악화면 병변 blur 실재의 첫 실측 신호다 → model_strategy §3.1 에 기록하고 기각 유지.
+==========================================================

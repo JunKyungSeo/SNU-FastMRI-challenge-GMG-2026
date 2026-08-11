@@ -1,7 +1,7 @@
 # Preprocessing 전략 — FastMRI 2026
 
-> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
-> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`confirmed_model.md`](confirmed_model.md).** A2·**B5는 구현됨**(플래그 off, 검증 전), B3·C6은 미구현 후보 → [`candidates.md`](candidates.md). 아래는 그 근거.
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`next_levers.md`](next_levers.md) · 제외 [`rejected.md`](rejected.md).
+> 📌 **A1(readout crop)·B4(전역 스칼라 정규화)는 확정 채택 → [`confirmed_model.md`](confirmed_model.md).** A2·**B5는 구현됨**(플래그 off, 검증 전), B3·C6은 미구현 후보 → [`next_levers.md`](next_levers.md). 아래는 그 근거.
 > augmentation([`augmentation.md`](augmentation.md))·모델/메모리([`model_strategy.md`](model_strategy.md))와 별개로,
 > **입력 데이터를 네트워크에 넣기 전 결정적으로 가공하는 preprocessing**만 모은 문서.
 > 여기 항목들은 **현재 코드·다른 전략 문서 어디에도 없는(미구현·미계획) 신규 후보**다.

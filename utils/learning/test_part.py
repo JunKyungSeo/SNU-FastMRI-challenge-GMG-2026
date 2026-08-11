@@ -1,3 +1,4 @@
+import copy
 import h5py
 import numpy as np
 import torch
@@ -25,6 +26,9 @@ def _set_preproc(model, saved):
     model.crop_h = int(getattr(saved, 'crop_h', 384))
     model.coil_compress = bool(getattr(saved, 'coil_compress', False))
     model.n_virtual_coils = int(getattr(saved, 'n_virtual_coils', 8))
+    # 2.5D 인접 슬라이스도 학습과 동일해야 한다 — 학습이 3슬라이스면 추론도 3슬라이스를 쌓아야
+    # 코일축 크기가 맞고(안 맞으면 conv in_chans 불일치로 즉시 에러), 중앙 슬라이스 규약도 성립한다.
+    model.num_adj_slices = int(getattr(saved, 'num_adj_slices', 1))
     return model
 
 
@@ -52,7 +56,13 @@ def load_model(args, device):
     if ckpt.get('moe', False):
         from utils.model.moe import MoEWrapper, DEFAULT_ACC_THRESHOLD
         experts = ckpt['experts']
-        e4 = _build_expert(experts['acc4']['args'], experts['acc4']['model'], args)
+        # ⚠️ deepcopy 필수. promptmr_plus.py:277의 act=nn.PReLU()는 mutable default argument라
+        # import 시점에 만들어진 PReLU **하나**를 모든 CAB이, 심지어 **다른 모델 인스턴스끼리도**
+        # 공유한다. 그대로 두면 나중에 로드한 acc8의 slope가 acc4 전문가까지 덮어써서
+        # acc4가 acc8의 활성화로 돈다. deepcopy는 모델 **내부** 공유(감도맵 이중 등록 등)는
+        # 보존하면서 인스턴스 **바깥** 공유만 끊는다. 근본 수정(act=None)은 학습 의미가 바뀌어
+        # (전역 slope 1개 → CAB마다 1개) 기존 체크포인트와 비교가 깨지므로 대회 후로 미룬다.
+        e4 = copy.deepcopy(_build_expert(experts['acc4']['args'], experts['acc4']['model'], args))
         e8 = _build_expert(experts['acc8']['args'], experts['acc8']['model'], args)
         threshold = ckpt.get('router', {}).get('threshold', DEFAULT_ACC_THRESHOLD)
         model = MoEWrapper(e4, e8, threshold=threshold)
@@ -78,9 +88,17 @@ def recon_slice(model, ctx, s):
     """슬라이스 1장 복원(batch=1). 하네스가 이 호출의 시간만 잰다."""
     device = ctx["device"]
     mask = ctx["mask"]
-    ks = ctx["kspace"][s] * mask
+    adj = int(getattr(model, "num_adj_slices", 1))
+    if adj == 1:
+        ks = ctx["kspace"][s] * mask
+    else:
+        # 학습(SliceData)과 **동일 규약**: 코일축에 슬라이스-major로 쌓고 볼륨 경계는 clamp.
+        n, half = ctx["num_slices"], adj // 2
+        idxs = [min(max(s + d, 0), n - 1) for d in range(-half, half + 1)]
+        ks = np.concatenate([ctx["kspace"][j] for j in idxs], axis=0) * mask
     # 학습(DataTransform)과 동일 순서·설정으로 전처리 재적용 → train/infer 정합.
     #   ① readout crop(H만 640→crop_h, 무손실)  ② coil compression(ACS SVD)  — DataTransform과 동일 순서.
+    #   readout_crop은 axis -2(H)만 건드려 코일축에 쌓인 슬라이스 전부에 동일 적용된다(슬라이스별과 동일).
     if getattr(model, "readout_crop", False):
         ks = readout_crop(ks, getattr(model, "crop_h", 384))
     if getattr(model, "coil_compress", False):

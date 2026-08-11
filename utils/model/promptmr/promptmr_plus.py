@@ -1,6 +1,6 @@
 # Vendored from sMartify-fastmri/2025_final (FastMRI_challenge_sMaRtIfy_final/utils/model/promptmr_plus.py)
 # 원본 커밋: c7087f58addfc2e6f0cec0b33443213d69e2ce52 (main). PromptMR+ (Xin et al., arXiv:2411/ECCV'24).
-# 이 repo에선 knee·정적 2D·단일 슬라이스·Cartesian 전용으로 사용(num_adj_slices=1).
+# 이 repo에선 knee·정적 2D·Cartesian 전용. num_adj_slices=1(기본) 또는 3(--num-adj-slices 3).
 # `import fastmri`는 varnet과 동일하게 utils/model/fastmri로 해석됨(sens_expand/sens_reduce는 그쪽에 추가함).
 import math
 from typing import List, Optional, Tuple, Union
@@ -477,11 +477,20 @@ class NormPromptUnet(nn.Module):
         return x, latent, history_feat
 
 class PromptMRBlock(nn.Module):
-    def __init__(self, model: nn.Module):
+    def __init__(self, model: nn.Module, num_adj_slices: int = 1, swdc: bool = True):
 
         super().__init__()
         self.model = model
-        self.dc_weight = nn.Parameter(torch.ones(1))
+        self.num_adj_slices = num_adj_slices   # DC(sens_expand/reduce)가 슬라이스 그룹을 알아야 한다
+        self.swdc = swdc
+        if swdc:
+            # SWDC(SDUM §3.4): 스칼라 η 대신 k-space 위치별 학습 가중치 지도. (640, 480) =
+            # readout-crop 없는 H 최대 × 학습셋 W 최대 — 실제 (H, W)로 중앙 crop해 쓴다.
+            # ones 초기화라 학습 시작 시점엔 η=1 스칼라와 수학적으로 동일(테스트로 강제).
+            self.dc_weight_map = nn.Parameter(torch.ones(1, 1, 640, 480, 1))
+        else:
+            # 테스트 전용 비교 기준(등가성). CLI/config에서 이 분기로 못 들어온다.
+            self.dc_weight = nn.Parameter(torch.ones(1))
 
     def forward(
         self,
@@ -490,18 +499,32 @@ class PromptMRBlock(nn.Module):
         latent: torch.Tensor,
         mask: torch.Tensor,
         sens_maps: torch.Tensor,
-        history_feat: Optional[Tuple[torch.Tensor, ...]] = None
+        history_feat: Optional[Tuple[torch.Tensor, ...]] = None,
+        masked_kspace: Optional[torch.Tensor] = None,
     ):
         zero = torch.zeros(1, 1, 1, 1, 1).to(current_img)
-        current_kspace = fastmri.sens_expand(current_img, sens_maps)
-        ffx = fastmri.sens_reduce(torch.where(mask != 0, current_kspace, zero), sens_maps) # mask != 0 for silence warning
+        current_kspace = fastmri.sens_expand(current_img, sens_maps, self.num_adj_slices)
+        ffx = fastmri.sens_reduce(torch.where(mask != 0, current_kspace, zero), sens_maps,
+                                  self.num_adj_slices) # mask != 0 for silence warning
         if self.model.n_buffer > 0:
             # adaptive input. buffer: A^H*A*x_i, s_i, x0, A^H*A*x_i-x0
             buffer = torch.cat([ffx, latent, img_zf] + [ffx-img_zf]*(self.model.n_buffer-3), dim=1)
         else:
             buffer = None
-            
-        soft_dc = (ffx - img_zf) * self.dc_weight
+
+        if self.swdc:
+            # soft_dc = A^H(W ⊙ (M·A·x − k0)). W는 A^H **앞**(k-space)에서 곱해야 주파수별
+            # 의미가 생긴다 — (ffx − img_zf)에 곱하면 이미지 도메인 가중이라 다른 물건이다.
+            # k0(masked_kspace)는 mask 밖이 0이라 where 하나로 잔차가 닫힌다.
+            assert masked_kspace is not None, "swdc=True면 masked_kspace를 넘겨야 한다"
+            _, _, h, w, _ = current_kspace.shape
+            assert h <= 640 and w <= 480, f"dc_weight_map(640x480)보다 큰 k-space {h}x{w}"
+            wmap = self.dc_weight_map[:, :, (640 - h) // 2: (640 - h) // 2 + h,
+                                      (480 - w) // 2: (480 - w) // 2 + w, :]
+            k_res = torch.where(mask != 0, current_kspace - masked_kspace, zero)
+            soft_dc = fastmri.sens_reduce(wmap * k_res, sens_maps, self.num_adj_slices)
+        else:
+            soft_dc = (ffx - img_zf) * self.dc_weight
         model_term, latent, history_feat = self.model(current_img, history_feat, buffer)
         img_pred = current_img - soft_dc - model_term
         return img_pred, latent, history_feat
@@ -536,13 +559,23 @@ class PromptMR(nn.Module):
         adaptive_input: bool = True,   # Plus
         n_buffer: int = 4,             # Plus
         n_history: int = 11,           # Plus
+        num_adj_slices: int = 1,       # 2.5D 인접 슬라이스 (1=단일, 3=±1). 상류 원본과 동일 규약
+        swdc: bool = True,             # SWDC(SDUM §3.4). False는 테스트 전용 — CLI/config 배선 없음
     ):
-        # slim: 단일 슬라이스 전용 → num_adj_slices/use_sens_adj/center_slice 제거.
+        # 인접 슬라이스 규약(상류 promptmr_v2.py와 동일):
+        #   masked_kspace 코일축은 **슬라이스-major** 배열 — (B, adj*C, H, W, 2) 에서
+        #   [adj0의 C코일, adj1의 C코일, ...] 순서. einops 'b (adj coil) ...' 와 같은 뜻이다.
+        #   sens_reduce/sens_expand(coil_combine.py)가 이 배열을 전제로 이미 num_adj_slices를 받는다.
+        #   use_sens_adj는 미사용(감도는 코일별 독립 추정) — 8GB에서 compute_sens_per_coil을 쓰므로
+        #   sens U-Net in_chans는 2로 둔다. 상류의 use_sens_adj=False 분기와 동일.
         super().__init__()
         self.num_cascades = num_cascades
         self.n_history = n_history
         self.n_buffer = n_buffer
+        self.num_adj_slices = num_adj_slices
+        self.center_slice = num_adj_slices // 2
         self.sens_net = SensitivityModel(
+            num_adj_slices=num_adj_slices,
             n_feat0=sens_n_feat0,
             feature_dim=sens_feature_dim,
             prompt_dim=sens_prompt_dim,
@@ -562,8 +595,8 @@ class PromptMR(nn.Module):
         self.cascades = nn.ModuleList([
             PromptMRBlock(
                 NormPromptUnet(
-                    in_chans=2,
-                    out_chans=2,
+                    in_chans=2 * num_adj_slices,    # 상류: 실/허 2채널 × 인접 슬라이스 수
+                    out_chans=2 * num_adj_slices,
                     n_feat0=n_feat0,
                     feature_dim=feature_dim,
                     prompt_dim=prompt_dim,
@@ -579,6 +612,8 @@ class PromptMR(nn.Module):
                     n_buffer=n_buffer,
                     n_history=n_history
                 ),
+                num_adj_slices=num_adj_slices,
+                swdc=swdc,
             ) for _ in range(num_cascades)
         ])
 
@@ -591,6 +626,7 @@ class PromptMR(nn.Module):
         mask_type: Tuple[str] = ("cartesian",),
         use_checkpoint: bool = True,
         compute_sens_per_coil: bool = True, # can further reduce the memory usage
+        sens_chunk: int = 1,
     ) -> torch.Tensor:
         '''
         Args:
@@ -600,6 +636,9 @@ class PromptMR(nn.Module):
             mask_type: (str) mask type
             use_checkpoint: (bool) whether to use checkpoint for memory saving
             compute_sens_per_coil: (bool) whether to compute sensitivity maps per coil for memory saving
+            sens_chunk: (int) 감도맵 U-Net 에 한 번에 넣을 코일 수(1=기존 코드와 비트 동일).
+                VRAM 을 시간과 바꾸는 레버 — 커널 발사 횟수가 15/chunk 로 준다. chunk>1 은
+                수학적으로 같은 값이되 누산 순서가 달라 비트까지 같지는 않다(compute_sens 참고).
         '''
 
         # Shape aligning to SNU FastMRI dataloader
@@ -613,12 +652,12 @@ class PromptMR(nn.Module):
             # 코일 단위 checkpoint 를 compute_sens 안에서 직접 걸므로 바깥 통짜 wrapper 는 쓰지 않는다.
             # (겹쳐 걸면 바깥 재계산이 코일 루프를 통째로 되살려 코일 단위 절감이 무의미해진다.)
             sens_maps = self.sens_net(masked_kspace, mask, num_low_frequencies, mask_type,
-                                      compute_sens_per_coil, use_checkpoint)
+                                      compute_sens_per_coil, use_checkpoint, sens_chunk)
         else:
             self.sens_net_ckp.use_checkpoint = use_checkpoint
             sens_maps = self.sens_net_ckp(masked_kspace, mask, num_low_frequencies, mask_type, compute_sens_per_coil)
 
-        img_zf = fastmri.sens_reduce(masked_kspace, sens_maps)
+        img_zf = fastmri.sens_reduce(masked_kspace, sens_maps, self.num_adj_slices)
         img_pred = img_zf.clone()
         latent = img_zf.clone()
         history_feat = None
@@ -629,13 +668,19 @@ class PromptMR(nn.Module):
                 # ·complex_mul). 코일 압축을 없애면 C=15 라 이게 cascade 수만큼 그대로 쌓인다.
                 # cascade 단위로 끊으면 역전파 때 한 cascade 분만 재현되므로 nc 를 늘려도 평평해진다.
                 img_pred, latent, history_feat = checkpoint(
-                    cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat,
+                    cascade, img_pred, img_zf, latent, mask, sens_maps, history_feat, masked_kspace,
                     use_reentrant=False,
                 )
             else:
-                img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps, history_feat)
+                img_pred, latent, history_feat = cascade(img_pred, img_zf, latent, mask, sens_maps,
+                                                         history_feat, masked_kspace)
 
-        # slim: 단일 슬라이스라 중앙 슬라이스 추출(chunk) 불필요 → RSS로 바로 coil-combine.
+        # 인접 슬라이스면 **중앙 슬라이스만** 최종 출력이다(상류와 동일). img_pred는 (B,adj,H,W,2),
+        # sens_maps는 (B,adj*C,H,W,2) — 각각 adj로 chunk해 center를 꺼낸 뒤 coil-combine한다.
+        # num_adj_slices=1이면 chunk(...,1)[0]이 항등이라 기존 동작과 비트 동일하다.
+        if self.num_adj_slices > 1:
+            img_pred = torch.chunk(img_pred, self.num_adj_slices, dim=1)[self.center_slice]
+            sens_maps = torch.chunk(sens_maps, self.num_adj_slices, dim=1)[self.center_slice]
         # complex_mul 은 torch.stack 으로 새 텐서를 만들어 입력을 건드리지 않는다 → clone 불필요.
         img_pred = fastmri.rss(fastmri.complex_abs(fastmri.complex_mul(img_pred, sens_maps)), dim=1)
         img_pred = center_crop(img_pred, 384, 384)
@@ -658,9 +703,13 @@ class SensitivityModel(nn.Module):
         no_use_ca: bool = False,
         mask_center: bool = True,
         learnable_prompt=False,
+        num_adj_slices: int = 1,
     ):
-        # slim: 단일 슬라이스 전용 → num_adj_slices/use_sens_adj 제거(코일별 감도 추정).
+        # use_sens_adj는 미사용(상류의 use_sens_adj=False 분기) → 감도는 **코일별 독립 추정**이라
+        # unet in_chans는 인접 슬라이스 수와 무관하게 2다. num_adj_slices는 RSS 정규화를
+        # 슬라이스 그룹별로 하기 위해서만 필요하다(divide_root_sum_of_squares 참고).
         super().__init__()
+        self.num_adj_slices = num_adj_slices
         self.mask_center = mask_center
         self.norm_unet = NormPromptUnet(in_chans=2,
                                         out_chans=2,
@@ -688,23 +737,39 @@ class SensitivityModel(nn.Module):
 
     def divide_root_sum_of_squares(self, x: torch.Tensor) -> torch.Tensor:
         # per-pixel coil normalization: sum_c |S_c|^2 = 1
-        return x / fastmri.rss_complex(x, dim=1).unsqueeze(-1).unsqueeze(1)
+        # ⚠️ 인접 슬라이스에서는 **슬라이스 그룹별로** 정규화해야 한다(상류와 동일). 코일축 전체로
+        #    한 번에 나누면 각 그룹 합이 1/adj 로 줄어 스케일이 조용히 어긋난다.
+        if self.num_adj_slices == 1:
+            return x / fastmri.rss_complex(x, dim=1).unsqueeze(-1).unsqueeze(1)
+        b, adj_coil, h, w, two = x.shape
+        coil = adj_coil // self.num_adj_slices
+        x = x.view(b, self.num_adj_slices, coil, h, w, two)
+        x = x / fastmri.rss_complex(x, dim=2).unsqueeze(-1).unsqueeze(2)
+        return x.view(b, adj_coil, h, w, two)
 
     def compute_sens(self, model: nn.Module, images: torch.Tensor, compute_per_coil: bool,
-                     use_checkpoint: bool = False) -> torch.Tensor:
+                     use_checkpoint: bool = False, chunk: int = 1) -> torch.Tensor:
         bc = images.shape[0]  # batch_size * n_coils
         if compute_per_coil:
+            # chunk = 한 번에 U-Net 에 넣을 코일 수. 1이면 예전 코드와 **비트 동일**(images[i:i+1] 은
+            # images[i].unsqueeze(0) 과 같은 텐서다). 코일은 서로 독립이고 이 경로에 배치를 가로지르는
+            # 연산이 없어(norm 은 샘플별, BatchNorm 없음) chunk 를 바꿔도 **수학적으로 같은 값**이다.
+            # ⚠️ 다만 비트까지 같지는 않다 — 배치 크기가 바뀌면 GEMM 타일링·누산 순서가 달라져
+            #    실측 fp32 ~1e-6, fp64 ~4e-15 차가 난다(테스트는 1e-9 로 등가성만 강제).
+            #    같은 chunk 로 다시 돌리면 같은 결과가 나오므로 재현성은 유지되지만, chunk 를 바꾼
+            #    체크포인트를 예전 것과 비트 비교하지는 말 것.
+            step = max(1, int(chunk))
             output = []
-            for i in range(bc):
-                image_i = images[i].unsqueeze(0)
+            for i in range(0, bc, step):
+                images_i = images[i:i + step]
                 if use_checkpoint and self.training:
-                    # ⚠️ 코일 "하나씩" checkpoint 하는 게 핵심이다. sens_net 전체를 한 덩어리로
-                    # checkpoint 하면 순전파 peak 만 줄고, 역전파 재계산 때 이 루프가 통째로 다시
-                    # 돌면서 B*C 코일분 activation 이 동시에 살아난다(= 절감 효과가 사라짐).
-                    # 코일 단위로 끊으면 재계산 중에도 한 코일분만 살아 있다.
-                    out_i = checkpoint(lambda t: model(t)[0], image_i, use_reentrant=False)
+                    # ⚠️ 코일 "하나씩"(또는 chunk 씩) checkpoint 하는 게 핵심이다. sens_net 전체를 한
+                    # 덩어리로 checkpoint 하면 순전파 peak 만 줄고, 역전파 재계산 때 이 루프가 통째로
+                    # 다시 돌면서 B*C 코일분 activation 이 동시에 살아난다(= 절감 효과가 사라짐).
+                    # 청크 단위로 끊으면 재계산 중에도 한 청크분만 살아 있다.
+                    out_i = checkpoint(lambda t: model(t)[0], images_i, use_reentrant=False)
                 else:
-                    out_i = model(image_i)[0]
+                    out_i = model(images_i)[0]
                 output.append(out_i)
             output = torch.cat(output, dim=0)
         else:
@@ -719,6 +784,7 @@ class SensitivityModel(nn.Module):
         mask_type: Tuple[str] = ("cartesian",),
         compute_per_coil: bool = False,
         use_checkpoint: bool = False,
+        sens_chunk: int = 1,
     ) -> torch.Tensor:
 
         masked_kspace_acs = self.kspace_acs_extractor(masked_kspace, mask, num_low_frequencies, mask_type)
@@ -727,6 +793,7 @@ class SensitivityModel(nn.Module):
 
         return self.divide_root_sum_of_squares(
             self.batch_chans_to_chan_dim(
-                self.compute_sens(self.norm_unet, images, compute_per_coil, use_checkpoint), batches
+                self.compute_sens(self.norm_unet, images, compute_per_coil, use_checkpoint,
+                                  sens_chunk), batches
             )
         )

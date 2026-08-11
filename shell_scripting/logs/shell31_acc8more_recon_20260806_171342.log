@@ -1,0 +1,20 @@
+[START] shell31_acc8more_recon   2026-08-06 17:13:42   acc4=promptmrp_0801_acc4  acc8=promptmrp_0801_acc8_ext  →  promptmrp_0801_moe_ext
+[VAL  ] promptmrp_0801_acc4: 8ep · 최저 0.06721
+[VAL  ] promptmrp_0801_acc8_ext: 3ep · 최저 0.09567
+[VAL  ] promptmrp_0801_acc8: 8ep · 최저 0.09570
+[merge] 저장: ../result/promptmrp_0801_moe_ext/checkpoints/best_model.pt
+[merge] acc4=promptmrp_0801_acc4  acc8=promptmrp_0801_acc8_ext  threshold=0.25
+[merge] 채점:  python recon_eval.py -n promptmrp_0801_moe_ext -p /root/Data/leaderboard
++ python -u recon_eval.py -n promptmrp_0801_moe_ext -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmrp_0801_moe_ext_20260806_171342.txt
+Leaderboard SSIM_full : 0.9336
+Leaderboard SSIM_bbox : 0.9322
+Leaderboard Recon Time : 1632.08s (737.5 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9505   SSIM_full (acc8): 0.9167
+SSIM_bbox (acc4): 0.9516   SSIM_bbox (acc8): 0.9128
+Recon Time (acc4): 855.52s (750.5 ms/slice)   (acc8): 776.56s (723.7 ms/slice)
+Recon Time (total): 1632.08s
+[DONE ] shell31_acc8more_recon   2026-08-06 17:47:38   exit=0
+[저장] 점수: shell_scripting/results/recon_eval_promptmrp_0801_moe_ext_20260806_171342.txt
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (promptmrp_0801_moe_ext 채점 완료 (exit=0))

@@ -7,11 +7,12 @@
   2. 확률 스케줄이 실제 런 길이(10 epoch)에서 0이 아닌가.
   3. 증강 off면 기존 파이프라인과 동일한가(6-튜플, val/forward 미적용).
 """
+import cv2
 import numpy as np
 import pytest
 
 from utils.data.transforms import (
-    AugmentConfig, MRIAugmentor, DataTransform, _detect_acs, _fftc, _ifftc,
+    AugmentConfig, MRIAugmentor, DataTransform, _detect_acs, _fftc, _ifftc, _rss_crop,
 )
 
 TARGET_W = 384
@@ -38,8 +39,8 @@ def make_target(seed=1):
 
 
 def flip_cfg(**kw):
-    """p=1 고정(항상 flip)."""
-    base = dict(on=True, schedule="constant", max_prob=1.0)
+    """p=1 고정(항상 flip). affine=False — 이 헬퍼는 flip 단독 계약 테스트용."""
+    base = dict(on=True, schedule="constant", max_prob=1.0, affine=False)
     base.update(kw)
     return AugmentConfig(**base)
 
@@ -230,3 +231,258 @@ def test_flip_lr_closed_form_matches_image_domain_reference():
     rel = np.linalg.norm(K2 - ref) / np.linalg.norm(ref)
     assert rel < 1e-5, f"closed form이 이미지 도메인 참조와 어긋난다: {rel:.2e}"
     assert K2.dtype == np.complex64, f"K2 dtype이 complex128로 승격됐다: {K2.dtype}"
+
+
+# ---------------------------------------------------------------------------
+# affine(회전+확대) 증강 — 2026-08-07 채택. full k-space 워프 + target 재생성 방식.
+# ---------------------------------------------------------------------------
+
+def make_phantom_kspace(coils=3, H=128, W=368, seed=2):
+    """복원이 의미 있는 팬텀 k-space: 저주파 blob 영상 × 부드러운 코일 감도.
+    make_kspace(백색잡음)는 워프 정합을 눈으로도 수치로도 판별할 수 없어 별도로 둔다."""
+    rng = np.random.default_rng(seed)
+    y, x = np.mgrid[0:H, 0:W]
+    img = np.zeros((H, W), np.float32)
+    for _ in range(6):
+        cy, cx = rng.uniform(H * 0.3, H * 0.7), rng.uniform(W * 0.3, W * 0.7)
+        r = rng.uniform(6, 18)
+        img += np.exp(-((y - cy) ** 2 + (x - cx) ** 2) / (2 * r * r)).astype(np.float32)
+    profiles = [(0.2, 0.3), (0.8, 0.5), (0.4, 0.8)][:coils]
+    sig = 0.5 * max(H, W)
+    coil_imgs = np.stack([
+        img * (0.5 + 0.5 * np.exp(-((y - H * ky) ** 2 + (x - W * kx) ** 2) / (2 * sig ** 2)))
+        for ky, kx in profiles
+    ]).astype(np.complex64)
+    return _fftc(coil_imgs).astype(np.complex64), img
+
+
+class _FixedRng:
+    """_affine의 추첨(각도, 배율)을 고정하는 스텁 — uniform 호출 순서에 의존."""
+    def __init__(self, deg, s):
+        self.vals = [deg, s]
+    def uniform(self, a, b):
+        return self.vals.pop(0)
+
+
+def affine_cfg(**kw):
+    base = dict(on=True, schedule="constant", max_prob=1.0, delay=0,
+                total_epochs=10, affine=True, rot_max=5.0, scale_max=1.1, seed=430)
+    base.update(kw)
+    return AugmentConfig(**base)
+
+
+def test_affine_pair_roundtrip_consistency():
+    """반환 target == 워프된 k-space를 다시 복원한 RSS crop (FFT 왕복·crop 규약 정합)."""
+    K, _ = make_phantom_kspace()
+    aug = MRIAugmentor(affine_cfg())
+    Kw, tgt = aug._affine(K, (384, 384), _FixedRng(3.0, 1.05))
+    assert Kw.shape == K.shape and tgt.shape == (384, 384) and tgt.dtype == np.float32
+    ref = _rss_crop(_ifftc(Kw), (384, 384))
+    assert np.corrcoef(ref.ravel(), tgt.ravel())[0, 1] > 0.9999
+
+
+def test_affine_matches_independent_magnitude_warp():
+    """복소 코일 워프→RSS ≈ 원본 RSS를 같은 행렬로 워프 — 행렬·중심·축순서 검증.
+    (RSS가 비선형이라 완전 동일은 아님 — 팬텀에서 corr>0.99면 기하가 맞는 것)"""
+    K, _ = make_phantom_kspace()
+    imgs = _ifftc(K)
+    rss0 = np.sqrt((np.abs(imgs) ** 2).sum(0)).astype(np.float32)
+    H, W = rss0.shape
+    aug = MRIAugmentor(affine_cfg())
+    _, tgt = aug._affine(K, (384, 384), _FixedRng(3.0, 1.05))
+    mat = cv2.getRotationMatrix2D(((W - 1) / 2.0, (H - 1) / 2.0), 3.0, 1.05)
+    ref_full = cv2.warpAffine(rss0, mat, (W, H), flags=cv2.INTER_LANCZOS4,
+                              borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+    ref = _rss_crop(ref_full[np.newaxis, ...], (384, 384))
+    assert np.corrcoef(ref.ravel(), tgt.ravel())[0, 1] > 0.99
+
+
+def test_affine_kspace_support_stays_in_mask():
+    """affine은 mask를 건드리지 않고, 반환 K의 에너지는 mask 열 안에만 있어야 한다."""
+    K, _ = make_phantom_kspace()
+    M = make_mask(W=368)
+    aug = MRIAugmentor(affine_cfg())
+    out_K, out_M, tgt, bbox, g = aug(K, M, make_target(), None, None, "p.h5", 0)
+    assert np.array_equal((out_M >= 1), np.roll(np.flip(M >= 1), 1)) or np.array_equal(out_M, M)
+    cols = (out_M >= 1)
+    assert np.abs(out_K[..., ~cols]).max() == 0.0
+
+
+def test_affine_deterministic_and_epoch_varies():
+    K, _ = make_phantom_kspace()
+    M = make_mask(W=368)
+    a1, a2 = MRIAugmentor(affine_cfg()), MRIAugmentor(affine_cfg())
+    o1 = a1(K, M, make_target(), None, None, "p.h5", 5)
+    o2 = a2(K, M, make_target(), None, None, "p.h5", 5)
+    assert np.array_equal(o1[2], o2[2])          # 같은 (seed,epoch,fname,sl) → 같은 target
+    a2.set_epoch(1)
+    o3 = a2(K, M, make_target(), None, None, "p.h5", 5)
+    assert not np.array_equal(o1[2], o3[2])      # epoch가 다르면 다른 추첨
+
+
+def test_no_affine_reproduces_legacy_flip_stream():
+    """--no-aug-affine이면 affine 분기가 rng를 소비하지 않아 구버전 flip 추첨과 동일해야 한다."""
+    K, M, T = make_kspace(), make_mask(), make_target()
+    aug = MRIAugmentor(affine_cfg(affine=False, max_prob=0.5))
+    out = aug(K, M, T, None, None, "a.h5", 3)
+    ref_rng = aug._rng("a.h5", 3)
+    flipped = ref_rng.random() < 0.5             # 구버전과 동일한 첫 추첨이 flip 게이트
+    Mb = (M >= 1).astype(M.dtype)
+    exp_tgt = aug._flip_lr(K * Mb, T, None, Mb)[1] if flipped else T
+    assert np.array_equal(out[2], np.ascontiguousarray(exp_tgt))
+
+
+def test_affine_guards_bbox_and_grappa():
+    """bbox 손실·GRAPPA는 affine 변환 미구현 — 켠 채 조합하면 조용히 어긋나는 대신 죽어야 한다."""
+    K, _ = make_phantom_kspace()
+    M = make_mask(W=368)
+    aug = MRIAugmentor(affine_cfg())
+    with pytest.raises(AssertionError):
+        aug(K, M, make_target(), [{"x": 1, "y": 1, "width": 5, "height": 5}], None, "p.h5", 0)
+    with pytest.raises(AssertionError):
+        aug(K, M, make_target(), None, np.ones((384, 384), np.float32), "p.h5", 0)
+
+
+def test_affine_width_variants_and_dtype():
+    """W=368(<384, pad 경로)·W=480(>384, crop 경로) 모두 동작, complex64 유지."""
+    for W in (368, 480):
+        K, _ = make_phantom_kspace(W=W)
+        aug = MRIAugmentor(affine_cfg())
+        Kw, tgt = aug._affine(K.astype(np.complex64), (384, 384), _FixedRng(-4.0, 1.1))
+        assert tgt.shape == (384, 384) and np.isfinite(tgt).all()
+        assert Kw.shape == K.shape
+
+
+def test_lanczos_retains_more_highfreq_than_bilinear():
+    """보간 블러 대책의 근거 고정: LANCZOS4가 bilinear보다 고주파를 더 보존한다."""
+    _, img = make_phantom_kspace()
+    img = img + 0.2 * np.random.default_rng(3).standard_normal(img.shape).astype(np.float32)
+    H, W = img.shape
+    mat = cv2.getRotationMatrix2D(((W - 1) / 2.0, (H - 1) / 2.0), 5.0, 1.0)
+
+    def hf_energy(x):
+        F = np.fft.fftshift(np.fft.fft2(x))
+        cy, cx = H // 2, W // 2
+        Y, X = np.ogrid[:H, :W]
+        ring = ((Y - cy) ** 2 + (X - cx) ** 2) > (min(H, W) // 4) ** 2
+        return float(np.abs(F[ring]).sum())
+
+    wl = cv2.warpAffine(img, mat, (W, H), flags=cv2.INTER_LANCZOS4)
+    wb = cv2.warpAffine(img, mat, (W, H), flags=cv2.INTER_LINEAR)
+    assert hf_energy(wl) > hf_energy(wb)
+
+
+# ---------------------------------------------------------------------------
+# 변환별 최대확률 분리(--flip-max-prob/--affine-max-prob) — 2026-08-08
+# ---------------------------------------------------------------------------
+
+def test_split_max_prob_falls_back_to_shared():
+    """미지정(None)이면 기존 --aug-max-prob와 동일 — 기존 셸 인자 100% 호환 계약."""
+    cfg = affine_cfg(max_prob=0.5)
+    aug = MRIAugmentor(cfg)
+    assert cfg.flip_max_prob == 0.5 and cfg.affine_max_prob == 0.5
+    assert aug.prob(cfg.flip_max_prob) == 0.5
+    assert aug.prob() == 0.5                     # 무인자 = 기존 동작(스케줄 테스트 보호)
+
+
+def test_split_max_prob_gates_independently():
+    """flip 1.0/affine 0.0 → flip만, flip 0.0/affine 1.0 → affine만 발동해야 한다.
+    (0.0은 유효값 — None fallback과 혼동해 max_prob로 되살아나면 이 테스트가 잡는다)"""
+    K, _ = make_phantom_kspace()
+    M = make_mask(W=368)
+    T = make_target()
+    Mb = (M >= 1).astype(M.dtype)
+
+    flip_only = MRIAugmentor(affine_cfg(flip_max_prob=1.0, affine_max_prob=0.0))
+    out = flip_only(K, M, T, None, None, "p.h5", 0)
+    exp = flip_only._flip_lr(K * Mb, T, None, Mb)[1]     # affine 미발동이라 K 원본 기준
+    assert np.array_equal(out[2], np.ascontiguousarray(exp))
+
+    aff_only = MRIAugmentor(affine_cfg(flip_max_prob=0.0, affine_max_prob=1.0))
+    out2 = aff_only(K, M, T, None, None, "p.h5", 0)
+    assert np.array_equal(np.asarray(out2[1]), M)        # flip 미발동 — 마스크 원본 그대로
+    assert out2[2].shape == (384, 384) and not np.array_equal(out2[2], T)  # affine은 발동(재생성)
+
+
+def test_split_max_prob_scales_schedule_shape():
+    """스케줄 곡선은 공유, 도달점만 다름 — 두 확률의 비가 epoch 내내 일정해야 한다."""
+    cfg = affine_cfg(schedule="exp", delay=2, total_epochs=10,
+                     flip_max_prob=0.4, affine_max_prob=0.1)
+    aug = MRIAugmentor(cfg)
+    for e in range(3, 10):
+        aug.set_epoch(e)
+        pf, pa = aug.prob(cfg.flip_max_prob), aug.prob(cfg.affine_max_prob)
+        assert pf > 0.0
+        assert pa == pytest.approx(pf * 0.25, rel=1e-9)
+
+
+# ---------------------------------------------------------------------------
+# affine 후반 상승(코사인 램프) — 2026-08-09. flip은 constant 유지, affine만 갈라진다.
+# ---------------------------------------------------------------------------
+
+def test_affine_peak_epoch_absent_keeps_shared_curve():
+    """미지정이면 지금까지대로 flip과 같은 곡선 — 하위호환 계약."""
+    cfg = affine_cfg(schedule="constant", max_prob=0.5, affine_max_prob=0.3)
+    aug = MRIAugmentor(cfg)
+    assert cfg.affine_peak_epoch is None
+    for e in (0, 3, 9):
+        aug.set_epoch(e)
+        assert aug.affine_prob() == aug.prob(cfg.affine_max_prob) == 0.3
+
+
+def test_affine_cosine_ramp_shape():
+    """delay 전 0 · peak에서 max · 이후 유지 · 그 사이는 단조증가하는 코사인."""
+    cfg = affine_cfg(schedule="constant", flip_max_prob=0.5, affine_max_prob=0.5,
+                     affine_delay=5, affine_peak_epoch=10, total_epochs=20)
+    aug = MRIAugmentor(cfg)
+
+    for e in (0, 4, 5):                       # delay까지(포함) 0
+        aug.set_epoch(e)
+        assert aug.affine_prob() == 0.0
+    aug.set_epoch(10)
+    assert aug.affine_prob() == pytest.approx(0.5)
+    aug.set_epoch(19)                          # peak 이후 유지
+    assert aug.affine_prob() == pytest.approx(0.5)
+
+    ps = []
+    for e in range(5, 11):
+        aug.set_epoch(e)
+        ps.append(aug.affine_prob())
+    assert all(b > a for a, b in zip(ps[:-1], ps[1:])), f"단조증가가 아니다: {ps}"
+
+    # 코사인 램프의 대칭성 p(D+k) + p(P−k) = p_max. (중점 u=0.5는 t=7.5라 정수 epoch에
+    # 안 떨어진다 — 그래서 한 점이 아니라 대칭쌍으로 못박는다. 아래 총노출이 정확히
+    # 떨어지는 근거이기도 하다.)
+    def at(e):
+        aug.set_epoch(e)
+        return aug.affine_prob()
+    assert at(6) + at(9) == pytest.approx(0.5)
+    assert at(7) + at(8) == pytest.approx(0.5)
+
+
+def test_affine_ramp_leaves_flip_constant():
+    """flip은 --aug-schedule(constant)을 그대로 따른다 — affine 램프에 딸려가면 안 된다.
+    (딸려가면 shared 내내 0.5였던 flip이 전문가 시작에서 0으로 떨어져 더 큰 계단이 생긴다)"""
+    cfg = affine_cfg(schedule="constant", flip_max_prob=0.5, affine_max_prob=0.5,
+                     affine_delay=5, affine_peak_epoch=10, total_epochs=20)
+    aug = MRIAugmentor(cfg)
+    for e in (0, 5, 10, 19):
+        aug.set_epoch(e)
+        assert aug.prob(cfg.flip_max_prob) == 0.5
+
+
+def test_affine_exposure_matches_design_numbers():
+    """실전 값의 총노출(epoch 환산)을 못박는다 — A/B 없이 도는 런이라 의도를 테스트에 남긴다.
+    acc8(20ep, 5→10): 6.0 = 기존 0.3 고정과 동일(재배치). acc4(10ep, 3→5): 2.75 ≈ 기존 3.0."""
+    def exposure(total, delay, peak):
+        cfg = affine_cfg(schedule="constant", affine_max_prob=0.5, total_epochs=total,
+                         affine_delay=delay, affine_peak_epoch=peak)
+        aug = MRIAugmentor(cfg)
+        s = 0.0
+        for e in range(total):
+            aug.set_epoch(e)
+            s += aug.affine_prob()
+        return s
+
+    assert exposure(20, 5, 10) == pytest.approx(6.0)      # = 0.3 × 20
+    assert exposure(10, 3, 5) == pytest.approx(2.75)      # ≈ 0.3 × 10

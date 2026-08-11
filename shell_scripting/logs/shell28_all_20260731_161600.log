@@ -1,0 +1,23 @@
+==========================================================
+[START] shell28  STAGE=all  2026-07-31 16:16:00
+[LOG  ] shell_scripting/logs/shell28_all_20260731_161600.log
+==========================================================
+[GPU  ] used=2MiB
+[A offset] promptmr_kfold_f2_aug  acc8
++ python scripts/probe_offset.py -n promptmr_kfold_f2_aug --acc 8 --k-fold 5 --val-fold 2 --kfold-seed 430 --data-path-train /root/Data/train/ --data-path-val /root/Data/val/
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/scripts/probe_offset.py", line 30, in <module>
+    from utils.common.metrics import SSIM, foreground_mask, ssim_bbox, ssim_full
+ModuleNotFoundError: No module named 'utils'
+[B l1] --l1-weight 0.0  (300 iter)
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 -t /root/Data/train/ -v /root/Data/val/ --k-fold 5 --val-fold 2 --kfold-seed 430 --acc 8 --l1-weight 0.0 -e 1 --max-iters 300 -n probe_l1_0.0 --run-tag probe_l1_0.0
++ tee /tmp/tmp.Kn4Sd0VIKH/0.0.txt
+Current cuda device:  0
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=8 (전체 100 volume)
+[K-Fold] train  80 vol (acc4 0 · acc8 80) · 2163 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+Epoch # 0 ............... probe_l1_0.0 ...............
+Epoch = [  0/  1] Iter = [   0/2163] Loss = 0.1715 Time = 5.4076s
+Epoch = [  0/  1] Iter = [  50/2163] Loss = 0.05612 Time = 228.7485s
+Epoch = [  0/  1] Iter = [ 100/2163] Loss = 0.1048 Time = 234.0160s
+Epoch = [  0/  1] Iter = [ 150/2163] Loss = 0.09512 Time = 233.1814s

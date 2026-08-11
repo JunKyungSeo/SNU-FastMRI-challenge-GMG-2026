@@ -1,0 +1,585 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>shell31 — promptmrp_0801 3단계 학습 결과</title>
+<style>
+  :root {
+    color-scheme: light;
+    --plane:          #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --series-2:       #eb6834;
+    --series-3:       #1baf7a;
+    --good:           #006300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --plane:          #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --series-2:       #d95926;
+      --series-3:       #199e70;
+      --good:           #0ca30c;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --plane:          #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --series-2:       #d95926;
+    --series-3:       #199e70;
+    --good:           #0ca30c;
+  }
+
+  body {
+    margin: 0;
+    padding: 40px 24px 80px;
+    background: var(--plane);
+    color: var(--text-primary);
+    font: 15px/1.65 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+
+  header.top { margin-bottom: 36px; }
+  header.top h1 { font-size: 26px; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  header.top .sub { color: var(--text-secondary); font-size: 14px; }
+  header.top .meta { color: var(--text-muted); font-size: 13px; margin-top: 10px; }
+
+  h2 { font-size: 19px; font-weight: 650; margin: 48px 0 4px; letter-spacing: -0.01em; }
+  h2 + .lede { color: var(--text-secondary); font-size: 14px; margin: 0 0 18px; }
+
+  /* ── hero ───────────────────────────────────────────── */
+  .hero {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 26px 28px;
+    margin-bottom: 16px;
+  }
+  .hero .label { color: var(--text-secondary); font-size: 13px; }
+  .hero .figure { font-size: 60px; font-weight: 650; line-height: 1.05; margin: 4px 0 2px; letter-spacing: -0.02em; }
+  .hero .delta { font-size: 14px; color: var(--good); font-weight: 550; }
+  .hero .delta .vs { color: var(--text-muted); font-weight: 400; }
+
+  /* ── stat tiles ─────────────────────────────────────── */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+  .tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 18px;
+  }
+  .tile .label { color: var(--text-secondary); font-size: 12.5px; }
+  .tile .value { font-size: 25px; font-weight: 620; margin-top: 3px; letter-spacing: -0.01em; }
+  .tile .note  { color: var(--text-muted); font-size: 12px; margin-top: 2px; }
+
+  /* ── chart card ─────────────────────────────────────── */
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px 16px;
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .card h3 { font-size: 15.5px; font-weight: 620; margin: 0 0 2px; }
+  .card .cap { color: var(--text-secondary); font-size: 13px; margin: 0 0 14px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 10px; }
+  .legend .item { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--text-secondary); }
+  .legend .key { width: 14px; height: 3px; border-radius: 2px; flex: none; }
+  .legend .key.dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  .plot { width: 100%; overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; }
+  .grid-line { stroke: var(--grid); stroke-width: 1; }
+  .axis-line { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .axis-title { fill: var(--text-muted); font-size: 11.5px; }
+  .dlabel { fill: var(--text-secondary); font-size: 11.5px; font-weight: 560; font-variant-numeric: tabular-nums; }
+  .facet-title { fill: var(--text-secondary); font-size: 12px; font-weight: 560; }
+
+  .hit { fill: transparent; cursor: pointer; }
+
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    transition: opacity .1s;
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    box-shadow: 0 4px 14px rgba(0,0,0,.14);
+    border-radius: 9px; padding: 8px 11px;
+    font-size: 12.5px; line-height: 1.5; white-space: nowrap; z-index: 10;
+    color: var(--text-primary);
+  }
+  .tip .tt { font-weight: 620; margin-bottom: 3px; }
+  .tip .row { display: flex; align-items: center; gap: 7px; }
+  .tip .sw { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .tip .nm { color: var(--text-secondary); }
+  .tip .vl { margin-left: auto; font-variant-numeric: tabular-nums; font-weight: 560; }
+
+  details.tv { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+  details.tv summary { cursor: pointer; font-size: 12.5px; color: var(--text-secondary); }
+  .tv-scroll { overflow-x: auto; margin-top: 10px; }
+  table { border-collapse: collapse; font-size: 12.5px; width: 100%; }
+  th, td { text-align: right; padding: 5px 10px; border-bottom: 1px solid var(--border); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; font-variant-numeric: normal; }
+  th { color: var(--text-secondary); font-weight: 560; }
+
+  .prose p { margin: 0 0 14px; }
+  .prose ul { margin: 0 0 14px; padding-left: 20px; }
+  .prose li { margin-bottom: 7px; }
+  .prose strong { font-weight: 620; }
+  .prose code {
+    font: 12.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 5px; padding: 1px 5px;
+  }
+  .finding {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-left: 3px solid var(--series-1);
+    border-radius: 0 12px 12px 0; padding: 16px 20px; margin: 0 0 16px;
+  }
+  .finding h4 { margin: 0 0 6px; font-size: 14.5px; font-weight: 620; }
+  .finding p  { margin: 0; font-size: 14px; color: var(--text-secondary); }
+  .finding p + p { margin-top: 9px; }
+  footer { margin-top: 56px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 12.5px; }
+</style>
+
+<div class="wrap">
+
+<header class="top">
+  <h1>shell31 — promptmrp_0801 3단계 학습 결과</h1>
+  <div class="sub">PromptMR+ · 10 cascade · n-history 3 · k-fold 5 (val-fold 2, seed 430) · GTX 1080 단일 GPU</div>
+  <div class="meta">SHARED 12 ep → ACC4 8 ep → ACC8 8 ep → MoE 병합 → 리더보드 채점 · 2026-08-01 03:23 ~ 08-06 02:44 KST</div>
+</header>
+
+<!-- ═══ 1. 최종 성적 ═══ -->
+<h2>1. 최종 성적</h2>
+<p class="lede">병합 모델 <code>promptmrp_0801_moe</code>의 리더보드 채점 결과.</p>
+
+<div class="hero">
+  <div class="label">Leaderboard SSIM_full — promptmrp_0801_moe</div>
+  <div class="figure">0.9336</div>
+  <div class="delta">+0.0016 <span class="vs">직전 MoE 런(0.9320) 대비</span></div>
+</div>
+
+<div class="tiles">
+  <div class="tile"><div class="label">SSIM_bbox</div><div class="value">0.9321</div><div class="note">+0.0020 vs 직전 MoE</div></div>
+  <div class="tile"><div class="label">shared 단독 대비</div><div class="value">+0.0006</div><div class="note">0.9330 → 0.9336</div></div>
+  <div class="tile"><div class="label">총 학습 시간</div><div class="value">118.0h</div><div class="note">4.9일 · 3단계 합계</div></div>
+  <div class="tile"><div class="label">Recon Time</div><div class="value">1,654s</div><div class="note">747.3 ms/slice</div></div>
+</div>
+
+<div class="card" id="c-runs">
+  <h3>리더보드 SSIM 추이</h3>
+  <p class="cap">네 개 런의 최종 점수. 값이 0.93 근처에 몰려 있어 0에서 시작하는 막대 대신 점으로 그렸다 — 축 범위는 0.925~0.935다.</p>
+  <div class="legend">
+    <span class="item"><span class="key dot" style="background:var(--series-1)"></span>SSIM_full</span>
+    <span class="item"><span class="key dot" style="background:var(--series-2)"></span>SSIM_bbox</span>
+  </div>
+  <div class="plot"><svg id="svg-runs" viewBox="0 0 700 300" role="img" aria-label="런별 리더보드 SSIM 점도표"></svg></div>
+  <div class="tip" id="tip-runs"></div>
+  <details class="tv"><summary>표로 보기</summary><div class="tv-scroll" id="tbl-runs"></div></details>
+</div>
+
+<!-- ═══ 2. acc4 / acc8 ═══ -->
+<h2>2. 가속도별 분해</h2>
+<p class="lede">전체 점수는 acc4와 acc8의 평균에 가깝다. 두 값의 격차가 이 프로젝트의 지배적 변수다.</p>
+
+<div class="card" id="c-acc">
+  <h3>acc4 vs acc8 — SSIM_full</h3>
+  <p class="cap">같은 런 안에서도 acc8이 acc4보다 0.034 낮다. 축 범위 0.905~0.955.</p>
+  <div class="legend">
+    <span class="item"><span class="key dot" style="background:var(--series-1)"></span>acc4</span>
+    <span class="item"><span class="key dot" style="background:var(--series-2)"></span>acc8</span>
+  </div>
+  <div class="plot"><svg id="svg-acc" viewBox="0 0 700 300" role="img" aria-label="런별 acc4/acc8 SSIM_full 점도표"></svg></div>
+  <div class="tip" id="tip-acc"></div>
+  <details class="tv"><summary>표로 보기</summary><div class="tv-scroll" id="tbl-acc"></div></details>
+</div>
+
+<!-- ═══ 3. 학습 곡선 ═══ -->
+<h2>3. 학습 곡선</h2>
+<p class="lede">세 단계의 epoch별 손실. 단계마다 데이터 구성이 달라(shared=전체, acc4/acc8=가속도별 절반) 절대값 비교보다 기울기를 볼 것.</p>
+
+<div class="card" id="c-val">
+  <h3>Validation loss — 3단계</h3>
+  <p class="cap">SHARED만 뚜렷하게 내려가고, 미세조정 두 단계는 거의 평평하다. 끝점에 최종값을 직접 표기했다.</p>
+  <div class="legend">
+    <span class="item"><span class="key" style="background:var(--series-1)"></span>SHARED (12 ep)</span>
+    <span class="item"><span class="key" style="background:var(--series-2)"></span>ACC4 (8 ep)</span>
+    <span class="item"><span class="key" style="background:var(--series-3)"></span>ACC8 (8 ep)</span>
+  </div>
+  <div class="plot"><svg id="svg-val" viewBox="0 0 700 330" role="img" aria-label="단계별 epoch당 validation loss 선그래프"></svg></div>
+  <div class="tip" id="tip-val"></div>
+  <details class="tv"><summary>표로 보기</summary><div class="tv-scroll" id="tbl-val"></div></details>
+</div>
+
+<div class="card" id="c-tv">
+  <h3>Train vs Validation — 단계별</h3>
+  <p class="cap">각 패널의 세로축은 그 단계에 맞춰 따로 잡았다(스케일이 서로 다름). 두 선의 간격이 일반화 격차다.</p>
+  <div class="legend">
+    <span class="item"><span class="key" style="background:var(--series-1)"></span>Validation loss</span>
+    <span class="item"><span class="key" style="background:var(--series-2)"></span>Train loss</span>
+  </div>
+  <div class="plot"><svg id="svg-tv" viewBox="0 0 700 260" role="img" aria-label="단계별 train/validation loss 소형 다중 패널"></svg></div>
+  <div class="tip" id="tip-tv"></div>
+  <details class="tv"><summary>표로 보기</summary><div class="tv-scroll" id="tbl-tv"></div></details>
+</div>
+
+<!-- ═══ 4. 비용 ═══ -->
+<h2>4. 비용</h2>
+<p class="lede">단계별 벽시계 시간과, 그 시간이 사들인 점수.</p>
+
+<div class="card" id="c-cost">
+  <h3>단계별 소요 시간</h3>
+  <p class="cap">학습 + 검증 합계. epoch당 편차는 세 단계 모두 0.5% 이내였다.</p>
+  <div class="plot"><svg id="svg-cost" viewBox="0 0 700 230" role="img" aria-label="단계별 소요 시간 막대그래프"></svg></div>
+  <div class="tip" id="tip-cost"></div>
+  <details class="tv"><summary>표로 보기</summary><div class="tv-scroll" id="tbl-cost"></div></details>
+</div>
+
+<!-- ═══ 5. 해석 ═══ -->
+<h2>5. 결과 해석 및 분석</h2>
+
+<div class="finding">
+  <h4>① MoE 전문가화는 작동했지만, 이득이 비용에 한참 못 미친다</h4>
+  <p>shared 단독 0.9330 → MoE 병합 0.9336. <strong>+0.0006을 위해 47.3시간</strong>(ACC4 23.6h + ACC8 23.7h)을 더 썼다. 앞선 SHARED 70.7시간이 이전 세대 MoE 대비 +0.0010을 만든 것과 비교하면 시간당 수익률이 절반 아래로 떨어졌다.</p>
+  <p>분해하면 방향이 분명하다 — acc4는 0.9502 → 0.9505 (<strong>+0.0003</strong>), acc8은 0.9159 → 0.9167 (<strong>+0.0008</strong>). 전문가화가 실제로 값을 한 건 어려운 쪽뿐이고, acc4는 이미 shared 단계에서 포화돼 있었다.</p>
+</div>
+
+<div class="finding">
+  <h4>② ACC4 미세조정 23.6시간은 사실상 헛돈이었다</h4>
+  <p>ACC4의 val loss는 8 epoch 동안 0.06779 → 0.06721, <strong>0.86% 개선</strong>에 그쳤다. epoch당 평균 −0.00008이고 마지막 구간(6→7)은 −0.00003으로 측정 잡음 수준이다. 반면 train loss는 0.04881 → 0.04779로 계속 내려갔다 — 학습은 되는데 일반화로 이어지지 않는, 미세조정이 더 줄 게 없다는 전형적 신호다.</p>
+  <p>ACC8은 같은 8 epoch에서 0.09738 → 0.09570으로 <strong>1.73%</strong>, ACC4의 3배를 얻었다. <strong>두 전문가에 epoch을 균등 배분한 게 이 런의 명확한 설계 실수다.</strong> ACC4를 3~4 epoch으로 줄이고 남는 시간을 ACC8에 몰았어야 했다. 다만 ACC8도 마지막 두 epoch 개선폭이 −0.00015 → −0.00006으로 꺾였으니, 단순 증량만으로 크게 더 얻긴 어렵고 LR 스케줄이나 증강 쪽을 함께 손봐야 한다.</p>
+</div>
+
+<div class="finding">
+  <h4>③ 남은 개선 여지는 전부 acc8에 있다</h4>
+  <p>최종 모델에서 acc4 0.9505, acc8 0.9167 — <strong>격차 0.0338</strong>이다. 전체 점수는 두 값의 거의 균등한 혼합이라, acc4를 0.001 올리는 것과 acc8을 0.001 올리는 것의 가치가 같은데 <strong>acc4 쪽은 위 ②에서 보듯 이미 벽에 닿았다.</strong> 네 런에 걸쳐 acc4는 0.9483 → 0.9505 (+0.0022) 오르는 동안 acc8은 0.9122 → 0.9167 (+0.0045)로 두 배 올랐다는 사실도 같은 방향을 가리킨다.</p>
+</div>
+
+<div class="finding">
+  <h4>④ fg-loss·area-weight는 의도대로 동작하고 있다</h4>
+  <p>full 대비 bbox의 손해가 런이 진행될수록 좁아진다 — kfold 0.0024 → 이전 MoE 0.0019 → shared 0.0016 → 최종 MoE <strong>0.0015</strong>. 관심 영역 가중이 실제로 bbox를 끌어올리고 있다는 뜻이다.</p>
+  <p>다만 전체 bbox가 여전히 full보다 낮은 원인은 acc8 하나다. 최종 모델에서 acc4는 <strong>bbox(0.9516) &gt; full(0.9505)</strong>로 이미 역전했는데, acc8은 <strong>bbox(0.9126) &lt; full(0.9167)</strong>로 0.0041 뒤진다. acc8의 관심영역 복원이 배경보다 유독 나쁘다 — ③의 공략 지점을 더 좁혀주는 단서다.</p>
+</div>
+
+<div class="finding">
+  <h4>⑤ MoE는 추론이 1.3% 느리다</h4>
+  <p>shared 1,632.2s → MoE 1,653.8s, <strong>+21.6s</strong> (737.6 → 747.3 ms/slice). 라우터가 전문가 두 벌을 들고 마스크에 따라 스위칭하는 비용이다. 절대값으로는 작지만, 제출에 시간 제한이 걸려 있다면 +0.0006과 맞바꾸는 셈이라는 점은 계산에 넣어야 한다.</p>
+</div>
+
+<div class="finding">
+  <h4>⑥ 학습 자체는 흠 없이 안정적이었다</h4>
+  <p>118시간 내내 epoch 시간 편차가 0.5% 이내였고(SHARED 20,453~20,554s), 세 단계 모두 val loss가 단조 감소해 early stopping(patience 6)이 한 번도 걸리지 않았다. 열화·스왑 쓰래싱·발산 흔적이 없다. 다만 SHARED가 12 epoch 끝까지 단조 하락했다는 건 <strong>여기서도 수렴 전에 끊었을 가능성</strong>을 남긴다 — 마지막 구간 개선폭이 첫 구간의 1/24(−0.00013 vs −0.00310)까지 줄긴 했으니 남은 여지는 크지 않아 보인다.</p>
+</div>
+
+<h2>다음 수순 제안</h2>
+<div class="prose">
+  <ul>
+    <li><strong>epoch 재배분.</strong> ACC4 8 → 3, ACC8 8 → 13. 총 시간은 그대로고, ②의 근거대로면 순이득이 난다.</li>
+    <li><strong>acc8 전용 대책.</strong> 격차의 원인이 acc8의 bbox(④)이므로, acc8 전문가에만 <code>--l1-weight</code>나 area-weight를 더 세게 거는 비대칭 설정을 값싸게 탐침해볼 만하다.</li>
+    <li><strong>MoE 자체를 재검토.</strong> +0.0006에 47.3시간 + 추론 1.3% 손해다. 같은 47시간을 SHARED 연장에 쓰는 쪽과 정면 비교해본 적이 아직 없다.</li>
+  </ul>
+  <p style="color:var(--text-secondary);font-size:13.5px">
+    주의 — 위 비교는 모두 <strong>리더보드 전체 집합에 대한 결정론적 평가</strong>라 표본 잡음은 없지만, 0.0006 수준의 차이가 다른 데이터에서도 유지된다는 보장은 아니다. 판정 근거로 쓰기엔 얇은 마진이다.
+  </p>
+</div>
+
+<footer>
+  출처 — <code>shell_scripting/logs/shell31_{SHARED,ACC4,ACC8}_*.log</code>,
+  <code>shell_scripting/results/recon_eval_*.txt</code>.
+  학습 2026-08-01 03:23 ~ 08-06 02:28 KST, 최종 채점 08-06 02:44 완료.
+</footer>
+
+</div>
+
+<script>
+// ── 데이터 ───────────────────────────────────────────────────────────────────
+const STAGES = [
+  { key:'shared', name:'SHARED', color:'var(--series-1)', ep:12,
+    val:[0.09333,0.09023,0.08721,0.08672,0.08520,0.08461,0.08422,0.08325,0.08290,0.08227,0.08197,0.08184],
+    trn:[0.06914,0.06113,0.06023,0.05981,0.05911,0.05876,0.05860,0.05815,0.05762,0.05726,0.05717,0.05671],
+    secs:254527.2 },
+  { key:'acc4', name:'ACC4', color:'var(--series-2)', ep:8,
+    val:[0.06779,0.06769,0.06761,0.06744,0.06739,0.06729,0.06724,0.06721],
+    trn:[0.04881,0.04934,0.04922,0.04878,0.04812,0.04780,0.04808,0.04779],
+    secs:85073.4 },
+  { key:'acc8', name:'ACC8', color:'var(--series-3)', ep:8,
+    val:[0.09738,0.09688,0.09683,0.09636,0.09615,0.09591,0.09576,0.09570],
+    trn:[0.06574,0.06638,0.06611,0.06547,0.06457,0.06411,0.06440,0.06401],
+    secs:85155.8 },
+];
+
+const RUNS = [
+  { label:'kfold 단일',  date:'7/31', full:0.9303, bbox:0.9279, a4f:0.9483, a8f:0.9122, a4b:0.9490, a8b:0.9068, time:1630.93 },
+  { label:'MoE (이전)',  date:'7/31', full:0.9320, bbox:0.9301, a4f:0.9498, a8f:0.9143, a4b:0.9507, a8b:0.9094, time:1629.19 },
+  { label:'0801 shared', date:'8/4',  full:0.9330, bbox:0.9314, a4f:0.9502, a8f:0.9159, a4b:0.9512, a8b:0.9117, time:1632.24 },
+  { label:'0801 MoE',    date:'8/6',  full:0.9336, bbox:0.9321, a4f:0.9505, a8f:0.9167, a4b:0.9516, a8b:0.9126, time:1653.84 },
+];
+
+const NS = 'http://www.w3.org/2000/svg';
+const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+const fmt = (v, d = 4) => v.toFixed(d);
+
+// 툴팁 — 마크 위 hover/focus 시 표시. 값 자체는 표 보기로도 항상 도달 가능하다.
+function bindTip(cardId, tipId) {
+  const card = document.getElementById(cardId), tip = document.getElementById(tipId);
+  const show = ev => {
+    tip.innerHTML = html_of.get(ev.currentTarget);
+    tip.style.opacity = 1;
+    const cb = card.getBoundingClientRect(), r = ev.currentTarget.getBoundingClientRect();
+    let x = r.left - cb.left + r.width / 2 - tip.offsetWidth / 2;
+    x = Math.max(6, Math.min(x, cb.width - tip.offsetWidth - 6));
+    tip.style.left = x + 'px';
+    tip.style.top = Math.max(4, r.top - cb.top - tip.offsetHeight - 8) + 'px';
+  };
+  const hide = () => { tip.style.opacity = 0; };
+  const html_of = new WeakMap();
+  return (target, html) => {
+    html_of.set(target, html);
+    // 키보드 포커스도 hover와 같은 것을 보여준다
+    target.addEventListener('pointerenter', show);
+    target.addEventListener('focus', show);
+    target.addEventListener('pointerleave', hide);
+    target.addEventListener('blur', hide);
+  };
+}
+const tipRow = (color, name, val) =>
+  `<div class="row"><span class="sw" style="background:${color}"></span><span class="nm">${name}</span><span class="vl">${val}</span></div>`;
+
+function table(host, cols, rows) {
+  const t = document.createElement('table');
+  t.innerHTML = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead><tbody>'
+    + rows.map(r => '<tr>' + r.map(c => `<td>${c}</td>`).join('') + '</tr>').join('') + '</tbody>';
+  document.getElementById(host).appendChild(t);
+}
+
+// ── 점도표: 런별 지표 2계열 ──────────────────────────────────────────────────
+function dotPlot(svgId, cardId, tipId, series, yMin, yMax, yStep, valFmt) {
+  const svg = document.getElementById(svgId);
+  const W = 700, H = +svg.getAttribute('viewBox').split(' ')[3];
+  const M = { t: 14, r: 18, b: 46, l: 62 };
+  const pw = W - M.l - M.r, ph = H - M.t - M.b;
+  const y = v => M.t + ph - (v - yMin) / (yMax - yMin) * ph;
+  const x = i => M.l + pw * (i + 0.5) / RUNS.length;
+  const on = bindTip(cardId, tipId);
+
+  for (let v = yMin; v <= yMax + 1e-9; v += yStep) {
+    svg.appendChild(el('line', { class: 'grid-line', x1: M.l, x2: W - M.r, y1: y(v), y2: y(v) }));
+    const tk = el('text', { class: 'tick', x: M.l - 9, y: y(v) + 4, 'text-anchor': 'end' });
+    tk.textContent = valFmt(v); svg.appendChild(tk);
+  }
+  svg.appendChild(el('line', { class: 'axis-line', x1: M.l, x2: W - M.r, y1: M.t + ph, y2: M.t + ph }));
+
+  RUNS.forEach((r, i) => {
+    const t1 = el('text', { class: 'tick', x: x(i), y: H - M.b + 20, 'text-anchor': 'middle' });
+    t1.textContent = r.label; svg.appendChild(t1);
+    const t2 = el('text', { class: 'tick', x: x(i), y: H - M.b + 35, 'text-anchor': 'middle', 'fill-opacity': .7 });
+    t2.textContent = r.date; svg.appendChild(t2);
+  });
+
+  // 계열별 연결선(추이) — 2px, 그 위에 표면링 두른 점
+  series.forEach(s => {
+    const d = RUNS.map((r, i) => `${i ? 'L' : 'M'}${x(i)},${y(r[s.f])}`).join(' ');
+    svg.appendChild(el('path', { d, fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'stroke-opacity': .45 }));
+  });
+  series.forEach(s => {
+    RUNS.forEach((r, i) => {
+      svg.appendChild(el('circle', { cx: x(i), cy: y(r[s.f]), r: 6.5, fill: 'var(--surface-1)' }));  // 2px 표면링
+      svg.appendChild(el('circle', { cx: x(i), cy: y(r[s.f]), r: 4.5, fill: s.color }));
+      const hit = el('circle', { cx: x(i), cy: y(r[s.f]), r: 14, class: 'hit', tabindex: 0 });
+      on(hit, `<div class="tt">${r.label} · ${r.date}</div>` +
+        series.map(t => tipRow(t.color, t.name, valFmt(r[t.f]))).join(''));
+      svg.appendChild(hit);
+    });
+  });
+
+  // 직접 라벨은 마지막 런에만 — 모든 점에 숫자를 붙이지 않는다
+  series.forEach(s => {
+    const i = RUNS.length - 1;
+    const lb = el('text', { class: 'dlabel', x: x(i), y: y(RUNS[i][s.f]) + s.dy, 'text-anchor': 'middle' });
+    lb.textContent = valFmt(RUNS[i][s.f]); svg.appendChild(lb);
+  });
+}
+
+dotPlot('svg-runs', 'c-runs', 'tip-runs',
+  [{ f: 'full', name: 'SSIM_full', color: 'var(--series-1)', dy: -14 },
+   { f: 'bbox', name: 'SSIM_bbox', color: 'var(--series-2)', dy: 22 }],
+  0.925, 0.935, 0.0025, v => v.toFixed(4));
+
+dotPlot('svg-acc', 'c-acc', 'tip-acc',
+  [{ f: 'a4f', name: 'acc4', color: 'var(--series-1)', dy: -14 },
+   { f: 'a8f', name: 'acc8', color: 'var(--series-2)', dy: 22 }],
+  0.905, 0.955, 0.01, v => v.toFixed(3));
+
+table('tbl-runs', ['런', '날짜', 'SSIM_full', 'SSIM_bbox', 'full−bbox'],
+  RUNS.map(r => [r.label, r.date, fmt(r.full), fmt(r.bbox), fmt(r.full - r.bbox)]));
+table('tbl-acc', ['런', 'acc4 full', 'acc8 full', '격차', 'acc4 bbox', 'acc8 bbox'],
+  RUNS.map(r => [r.label, fmt(r.a4f), fmt(r.a8f), fmt(r.a4f - r.a8f), fmt(r.a4b), fmt(r.a8b)]));
+
+// ── 선그래프: 단계별 val loss ────────────────────────────────────────────────
+(function () {
+  const svg = document.getElementById('svg-val');
+  const W = 700, H = 330, M = { t: 16, r: 96, b: 46, l: 62 };
+  const pw = W - M.l - M.r, ph = H - M.t - M.b;
+  const yMin = 0.06, yMax = 0.10, maxEp = 12;
+  const y = v => M.t + ph - (v - yMin) / (yMax - yMin) * ph;
+  const x = i => M.l + pw * i / (maxEp - 1);
+  const on = bindTip('c-val', 'tip-val');
+
+  for (let v = yMin; v <= yMax + 1e-9; v += 0.01) {
+    svg.appendChild(el('line', { class: 'grid-line', x1: M.l, x2: W - M.r, y1: y(v), y2: y(v) }));
+    const tk = el('text', { class: 'tick', x: M.l - 9, y: y(v) + 4, 'text-anchor': 'end' });
+    tk.textContent = v.toFixed(2); svg.appendChild(tk);
+  }
+  svg.appendChild(el('line', { class: 'axis-line', x1: M.l, x2: W - M.r, y1: M.t + ph, y2: M.t + ph }));
+  for (let i = 0; i < maxEp; i++) {
+    const tk = el('text', { class: 'tick', x: x(i), y: H - M.b + 20, 'text-anchor': 'middle' });
+    tk.textContent = i; svg.appendChild(tk);
+  }
+  const ax = el('text', { class: 'axis-title', x: M.l + pw / 2, y: H - 6, 'text-anchor': 'middle' });
+  ax.textContent = 'epoch'; svg.appendChild(ax);
+  const ay = el('text', { class: 'axis-title', x: 14, y: M.t + ph / 2, 'text-anchor': 'middle', transform: `rotate(-90 14 ${M.t + ph / 2})` });
+  ay.textContent = 'validation loss'; svg.appendChild(ay);
+
+  STAGES.forEach(s => {
+    svg.appendChild(el('path', {
+      d: s.val.map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '),
+      fill: 'none', stroke: s.color, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+    }));
+    s.val.forEach((v, i) => {
+      svg.appendChild(el('circle', { cx: x(i), cy: y(v), r: 5.5, fill: 'var(--surface-1)' }));
+      svg.appendChild(el('circle', { cx: x(i), cy: y(v), r: 3.5, fill: s.color }));
+      const hit = el('circle', { cx: x(i), cy: y(v), r: 13, class: 'hit', tabindex: 0 });
+      on(hit, `<div class="tt">${s.name} · epoch ${i}</div>` +
+        tipRow(s.color, 'val loss', fmt(v, 5)) + tipRow(s.color, 'train loss', fmt(s.trn[i], 5)));
+      svg.appendChild(hit);
+    });
+    // 끝점 직접 라벨 — 이름은 범례가 지고 있으니 값만 (오른쪽 여백 안에 들어가도록)
+    const li = s.val.length - 1;
+    const lb = el('text', { class: 'dlabel', x: x(li) + 11, y: y(s.val[li]) + 4 });
+    lb.textContent = fmt(s.val[li], 5); svg.appendChild(lb);
+  });
+
+  const rows = [];
+  for (let i = 0; i < maxEp; i++) {
+    rows.push([i, ...STAGES.map(s => s.val[i] !== undefined ? fmt(s.val[i], 5) : '—')]);
+  }
+  table('tbl-val', ['epoch', ...STAGES.map(s => s.name)], rows);
+})();
+
+// ── 소형 다중: 단계별 train vs val ──────────────────────────────────────────
+(function () {
+  const svg = document.getElementById('svg-tv');
+  const W = 700, H = 260, M = { t: 26, b: 40 }, gap = 26;
+  const fw = (W - gap * 2 - 40) / 3, ph = H - M.t - M.b;
+  const on = bindTip('c-tv', 'tip-tv');
+
+  STAGES.forEach((s, k) => {
+    const x0 = 20 + k * (fw + gap);
+    const all = s.val.concat(s.trn);
+    const lo = Math.min(...all), hi = Math.max(...all), pad = (hi - lo) * 0.18;
+    const yMin = lo - pad, yMax = hi + pad;
+    const y = v => M.t + ph - (v - yMin) / (yMax - yMin) * ph;
+    const x = i => x0 + (s.ep === 1 ? fw / 2 : fw * i / (s.ep - 1));
+
+    const ft = el('text', { class: 'facet-title', x: x0, y: 14 });
+    ft.textContent = `${s.name} (${s.ep} ep)`; svg.appendChild(ft);
+    svg.appendChild(el('line', { class: 'axis-line', x1: x0, x2: x0 + fw, y1: M.t + ph, y2: M.t + ph }));
+
+    [['val', 'var(--series-1)', 'Validation'], ['trn', 'var(--series-2)', 'Train']].forEach(([f, c, nm]) => {
+      svg.appendChild(el('path', {
+        d: s[f].map((v, i) => `${i ? 'L' : 'M'}${x(i)},${y(v)}`).join(' '),
+        fill: 'none', stroke: c, 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round'
+      }));
+      s[f].forEach((v, i) => {
+        svg.appendChild(el('circle', { cx: x(i), cy: y(v), r: 5, fill: 'var(--surface-1)' }));
+        svg.appendChild(el('circle', { cx: x(i), cy: y(v), r: 3, fill: c }));
+        const hit = el('circle', { cx: x(i), cy: y(v), r: 12, class: 'hit', tabindex: 0 });
+        on(hit, `<div class="tt">${s.name} · epoch ${i}</div>` + tipRow(c, nm + ' loss', fmt(v, 5)));
+        svg.appendChild(hit);
+      });
+    });
+
+    [0, s.ep - 1].forEach(i => {
+      const tk = el('text', { class: 'tick', x: x(i), y: M.t + ph + 18, 'text-anchor': 'middle' });
+      tk.textContent = i; svg.appendChild(tk);
+    });
+    const rg = el('text', { class: 'tick', x: x0, y: H - 8, 'fill-opacity': .8 });
+    rg.textContent = `${fmt(yMin, 4)}–${fmt(yMax, 4)}`; svg.appendChild(rg);
+  });
+
+  const rows = [];
+  for (let i = 0; i < 12; i++) {
+    rows.push([i, ...STAGES.flatMap(s => [
+      s.trn[i] !== undefined ? fmt(s.trn[i], 5) : '—',
+      s.val[i] !== undefined ? fmt(s.val[i], 5) : '—'])]);
+  }
+  table('tbl-tv', ['epoch', ...STAGES.flatMap(s => [`${s.name} train`, `${s.name} val`])], rows);
+})();
+
+// ── 막대: 단계별 소요 시간 ──────────────────────────────────────────────────
+(function () {
+  const svg = document.getElementById('svg-cost');
+  const W = 700, H = 230, M = { t: 18, r: 20, b: 52, l: 62 };
+  const pw = W - M.l - M.r, ph = H - M.t - M.b;
+  const hrs = STAGES.map(s => s.secs / 3600), yMax = 80;
+  const y = v => M.t + ph - v / yMax * ph;
+  const on = bindTip('c-cost', 'tip-cost');
+  const BAR = 24, band = pw / STAGES.length;
+
+  for (let v = 0; v <= yMax; v += 20) {
+    svg.appendChild(el('line', { class: v ? 'grid-line' : 'axis-line', x1: M.l, x2: W - M.r, y1: y(v), y2: y(v) }));
+    const tk = el('text', { class: 'tick', x: M.l - 9, y: y(v) + 4, 'text-anchor': 'end' });
+    tk.textContent = v + 'h'; svg.appendChild(tk);
+  }
+
+  STAGES.forEach((s, i) => {
+    const cx = M.l + band * (i + 0.5), h = ph - (y(hrs[i]) - M.t);
+    // 4px 둥근 데이터 끝 · 바닥은 각지게
+    const t = y(hrs[i]), b = M.t + ph, r = 4, x0 = cx - BAR / 2;
+    svg.appendChild(el('path', {
+      d: `M${x0},${b} L${x0},${t + r} Q${x0},${t} ${x0 + r},${t} L${x0 + BAR - r},${t} Q${x0 + BAR},${t} ${x0 + BAR},${t + r} L${x0 + BAR},${b} Z`,
+      fill: 'var(--series-1)'
+    }));
+    const lb = el('text', { class: 'dlabel', x: cx, y: t - 8, 'text-anchor': 'middle' });
+    lb.textContent = hrs[i].toFixed(1) + 'h'; svg.appendChild(lb);
+    const nm = el('text', { class: 'tick', x: cx, y: b + 20, 'text-anchor': 'middle' });
+    nm.textContent = s.name; svg.appendChild(nm);
+    const ep = el('text', { class: 'tick', x: cx, y: b + 35, 'text-anchor': 'middle', 'fill-opacity': .7 });
+    ep.textContent = `${s.ep} ep · ${(s.secs / s.ep / 3600).toFixed(2)}h/ep`; svg.appendChild(ep);
+
+    const hit = el('rect', { x: cx - band / 2, y: M.t, width: band, height: ph, class: 'hit', tabindex: 0 });
+    on(hit, `<div class="tt">${s.name}</div>` +
+      tipRow('var(--series-1)', '총 소요', hrs[i].toFixed(2) + 'h') +
+      tipRow('var(--series-1)', 'epoch당', (s.secs / s.ep / 3600).toFixed(2) + 'h'));
+    svg.appendChild(hit);
+  });
+
+  table('tbl-cost', ['단계', 'epoch', '총 소요(h)', 'epoch당(h)', '총 초'],
+    STAGES.map((s, i) => [s.name, s.ep, hrs[i].toFixed(2), (s.secs / s.ep / 3600).toFixed(2), s.secs.toLocaleString()])
+      .concat([['<strong>합계</strong>', 28, '<strong>' + (hrs.reduce((a, b) => a + b, 0)).toFixed(2) + '</strong>', '—',
+        '<strong>' + STAGES.reduce((a, s) => a + s.secs, 0).toLocaleString() + '</strong>']]));
+})();
+</script>

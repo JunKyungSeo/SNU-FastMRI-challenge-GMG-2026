@@ -1,0 +1,1 @@
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x480 param=76.0M opt=Y fwdbwd=4.36s peak=3.17GB

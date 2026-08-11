@@ -1,5 +1,6 @@
 import json
 import zlib
+import cv2
 import numpy as np
 import torch
 
@@ -30,8 +31,9 @@ def to_tensor(data):
 #     치역이 대회 마스크 가족과 동일하고(step 4|8 · cf 0.08, 학습풀+leaderboard 280볼륨 비트정확
 #     재현), 학습 중인 전문가의 가속률과 마스크가 CLI로 강제 일치해 라우터도 안 흔든다.
 #     지우기 전에 augmentation.md §0의 "마스크 재생성" 절을 읽을 것 — 한 번 지워진 전례가 있다.
-#   미채택(기록): 위-아래(readout) 플립 = 무릎 뼈 위치가 뒤바뀌는 비현실 형태.
-#     translation = target이 384 center-crop으로 제공되는데 모델은 640×W에서 크롭해 정렬 불가.
+#   미채택(기록): 위-아래(readout) 플립 = 무릎 뼈 위치가 뒤바뀌는 비현실 형태 (shell29 실측 상한 +0.003).
+#   affine(회전±5°+확대≤1.1, 2026-08-07 채택): translation 미채택 사유였던 "384 crop과 정렬 불가"를
+#     target 재생성(full k-space 워프 → RSS)으로 해소했다 — 아래 MRIAugmentor._affine 참고.
 #   스케줄: MRAugment schedule_p 형태 — delay D까지 off, T(=총 epoch)로 정규화한 exp/ramp/constant 증가.
 #   epoch 전달(train_part.py set_epoch)·args 정의(train.py --aug-*)는 배선 완료.
 #     --aug-on 기본값이 off라, 켜지 않으면 기존 학습과 동일하게 동작.
@@ -154,7 +156,7 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     • sens_net은 압축된 ACS로 내부 감도맵을 추정 → 그냥 Nvc코일로 동작(수정 불필요).
 
     ── 상호배타 주의 ─────────────────────────────────────────────────────────
-    candidates.md 기준 coil compression은 **배치 SME(§3.2)와 택1(동시적용 금지)** — 둘 다
+    coil compression은 **배치 SME(model_strategy §3.2)와 택1(동시적용 금지)** — 둘 다
     SME 비용 절감이 목적이라 중복. 하나만 켠다.
 
     Args:
@@ -184,6 +186,21 @@ def coil_compress(kspace_c, mask1d, n_virtual_coils=8):
     return np.ascontiguousarray(kc)
 
 
+def _rss_crop(imgs, hw=(384, 384)):
+    """코일 복소 영상 → RSS → 중앙 crop(부족한 축은 0-pad) → float32.
+    affine 증강의 target 재생성 규약 — 제공 label과의 정합은
+    scripts/verify_affine_target.py가 실데이터 전수로 확인한다(corr≥0.9999)."""
+    rss = np.sqrt((np.abs(imgs) ** 2).sum(axis=0)).astype(np.float32)
+    H, W = rss.shape
+    th, tw = hw
+    out = np.zeros(hw, dtype=np.float32)
+    sh, dh = max((H - th) // 2, 0), max((th - H) // 2, 0)
+    sw, dw = max((W - tw) // 2, 0), max((tw - W) // 2, 0)
+    ch, cw = min(H, th), min(W, tw)
+    out[dh:dh + ch, dw:dw + cw] = rss[sh:sh + ch, sw:sw + cw]
+    return out
+
+
 class AugmentConfig:
     """증강 설정. train.py args에서 채워지며(없으면 getattr 기본값), 기본은 off.
     증강이 좌우 flip 하나뿐이라 변환 선택 스위치·가중치 필드는 없다 — on/off는 `on` 하나."""
@@ -197,6 +214,23 @@ class AugmentConfig:
         self.total_epochs = kw.get("total_epochs", 1)      # T: args.num_epochs (load_data가 채움)
         self.exp_decay = kw.get("exp_decay", 5.0)          # 논문/공식 repo 기본 c=5.0
         self.max_prob = kw.get("max_prob", 0.55)           # 논문 기본 p_max=0.55
+        # affine(회전+확대) — 2026-08-07 채택(사용자 확정: shear 없음·확대만·±5°).
+        self.affine = kw.get("affine", True)               # --aug-on 아래 기본 on. False면 flip 추첨 스트림까지 구버전 동일
+        self.rot_max = kw.get("rot_max", 5.0)              # 회전 최대각(도) — U(-rot_max, +rot_max)
+        self.scale_max = kw.get("scale_max", 1.1)          # 확대 상한 — U(1.0, scale_max). 축소는 빈 띠가 생겨 안 쓴다
+        # 변환별 최대확률(2026-08-08) — None이면 max_prob로 fallback(기존 셸 인자 100% 호환).
+        # 0.0은 "그 변환만 확률 0"인 유효값이므로 `or` 대신 None 검사로 해석한다.
+        v = kw.get("flip_max_prob", None)
+        self.flip_max_prob = float(self.max_prob if v is None else v)
+        v = kw.get("affine_max_prob", None)
+        self.affine_max_prob = float(self.max_prob if v is None else v)
+        # affine 전용 스케줄(2026-08-09) — peak_epoch을 지정하면 delay~peak을 코사인으로 올라간
+        # 뒤 유지한다(--aug-schedule과 무관). 미지정이면 flip과 같은 곡선(기존 동작).
+        # delay 미지정이면 공통 delay를 따른다.
+        v = kw.get("affine_delay", None)
+        self.affine_delay = int(self.delay if v is None else v)
+        v = kw.get("affine_peak_epoch", None)
+        self.affine_peak_epoch = None if v is None else int(v)
         self.seed = kw.get("seed", 430)
 
 
@@ -212,15 +246,18 @@ class MRIAugmentor:
         self.epoch = int(epoch)
 
     # ---- 스케줄 ----
-    def prob(self):
-        """이번 epoch에서 flip이 걸릴 확률. 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
+    def prob(self, p_max=None):
+        """이번 epoch에서 증강이 걸릴 확률. 학습 로그와 __call__이 같은 값을 쓰도록 한 곳에서 계산.
         MRAugment 공식 schedule_p와 동일: D=delay, T=total_epochs, c=exp_decay/(T-D).
         p(t<D)=0이고 p(T)=p_max로 정규화되므로 런 길이가 달라도 증강량이 일관된다.
-        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)"""
+        (epoch은 0..T-1이라 마지막 epoch의 p는 p_max에 살짝 못 미친다 — 상류와 동일.)
+        p_max 인자(2026-08-08): 변환별 도달점(cfg.flip_max_prob/affine_max_prob)으로 같은
+        곡선을 스케일할 때 쓴다. None이면 cfg.max_prob(기존 동작 — 스케줄 테스트가 이 계약을 쓴다)."""
         c = self.cfg
         if not c.on:
             return 0.0
-        D, T, t, p_max = int(c.delay), int(c.total_epochs), self.epoch, float(c.max_prob)
+        D, T, t = int(c.delay), int(c.total_epochs), self.epoch
+        p_max = float(c.max_prob if p_max is None else p_max)
         if t < D:
             return 0.0
         if c.schedule == "constant":
@@ -231,6 +268,26 @@ class MRIAugmentor:
             return p_max * (t - D) / (T - D)
         k = c.exp_decay / (T - D)
         return float(p_max / (1.0 - np.exp(-(T - D) * k)) * (1.0 - np.exp(-(t - D) * k)))
+
+    def affine_prob(self):
+        """affine 전용 확률. peak_epoch 미지정이면 flip과 같은 곡선(기존 동작).
+        지정하면 delay(D)부터 peak(P)까지 **코사인으로 올라가 이후 p_max를 유지**한다:
+            p(t<D)=0 · p(t≥P)=affine_max_prob · 그 사이 p = p_max·(1−cos(πu))/2, u=(t−D)/(P−D)
+        양 끝 기울기가 0이라 계단도, 꺾임도 없다. --aug-schedule(flip 곡선)과 독립인 이유:
+        flip은 shared 30 epoch 내내 0.5였으므로 전문가에서 같이 0부터 올리면 없애려던 계단보다
+        큰 계단(0.5→0→0.5)이 새로 생긴다. epoch은 **단계 내 로컬**(전역 = 30 + 로컬)."""
+        c = self.cfg
+        if (not c.on) or (not c.affine):
+            return 0.0
+        if c.affine_peak_epoch is None:
+            return self.prob(c.affine_max_prob)
+        D, P, t = int(c.affine_delay), int(c.affine_peak_epoch), self.epoch
+        if t < D:
+            return 0.0
+        if (t >= P) or (P - D <= 0):
+            return float(c.affine_max_prob)
+        u = (t - D) / (P - D)
+        return float(c.affine_max_prob * (1.0 - np.cos(np.pi * u)) / 2.0)
 
     def _rng(self, fname, sl):
         """샘플별 결정적 RNG: (seed, epoch, fname, slice) → aug ON/OFF A/B가 동일 추출 위에서 비교됨.
@@ -270,23 +327,61 @@ class MRIAugmentor:
         g = None if grappa is None else np.ascontiguousarray(grappa[..., ::-1])
         return K2, tgt, M2, bbox, g
 
-    def __call__(self, kspace_c, mask, target, bbox, grappa, fname, sl):
-        """kspace_c:(coils,H,W) complex(raw) · mask:(W,) · target:(384,384) or None
-        · grappa:(384,384) magnitude or None(GRAPPA 보조 입력, 확정: 영상 도메인 유지).
-        반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
-        GRAPPA에도 flip(기하)을 동기 적용한다 — 두 입력의 해부 정렬이 어긋나면 안 되므로."""
-        M = (mask >= 1).astype(mask.dtype)
-        K = kspace_c * M                       # 제공 언더샘플 적용
-        if (not self.cfg.on) or (target is None):
-            return K, M, target, bbox, grappa
-        p = self.prob()
-        if p <= 0.0:
-            return K, M, target, bbox, grappa
-        if self._rng(fname, sl).random() >= p:
-            return K, M, target, bbox, grappa
+    def _affine(self, kspace_c, target_hw, rng):
+        """회전 U(-rot_max,+rot_max)° + 확대 U(1,scale_max)를 '환자 통째로' 적용하고
+        target을 재생성한다 (MRAugment 방식). 반환: (warped_kspace_c, new_target).
 
-        # 좌-우(width) flip — target·bbox·mask·GRAPPA 동기(정렬 유지)
-        K, tgt, M, bbox, grappa = self._flip_lr(K, target, bbox, M, grappa)
+        왜 label 재사용이 아니라 재생성인가: label은 384² 고정 크롭이라 기하 변환 시
+        프레임 밖 정보가 없다. 학습 h5의 kspace는 full(remask에서 170/170 실측)이므로
+        코일별 IFFT→워프→FFT로 '변형된 환자의 획득'을 만들고 정답도 같은 워프 영상의
+        RSS에서 뽑으면 입력·정답이 구성상 정합한다(label↔full recon RSS corr 1.0 — remask 검증).
+
+        보간: INTER_LANCZOS4 — bilinear 대비 고주파 보존(테스트로 강제. 채점이 SSIM이라
+        블러가 곧 손해다). 회전 모서리 공백은 0 채움 — 입력·정답이 같은 공백을 공유하므로
+        오지도(誤指導)가 없다. 코일 감도는 환자와 '함께 도는' 셈이 되는데, 이는 다른 코일
+        배치의 유효한 획득이고 감도는 sens_net이 슬라이스별로 재추정하므로 문제없다.
+        ⚠️ 2.5D(인접 슬라이스 입력)를 켜는 날에는 '한 입력 안의 슬라이스들은 같은 변형'
+        제약이 새로 생긴다 — 지금은 슬라이스 1장 입력이라 해당 없음."""
+        deg = float(rng.uniform(-self.cfg.rot_max, self.cfg.rot_max))
+        s = float(rng.uniform(1.0, self.cfg.scale_max))
+        C, H, W = kspace_c.shape
+        mat = cv2.getRotationMatrix2D(((W - 1) / 2.0, (H - 1) / 2.0), deg, s)
+        imgs = _ifftc(kspace_c)
+        out = np.empty_like(imgs)
+        for c in range(C):
+            ch2 = np.stack([imgs[c].real, imgs[c].imag], axis=-1).astype(np.float32, copy=False)
+            w = cv2.warpAffine(ch2, mat, (W, H), flags=cv2.INTER_LANCZOS4,
+                               borderMode=cv2.BORDER_CONSTANT, borderValue=0.0)
+            out[c] = w[..., 0] + 1j * w[..., 1]
+        return _fftc(out), _rss_crop(out, target_hw)
+
+    def __call__(self, kspace_c, mask, target, bbox, grappa, fname, sl):
+        """kspace_c:(coils,H,W) complex(raw full) · mask:(W,) · target:(384,384) or None
+        · grappa:(384,384) magnitude or None.
+        반환: (kspace_masked_complex, mask_1d, target, bbox, grappa).
+        순서: affine(mask 곱 전, full k-space + target 재생성) → mask 곱 → flip(기존).
+        affine이 안 걸리면 target은 제공 label 그대로다(재생성은 걸린 샘플만)."""
+        M = (mask >= 1).astype(mask.dtype)
+        if (not self.cfg.on) or (target is None):
+            return kspace_c * M, M, target, bbox, grappa
+        p_flip = self.prob(self.cfg.flip_max_prob)
+        p_affine = self.affine_prob()
+        if p_flip <= 0.0 and p_affine <= 0.0:
+            return kspace_c * M, M, target, bbox, grappa
+        rng = self._rng(fname, sl)
+        tgt = target
+
+        # 1) affine(회전+확대) — full k-space에서. cfg.affine=False면 rng를 소비하지
+        #    않아(and 단락) flip 추첨 스트림이 구버전과 비트 동일하게 유지된다.
+        if self.cfg.affine and (rng.random() < p_affine):
+            assert not bbox, "affine 증강은 bbox 변환 미구현 — --bbox-loss-lambda와 같이 켤 수 없다"
+            assert grappa is None, "affine 증강은 GRAPPA 워프 미구현 — GRAPPA 입력과 같이 켤 수 없다"
+            kspace_c, tgt = self._affine(kspace_c, (384, 384), rng)
+
+        K = kspace_c * M
+        # 2) 좌-우(width) flip — target·bbox·mask·GRAPPA 동기 (기존 그대로, 독립 추첨)
+        if rng.random() < p_flip:
+            K, tgt, M, bbox, grappa = self._flip_lr(K, tgt, bbox, M, grappa)
         return K, M.astype(mask.dtype), np.ascontiguousarray(tgt), bbox, grappa
 
 
@@ -339,6 +434,31 @@ def remask_offset(seed, epoch, fname, sl, acc):
     return int(np.random.default_rng(zlib.crc32(key)).integers(int(acc)))
 
 
+# ---- 마스크 증강(--mask-aug) — 재생성 경로를 그대로 쓰되 무엇을 흔들지만 바꾼다 -------------
+#   offset : 가속률은 그대로 두고 격자 위상만 매 epoch 재추첨(채점의 무작위 offset 분포에 맞춤).
+#   full   : 가속률까지 4|8 중에서 재추첨 → 한 볼륨이 두 가속률을 오간다.
+#            전문가는 한 가속률만 봐야 하므로 --remask 와는 배타(train.py에서 fail-fast).
+
+def mask_aug_acc(seed, epoch, fname, sl):
+    """--mask-aug full 에서 뽑는 가속률(4|8). remask_offset과 같은 관례이되 salt를 달리해
+    스트림을 분리한다 — 안 나누면 가속률 추첨이 offset 추첨과 맞물려 조합이 편향된다."""
+    key = repr(("mask_aug_acc", int(seed), int(epoch), str(fname), int(sl))).encode()
+    return 4 if int(np.random.default_rng(zlib.crc32(key)).integers(2)) == 0 else 8
+
+
+def infer_acc(mask1d):
+    """딸려온 마스크에서 그 파일의 가속률을 읽는다 — ACS 밖 격자점의 **최소 간격**이 곧 acc
+    (ACS를 가로지르는 한 쌍만 더 벌어지므로 min이면 안전).
+    --mask-aug offset 이 --remask 없이 돌 때 "파일의 원래 가속률"을 유지하려고 쓴다.
+    파일명 accN 토큰을 읽는 길도 있지만 그 규약은 load_data 쪽이고, 여기서 import 하면
+    transforms↔load_data 순환이 된다. 마스크 자체가 더 직접적인 근거이기도 하다."""
+    m = np.asarray(mask1d) >= 1
+    idx = np.where(m & ~_detect_acs(m))[0]
+    if idx.size < 2:
+        raise ValueError("마스크에서 가속률을 못 읽었다 — ACS 밖 샘플 라인이 2개 미만")
+    return int(np.diff(idx).min())
+
+
 class DataTransform:
     """확정 파이프라인 전처리(strategy/confirmed_model.md). 신규 기능은 전부 플래그로 게이트.
 
@@ -375,7 +495,7 @@ class DataTransform:
                  normalize=False, readout_crop=False, crop_h=384, norm_percentile=99.0,
                  return_grappa=False, coil_compress=False, n_virtual_coils=8,
                  return_fg_mask=False, remask_acc=None, remask_offset="uniform",
-                 remask_seed=430):
+                 remask_seed=430, mask_aug="off"):
         self.isforward = isforward
         self.max_key = max_key
         self.augmentor = augmentor
@@ -391,13 +511,15 @@ class DataTransform:
         self.return_grappa = bool(return_grappa)  # GRAPPA 영상 prior 반환
         # ---- 효율 레버(후보): SVD coil compression. 기본 off. 배치 SME와 택1 ----
         #   켜면 코일 C(예 15)→n_virtual_coils(예 8)로 축소 → 반환 kspace shape의 coil축이 바뀜.
-        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, candidates.md.
+        #   화질은 neutral(속도/VRAM 레버). 상세: coil_compress() docstring, strategy/preprocessing.md A2.
         self.coil_compress = bool(coil_compress)
         self.n_virtual_coils = int(n_virtual_coils)
         # ---- 마스크 재생성(학습 전용). None = off = 딸려온 마스크 그대로(기존과 비트 동일) ----
         self.remask_acc = None if remask_acc in (None, "off", "") else int(remask_acc)
         self.remask_offset = str(remask_offset)
         self.remask_seed = int(remask_seed)
+        # ---- 마스크 증강(off|offset|full). off = 위 remask 로직 그대로(기존과 비트 동일) ----
+        self.mask_aug = str(mask_aug)
         self.epoch = 0
 
     def set_epoch(self, epoch):
@@ -437,11 +559,21 @@ class DataTransform:
         #   정답은 마스크와 무관하다. 아래 언더샘플 곱(augmentor의 K=kspace*M 또는 else 분기)이
         #   새 마스크로 수행된다 — 이 파일에서 동작이 바뀌는 지점은 여기 하나뿐이다.
         #   val/forward는 is_train 게이트에 걸린다(load_data도 애초에 None을 넘긴다 = 2중 방어).
-        if (self.remask_acc is not None) and self.is_train and (tgt is not None):
+        #   --mask-aug 도 같은 경로를 탄다 — off가 아니면 --remask가 꺼져 있어도 재생성한다.
+        #     offset: 가속률은 그대로(--remask 값, 없으면 딸려온 마스크에서 읽은 파일 원래 값) 두고 위상만 재추첨.
+        #     full  : 가속률까지 4|8 재추첨(--remask와는 배타 — train.py에서 막는다).
+        if ((self.remask_acc is not None) or self.mask_aug != "off") and self.is_train and (tgt is not None):
             W = kspace_c.shape[-1]
-            off = (canonical_offset(W, self.remask_acc) if self.remask_offset == "canonical"
-                   else remask_offset(self.remask_seed, self.epoch, fname, slice, self.remask_acc))
-            mask1d = equispaced_mask(W, self.remask_acc, off, dtype=mask1d.dtype)
+            if self.mask_aug == "full":
+                acc = mask_aug_acc(self.remask_seed, self.epoch, fname, slice)
+            elif self.remask_acc is not None:
+                acc = self.remask_acc
+            else:
+                acc = infer_acc(mask1d)
+            # mask_aug가 켜지면 위상 재추첨이 목적이라 canonical 고정을 덮는다.
+            off = (canonical_offset(W, acc) if (self.mask_aug == "off" and self.remask_offset == "canonical")
+                   else remask_offset(self.remask_seed, self.epoch, fname, slice, acc))
+            mask1d = equispaced_mask(W, acc, off, dtype=mask1d.dtype)
 
         bbox = self._parse_bbox(attrs, slice) if (self.return_bbox and not self.isforward) else None
 

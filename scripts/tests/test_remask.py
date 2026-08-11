@@ -17,7 +17,7 @@ import pytest
 
 from utils.data.transforms import (
     AugmentConfig, MRIAugmentor, DataTransform,
-    CENTER_FRACTION, equispaced_mask, canonical_offset, remask_offset, _fftc,
+    CENTER_FRACTION, equispaced_mask, canonical_offset, remask_offset, infer_acc, _fftc,
 )
 from utils.model.moe import extract_acc_from_mask, DEFAULT_ACC_THRESHOLD
 
@@ -223,7 +223,8 @@ def test_flip_decisions_unchanged_by_remask():
     flipped_T = T[:, ::-1]
 
     def flip_seq(remask_acc):
-        aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5, seed=430))
+        aug = MRIAugmentor(AugmentConfig(on=True, schedule="constant", max_prob=0.5, affine=False,  # flip 스트림 순수 탐침 — affine 추첨 제외
+                                         seed=430))
         dt = make_dt(remask_acc=remask_acc, augmentor=aug)
         dt.set_epoch(2)
         return [bool(np.array_equal(dt(m, K, T, make_attrs(), "knee_acc4_1.h5", i)[2].numpy(),
@@ -251,6 +252,87 @@ def test_remask_composes_with_flip():
     ks = kspace.numpy()
     energy = np.abs(ks[..., 0] + 1j * ks[..., 1]).sum(axis=(0, 1))
     assert np.allclose(energy[~got], 0.0), "flip 후에도 마스크 밖은 0"
+
+
+# ---------------------------------------------------------------- 마스크 증강(--mask-aug)
+
+def _family(W, acc):
+    """그 폭·가속률에서 나올 수 있는 마스크 전부(offset 0..acc-1)."""
+    return {equispaced_mask(W, acc, o).astype(bool).tobytes() for o in range(acc)}
+
+
+def test_infer_acc_reads_supplied_mask():
+    """딸려온 마스크에서 가속률을 읽는다 — ACS 밖 격자 간격. 학습셋 폭 범위 × 전 offset 전수."""
+    for W in (320, 368, 372, 400, 480):
+        for acc in (4, 8):
+            for off in range(acc):
+                assert infer_acc(equispaced_mask(W, acc, off)) == acc, (W, acc, off)
+
+
+@pytest.mark.parametrize("acc,W", [(4, 368), (8, 372)])
+def test_mask_aug_offset_keeps_acceleration(acc, W):
+    """offset 모드는 **위상만** 흔든다 — 가속률은 파일 원래 값 그대로여야 한다.
+    --remask 없이 도는 경로라, 가속률을 딸려온 마스크에서 못 읽으면 여기서 걸린다."""
+    import torch
+    K, T = make_kspace(W=W), make_target()
+    m = equispaced_mask(W, acc, canonical_offset(W, acc))
+    fam = _family(W, acc)
+
+    drawn = set()
+    for e in range(6):
+        dt = make_dt(remask_acc=None, mask_aug="offset")
+        dt.set_epoch(e)
+        got = dt(m, K, T, make_attrs(), f"knee_acc{acc}_1.h5", 0)[0].numpy().reshape(-1).astype(bool)
+        assert got.tobytes() in fam, "가속률이 바뀌었다 — offset 모드가 아니다"
+        assert extract_acc_from_mask(torch.from_numpy(got.astype(np.float32))) == acc
+        drawn.add(got.tobytes())
+    assert len(drawn) >= 2, "epoch을 바꿔도 offset이 안 흩어지면 RNG 배선이 죽은 것"
+
+
+def test_mask_aug_full_draws_only_4_or_8():
+    """full 모드는 가속률까지 흔들되 대회에 존재하는 4|8 밖으로 나가면 안 된다(둘 다 나와야 한다)."""
+    W = 368
+    K, T = make_kspace(W=W), make_target()
+    m = equispaced_mask(W, 4, canonical_offset(W, 4))
+    fam = {equispaced_mask(W, a, o).astype(bool).tobytes(): a for a in (4, 8) for o in range(a)}
+
+    accs = set()
+    for e in range(4):
+        dt = make_dt(remask_acc=None, mask_aug="full")
+        dt.set_epoch(e)
+        for sl in range(6):
+            got = dt(m, K, T, make_attrs(), "knee_acc4_1.h5", sl)[0].numpy().reshape(-1).astype(bool)
+            assert got.tobytes() in fam, "acc4|acc8 마스크 가족 밖의 물건이 나왔다"
+            accs.add(fam[got.tobytes()])
+    assert accs == {4, 8}
+
+
+def test_mask_aug_off_keeps_supplied_mask():
+    """off면 딸려온 마스크를 그대로 곱한 것과 바이트까지 같아야 한다(기대값은 구현 밖에서 손계산)."""
+    W = 372
+    K, T = make_kspace(W=W), make_target()
+    m = equispaced_mask(W, 8, canonical_offset(W, 8))
+
+    mask_t, kspace, *_ = make_dt(remask_acc=None, mask_aug="off")(
+        m, K, T, make_attrs(), "knee_acc8_1.h5", 3)
+    got = kspace.numpy()
+    assert np.array_equal(mask_t.numpy().astype(bool), (m >= 1).reshape(1, 1, W, 1))
+    assert np.array_equal((got[..., 0] + 1j * got[..., 1]).astype(K.dtype),
+                          (K * (m >= 1).astype(m.dtype)).astype(K.dtype))
+
+
+@pytest.mark.parametrize("is_train,isforward", [(False, False), (False, True)])
+def test_val_and_forward_never_mask_aug(is_train, isforward):
+    """--remask 와 같은 규칙 — 마스크 증강도 학습 로더 전용이다."""
+    W = 368
+    K = make_kspace(W=W)
+    T = None if isforward else make_target()
+    attrs = -1 if isforward else make_attrs()
+    m = equispaced_mask(W, 4, canonical_offset(W, 4))
+
+    dt = make_dt(remask_acc=None, mask_aug="full", is_train=is_train, isforward=isforward)
+    got = dt(m, K, T, attrs, "knee_acc4_1.h5", 0)[0].numpy().reshape(-1)
+    assert np.array_equal(got.astype(bool), m.astype(bool))
 
 
 # ---------------------------------------------------------------- 가드

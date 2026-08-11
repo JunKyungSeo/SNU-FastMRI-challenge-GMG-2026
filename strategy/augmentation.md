@@ -1,6 +1,6 @@
 # Data Augmentation 전략 — FastMRI 2026 (Annotation-guided Knee Reconstruction)
 
-> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`candidates.md`](candidates.md) · 제외 [`rejected.md`](rejected.md).
+> 📚 **근거(rationale) 문서.** 인덱스 [`README.md`](README.md) · 확정 SPEC [`confirmed_model.md`](confirmed_model.md) · 후보 [`next_levers.md`](next_levers.md) · 제외 [`rejected.md`](rejected.md).
 
 > # ✅ 구현 완료 (2026-07-03)
 > 이 문서의 채택 증강은 **`utils/data/transforms.py`(`MRIAugmentor`/`AugmentConfig`/`DataTransform`) · `utils/data/load_data.py`에 구현·검증 완료**.

@@ -97,11 +97,12 @@
 - **뭔가**: "몇 번째 cascade인지 + 어떤 프로토콜인지(mask/가속/모달리티)"를 **숫자 임베딩으로 만들어 신경망 매 블록에 주입**(FiLM/AdaLN 계열). 한 모델이 상황을 알고 행동을 바꾸게 함.
 - **논문에서 중요했던 이유**: cardiac 12종 contrast + 여러 trajectory + 4~24× 가속을 **단일 모델**로 처리하는 게 목표라 "상황 인지"가 핵심.
 - **우리 맥락**: **단일 modality(knee) · 단일 trajectory(Cartesian) · 가속 2종(acc4/acc8)뿐** → UC 대부분 목적 소멸, 실질 조건은 **{cascade index, acc4/acc8}**만 남음.
-- **우리 결정**: (a) cascade index만 최소 유지 / (b) acc4/acc8까지 조건화([`candidates.md`](candidates.md) acc-conditioning과 연결) / (c) 생략. 메모리 거의 안 듦 → 품질 관점 결정.
+- **우리 결정**: (a) cascade index만 최소 유지 / (b) acc4/acc8까지 조건화 — **2026-08-01 기각**(MoE 전문가 분리가 조건화의 상한, [`next_levers.md`](next_levers.md) C5) / (c) 생략. 메모리 거의 안 듦 → 품질 관점 결정.
 
 ### B9. Loss (손실 함수)
 - **논문**: SSIM loss만.
-- **우리**: 순위 결정축이 **SSIM_bbox(병변 박스)** → `L = (1−SSIM_full) + λ·(1−SSIM_bbox)`처럼 **병변 영역 가중** 추가가 전략 방향([`model_strategy.md`](model_strategy.md) §2.1, [`candidates.md`](candidates.md)). SDUM 백본 위에 **손실만 우리 대회용으로** 교체.
+- **우리**: 순위 결정축이 **SSIM_bbox(병변 박스)** → `L = (1−SSIM_full) + λ·(1−SSIM_bbox)`처럼 **병변 영역 가중** 추가가 전략 방향([`model_strategy.md`](model_strategy.md) §2.1). SDUM 백본 위에 **손실만 우리 대회용으로** 교체.
+  ⚠️ **2026-08-01 현황**: `--bbox-loss-lambda`로 배선 완료. run12에서 λ=0.5로 시도했으나 3축 퇴행해 기본 0.0(off) 유지. 근거: `training_anal/2026-07-18-run12-bbox-uc-analysis.md`.
 
 ### B10. GRAPPA prior + residual
 - **뭔가**: 대회가 **GRAPPA로 미리 복원한 영상**(alias 상당히 제거된 초기해)을 제공. 이를 **보조 채널 + residual**(`출력 = GRAPPA + f(...)`)로 넣으면 "밑그림 다시 그리기" 대신 "틀린 부분만 고치기" → 같은 크기로 품질↑.
@@ -110,7 +111,7 @@
 
 ### B6. 인접 슬라이스 입력
 - **논문**: 동적 cardiac/3D용으로 인접 프레임 함께 입력.
-- **우리**: knee는 정적 2D + **전략문서가 2.5D 인접입력을 이미 제외**([`rejected.md`](rejected.md): bbox blur → SSIM_bbox 악화) → **단일 슬라이스 고정**(이 기능 끔).
+- **우리**: 현재 **단일 슬라이스 고정**(코드 미배선). 단 🔁 **2026-08-01 기각 근거 반증** — 옛 사유 "bbox blur → SSIM_bbox 악화"는 대조군 없는 파일 2개 표본이었고, 재측정에서 병변 상관이 대조군보다 높았다([`model_strategy.md`](model_strategy.md) §3). **a=1 한정 재개 후보.**
 - (단 "인접 슬라이스로 감도맵만 배치추정"하는 메모리 최적화는 별개로 채택 가능 — [`model_strategy.md`](model_strategy.md) §3.2.)
 
 ---

@@ -30,7 +30,7 @@
 | **GRAPPA → fft → k-space** | GRAPPA는 magnitude·단일코일 384² → fft하면 위상·코일 날조된 가짜 k-space. cascade regularizer는 영상 도메인 동작이라 영상 prior가 정합 (2026-07-04 확정) | confirmed_model, model_strategy §1 |
 | **완전 384²(폭까지 pad)** | 폭 368/372→384 image-pad 후 fft하면 k-space 1.35배 번짐(실측) → phase-encode mask·DC 오염. readout(높이)만 crop해야 함 | confirmed_model 실측 |
 | **GRAPPA로 x0 대체** | magnitude-only 384² vs VarNet x0(complex multi-coil ~640×368). 위상 합성+coil 확장 필요→ill-posed·fabrication 위험 | model_strategy §1 (a) |
-| **2.5D 인접슬라이스 입력 스태킹** | bbox 내부 인접 상관 낮음(0.08~0.59) → 병변 blur→SSIM_bbox 악화. (배치 SME §3.2와 구분: 그건 메모리 최적화라 채택) | model_strategy §3.1 |
+| **2.5D 인접슬라이스 입력 스태킹** | 🔁 **2026-08-01 기각 철회(근거 반증)**. 옛 사유였던 "bbox 내부 상관 0.08~0.59 → 병변 blur"는 **대조군 없는 파일 2개 표본**이었다. 170파일·박스 7394개 재측정에서 병변 bbox 상관이 **같은 크기 대조군보다 +0.12 높고** gap1 SSIM은 동일 → 병변 특이 blur 근거 없음. 단 **a=1(3슬라이스) 한정**(gap2↑는 병변 SSIM이 대조군 아래로 뒤집힘). 이득은 **실측 결과 노이즈 수준**(shell30: ValLoss −0.0009, 부호 뒤집힘) 인데 비용은 학습·추론 1.9× → **채택 보류**. 배선은 유지(기본 1=비트 동일). (배치 SME §3.2와 구분: 그건 메모리 최적화라 별도 채택) | model_strategy §3·§3.1 |
 | **coil 배치화(UEPS UE)** | 15코일 knee에서 메모리 되레↑ 가능 → progressive(P)만 조각 이식 | §4.1 |
 
 ## 손실·기타

@@ -1,0 +1,6 @@
+[START] shell34   2026-08-07 13:01:09   NET=gnorm_probe
+[LOG  ] shell_scripting/logs/shell34_20260807_130109.log
++ python train.py --model promptmr --readout-crop --num-cascades 10 --n-feat0 48 --sens-n-feat0 24 --n-history 3 -b 1 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --aug-on --aug-schedule constant --aug-max-prob 0.5 --aug-delay 0 --l1-weight 0.1 --acc all -e 1 -l 2e-4 --max-iters 300 -t /root/Data/train/ -v /root/Data/val/ -n gnorm_probe --run-tag gnorm_probe
+Terminated
+[DONE ] shell34   2026-08-07 13:01:09   exit=143
+[볼 것] 로그의 [gnorm] 줄 — med / p90 / max / 발동%

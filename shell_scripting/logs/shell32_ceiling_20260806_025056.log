@@ -1,0 +1,51 @@
+==========================================================
+[START] shell32   2026-08-06 02:50:56   STAGE=ceiling
+[BR   ] jkMRplus (5f7f47b)
+[CONF ] 기준선 nc10 nh3 nf48/sens24 · fold=2 acc=8 · data=/root/Data
+[LOG  ] shell_scripting/logs/shell32_ceiling_20260806_025056.log
+==========================================================
+[GPU  ] NVIDIA GeForce GTX 1080, 8192 MiB  used=2MiB
+
+=== A) 기준선 — 실측 3.35GB 근처에 안 떨어지면 아래는 다 무의미하다 ===
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.15s peak=3.07GB
+OOM  cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=False coils=15 HxW=384x480 param=72.9M
+
+=== B) n-history 축 (nc10 nf48) — 원본값 11 을 되찾을 수 있나 ===
+OK   cascades=10 n_feat0=48 sens=24 n_hist=5 ckpt=True coils=15 HxW=384x480 param=73.5M opt=Y fwdbwd=4.20s peak=3.46GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=7 ckpt=True coils=15 HxW=384x480 param=74.0M opt=Y fwdbwd=4.26s peak=3.86GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=9 ckpt=True coils=15 HxW=384x480 param=74.6M opt=Y fwdbwd=4.32s peak=4.25GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=11 ckpt=True coils=15 HxW=384x480 param=75.2M opt=Y fwdbwd=4.38s peak=4.65GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=16 ckpt=True coils=15 HxW=384x480 param=76.6M opt=Y fwdbwd=4.51s peak=5.68GB
+
+=== C) num-cascades 축 (nh3 nf48) ===
+OK   cascades=12 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=87.1M opt=Y fwdbwd=4.73s peak=3.35GB
+OK   cascades=16 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=115.6M opt=Y fwdbwd=5.87s peak=3.90GB
+OK   cascades=20 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=144.1M opt=Y fwdbwd=7.03s peak=4.46GB
+OK   cascades=24 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=172.5M opt=Y fwdbwd=8.29s peak=5.01GB
+OK   cascades=32 n_feat0=48 sens=24 n_hist=3 ckpt=True coils=15 HxW=384x480 param=229.5M opt=Y fwdbwd=10.71s peak=6.11GB
+
+=== D) feature 폭 축 (nc10 nh3, 피라미드 동반 확대) ===
+OK   cascades=10 n_feat0=56 sens=28 n_hist=3 ckpt=True coils=15 HxW=384x480 param=98.2M opt=Y fwdbwd=5.17s peak=3.70GB
+OK   cascades=10 n_feat0=64 sens=32 n_hist=3 ckpt=True coils=15 HxW=384x480 param=127.2M opt=Y fwdbwd=6.11s peak=5.95GB
+OK   cascades=10 n_feat0=80 sens=40 n_hist=3 ckpt=True coils=15 HxW=384x480 param=196.5M opt=Y fwdbwd=8.38s peak=5.76GB
+OOM  cascades=10 n_feat0=96 sens=48 n_hist=3 ckpt=True coils=15 HxW=384x480 param=280.8M
+
+=== E) 조합 후보 (10:3:64 는 D 에서 이미 쟀다) ===
+OK   cascades=12 n_feat0=48 sens=24 n_hist=11 ckpt=True coils=15 HxW=384x480 param=89.9M opt=Y fwdbwd=5.17s peak=5.22GB
+OK   cascades=16 n_feat0=48 sens=24 n_hist=5 ckpt=True coils=15 HxW=384x480 param=116.5M opt=Y fwdbwd=6.17s peak=4.50GB
+OK   cascades=12 n_feat0=64 sens=32 n_hist=11 ckpt=True coils=15 HxW=384x480 param=157.0M opt=Y fwdbwd=6.72s peak=7.52GB
+
+===== 통과 (peak 오름차순) · h/epoch ≈ 4.95h × 시간비 =====
+shell_scripting/shell32.sh: line 112: column: command not found
+
+===== OOM =====
+shell_scripting/shell32.sh: line 114: column: command not found
+
+==========================================================
+[DONE ] shell32   2026-08-06 02:57:19   exit=0
+[저장] shell_scripting/results/lever_20260806_025056/probe.txt · arm 로그 shell_scripting/results/lever_20260806_025056/
+[판정] 천장 = OK 로 끝나는 가장 큰 값. 단 peak > 7.0GB 면 실학습엔 쓰지 말 것(폭 변동·단편화 여유).
+       메모리보다 시계가 먼저 막는다 — h/epoch 열을 보고 남은 대회 시간으로 자를 것.
+       파라미터가 크면 추론시간(점수항)도 손해다. SSIM 이 비슷하면 작은 쪽이 이긴다.
+[다음] 고른 config 는 resume 호환 필드라 처음부터 학습이다(--init-from 도 shape 로 죽는다).
+==========================================================

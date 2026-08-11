@@ -2,6 +2,8 @@
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
+**작업 시작 전 이 파일을 전문으로 읽는다.** 필요한 절만 grep으로 골라 읽으면 §5 같은 행동 규칙을 놓친다 (2026-08-07 실제 사고).
+
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
 ## 1. Think Before Coding
@@ -66,6 +68,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
  - 돌이킬 수 없는 행동 — 프로세스 `kill`, 학습 중단, 사용자가 열어둔 셸/터미널 종료, 체크포인트·결과 덮어쓰기·삭제, 큐 구조 변경 — 은 실행 전 **무엇을·왜 할지 알리고 허락을 받는다.** "작업에 필요해 보여서"는 사유가 안 된다. 내가 시작하지 않은 프로세스·터미널은 건드리지 않는다. 확인 못 한 것은 단정하지 말고 물어본다.
  - 기업 보고서 어투 지양. 조사 등을 생략하고 단어만 나열하지말고, 이것이 무엇인지 문맥으로 추론할 기회를 인간에게 주어라.
+ - **긴 설명·계획·제안을 낸 뒤에는 반드시 이해 확인을 한다**: (1) 처음 쓰는 전문용어(DC, EMA, …)에는 그 자리에서 한 줄 풀이를 붙인다. (2) 마지막에 핵심 결정 1~2개를 쉬운 말로 요약하고 "이해되는지, 다른 뜻으로 읽히는 부분은 없는지" 묻는다. 사용자가 모르는 용어 위에 결정을 쌓은 채 진행하지 않는다.
 
 ---
 
@@ -113,7 +116,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 10. 범위 밖 (후순위 / 다른 팀원)
 
-- 상세: `strategy/candidates.md`, `strategy/implementation.md` 참고.
+- 상세: `strategy/next_levers.md`, `strategy/implementation.md` 참고.
 
 ---
 

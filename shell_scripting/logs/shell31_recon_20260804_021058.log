@@ -1,0 +1,12 @@
+==========================================================
+[START] shell31_recon   2026-08-04 02:10:58   TARGET=merged  NET=promptmrp_0801_moe
+[LOG  ] shell_scripting/logs/shell31_recon_20260804_021058.log   [채점] /root/Data/leaderboard
+==========================================================
+Traceback (most recent call last):
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 82, in <module>
+    main()
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 49, in main
+    c4 = _load_best(args.result_root, args.acc4_net)
+  File "/root/FastMRI_SNU_2026_GMG/scripts/merge_moe.py", line 32, in _load_best
+    raise FileNotFoundError(f"체크포인트 없음: {path}")
+FileNotFoundError: 체크포인트 없음: ../result/promptmrp_0801_acc4/checkpoints/best_model.pt

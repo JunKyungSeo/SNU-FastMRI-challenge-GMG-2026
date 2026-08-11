@@ -1,0 +1,20 @@
+==========================================================
+[START] shell33 probe   2026-08-06 06:56:06   9591367
+[LOG  ] shell_scripting/logs/shell33_probe_20260806_065606.log
+==========================================================
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=1 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.19s peak=3.07GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=3 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.11s peak=3.07GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=5 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.12s peak=4.32GB
+OK   cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=8 coils=15 HxW=384x480 param=72.9M opt=Y fwdbwd=4.07s peak=6.23GB
+OOM  cascades=10 n_feat0=48 sens=24 n_hist=3 ckpt=True schunk=15 coils=15 HxW=384x480 param=72.9M
+
+===== chunk 별 fwdbwd · peak (W=480) =====
+shell_scripting/shell33.sh: line 52: column: command not found
+
+==========================================================
+[DONE ] shell33 probe   2026-08-06 06:57:15   exit=0
+[저장] shell_scripting/results/schunk_20260806_065606/
+[판정] OK 로 끝나는 가장 큰 chunk 가 천장. peak > 7.0GB 면 실학습엔 쓰지 말 것(폭 변동 여유).
+       chunk=1 대비 시간이 안 줄면 레버 C 는 폐기 — 값은 어차피 같으니 잃을 게 없다.
+       상한은 감도맵 U-Net 몫(전체 U-Net FLOP 의 약 1/4)이다. 그 이상은 안 나온다.
+==========================================================

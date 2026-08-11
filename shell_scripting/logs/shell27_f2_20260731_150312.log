@@ -1,0 +1,43 @@
+==========================================================
+[START] shell27 (fold 2)   2026-07-31 15:03:12
+[CWD  ] /root/FastMRI_SNU_2026_GMG   [LOG] shell_scripting/logs/shell27_f2_20260731_150312.log
+[BR   ] jkMRplus (29ce150)
+[대상 ] promptmr_moe_f2_aug_rm promptmr_kfold_f2_aug
+[채점 ] /root/Data/leaderboard   (점수 = 0.5·SSIM_full + 0.5·SSIM_bbox + 추론시간)
+==========================================================
+[GPU  ] used=2MiB
+
+---------- promptmr_moe_f2_aug_rm ----------
++ python -u recon_eval.py -n promptmr_moe_f2_aug_rm -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmr_moe_f2_aug_rm_20260731_150312.txt
+Leaderboard SSIM_full : 0.9320
+Leaderboard SSIM_bbox : 0.9301
+Leaderboard Recon Time : 1629.19s (736.2 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9498   SSIM_full (acc8): 0.9143
+SSIM_bbox (acc4): 0.9507   SSIM_bbox (acc8): 0.9094
+Recon Time (acc4): 853.23s (748.5 ms/slice)   (acc8): 775.96s (723.2 ms/slice)
+Recon Time (total): 1629.19s
+[promptmr_moe_f2_aug_rm] exit=0   점수: shell_scripting/results/recon_eval_promptmr_moe_f2_aug_rm_20260731_150312.txt
+
+---------- promptmr_kfold_f2_aug ----------
++ python -u recon_eval.py -n promptmr_kfold_f2_aug -p /root/Data/leaderboard
++ tee shell_scripting/results/recon_eval_promptmr_kfold_f2_aug_20260731_150312.txt
+Leaderboard SSIM_full : 0.9303
+Leaderboard SSIM_bbox : 0.9279
+Leaderboard Recon Time : 1630.93s (737.0 ms/slice)
+========== Details ==========
+SSIM_full (acc4): 0.9483   SSIM_full (acc8): 0.9122
+SSIM_bbox (acc4): 0.9490   SSIM_bbox (acc8): 0.9068
+Recon Time (acc4): 848.99s (744.7 ms/slice)   (acc8): 781.94s (728.7 ms/slice)
+Recon Time (total): 1630.93s
+[promptmr_kfold_f2_aug] exit=0   점수: shell_scripting/results/recon_eval_promptmr_kfold_f2_aug_20260731_150312.txt
+
+==========================================================
+[DONE ] shell27 (fold 2)   2026-07-31 16:10:33   exit=0
+[저장] 점수 사본: shell_scripting/results/recon_eval_*_20260731_150312.txt   (+ 재구성 h5: ../result/<net>/reconstructions_leaderboard/)
+[공유] git add shell_scripting/results/recon_eval_*_20260731_150312.txt 커밋·푸시하면 전 환경에서 점수가 보인다.
+[비교] MoE(promptmr_moe_f2_aug_rm) vs 단일(promptmr_kfold_f2_aug) 를 full·bbox·시간 3축으로.
+       MoE 는 모델 2개라 디스크·로딩이 크다 — SSIM 이득이 시간/크기 손해를 넘는지까지 봐야 순위 판단이 된다.
+==========================================================
+[NOTIFY] 메일 발송 완료 → bedso@snu.ac.kr, esel343434@snu.ac.kr (shell26 채점 완료 (fold 2))

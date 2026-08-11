@@ -5,7 +5,7 @@ import torch
 from utils.data.transforms import (
     DataTransform, MRIAugmentor, AugmentConfig, equispaced_mask, canonical_offset,
 )
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, Sampler
 from torch.utils.data._utils.collate import default_collate
 from pathlib import Path
 import numpy as np
@@ -67,11 +67,18 @@ def _norm_acc(acc):
 
 
 class SliceData(Dataset):
-    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None, acc=None):
+    def __init__(self, root, transform, input_key, target_key, forward=False, volumes=None, acc=None,
+                 num_adj_slices=1):
         self.transform = transform
         self.input_key = input_key
         self.target_key = target_key
         self.forward = forward
+        # 2.5D 인접 슬라이스: 1이면 기존과 완전히 동일(추가 I/O 0). 3이면 s-1,s,s+1을 읽어
+        # **코일축에 슬라이스-major**로 쌓는다 — (adj*C, H, W), [s-1의 C코일, s의 C코일, s+1의 C코일].
+        # 이 배열이 promptmr_plus의 sens_reduce/sens_expand·감도 RSS 정규화가 전제하는 규약이다.
+        self.num_adj_slices = int(num_adj_slices)
+        if self.num_adj_slices % 2 != 1:
+            raise ValueError(f"num_adj_slices는 홀수여야 한다(중앙 슬라이스가 있어야 함): {num_adj_slices}")
         # (image_path|None, kspace_path, slice_idx, vol_id) 튜플. image와 kspace를 **같은 root 안에서**
         # 짝지어 한 항목에 담는다. 예전엔 두 리스트에 따로 쌓고 같은 인덱스로 꺼낸 뒤 .name이 같은지로
         # 검증했는데, root가 둘이 되면 그 검증이 무력해진다(train/…/x.h5 와 val/…/x.h5 는 .name이 같다).
@@ -155,7 +162,16 @@ class SliceData(Dataset):
         image_fname, kspace_fname, dataslice, vol_id = self.examples[i]
 
         with h5py.File(kspace_fname, "r") as hf:
-            input = hf[self.input_key][dataslice]
+            ds = hf[self.input_key]
+            if self.num_adj_slices == 1:
+                input = ds[dataslice]
+            else:
+                # 볼륨 경계는 clamp(자기 복제) — 첫/마지막 슬라이스에서 인접이 없으면 자신을 반복한다.
+                # 0-padding 대신 clamp인 이유: 빈 코일 그룹은 감도맵 RSS 정규화에서 0 나눗셈이 된다.
+                n = ds.shape[0]
+                half = self.num_adj_slices // 2
+                idxs = [min(max(dataslice + d, 0), n - 1) for d in range(-half, half + 1)]
+                input = np.concatenate([ds[j] for j in idxs], axis=0)   # (adj*C, H, W) 슬라이스-major
             mask =  np.array(hf["mask"])
         grappa = None
         if self.forward:
@@ -231,8 +247,33 @@ def verify_remaskable(dataset):
           f"(생성기 비트 재현 · full k-space" + (f" · non-canonical offset {noncanon}개)" if noncanon else ")"))
 
 
+class HoldoutTailSampler(Sampler):
+    """hold-out 전량 + train 풀에서 (n − hold-out)개 무작위 추출 → 둘을 섞어 n개.
+
+    epoch 마다 다시 뽑히는 근거: train_part.train() 이 epoch 마다
+    train_loader.generator.manual_seed(seed + epoch) 를 부르고, 이 샘플러가 그 generator 를
+    **공유**한다. set_epoch 같은 별도 배선이 없는 이유다(따로 만든 generator 를 주면 재추첨이
+    조용히 사라져 두 epoch 이 같은 부분집합을 본다).
+    n ≤ hold-out 개수인 퇴화 상황에서는 hold-out 에서 n 개만 낸다 — __len__ 과 실제 개수가
+    어긋나면 스케줄러 horizon 이 거짓말을 한다.
+    """
+
+    def __init__(self, hold, pool, n, generator):
+        self.hold, self.pool, self.n, self.generator = hold, pool, n, generator
+
+    def __len__(self):
+        return self.n
+
+    def __iter__(self):
+        k = max(0, self.n - len(self.hold))
+        drawn = torch.randperm(len(self.pool), generator=self.generator)[:k].tolist()
+        idx = self.hold + [self.pool[i] for i in drawn]
+        order = torch.randperm(len(idx), generator=self.generator).tolist()
+        return iter([idx[i] for i in order][:self.n])
+
+
 def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_train=None, volumes=None,
-                        acc_override=None):
+                        acc_override=None, holdout=None):
     if isforward == False:
         max_key_ = args.max_key
         target_key_ = args.target_key
@@ -259,6 +300,13 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         total_epochs=int(getattr(args, "num_epochs", 1)),   # T = 런 길이 → 스케줄이 자동 스케일
         exp_decay=getattr(args, "aug_exp_decay", 5.0),
         max_prob=getattr(args, "aug_max_prob", 0.55),
+        affine=getattr(args, "aug_affine", True),
+        rot_max=getattr(args, "aug_rot_max", 5.0),
+        scale_max=getattr(args, "aug_scale_max", 1.1),
+        flip_max_prob=getattr(args, "flip_max_prob", None),
+        affine_max_prob=getattr(args, "affine_max_prob", None),
+        affine_delay=getattr(args, "affine_delay", None),
+        affine_peak_epoch=getattr(args, "affine_peak_epoch", None),
         seed=getattr(args, "seed", 430),
     )
     augmentor = MRIAugmentor(cfg) if (is_train and aug_on) else None
@@ -277,6 +325,12 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
     # 효율 레버(후보): SVD coil compression. 기본 off = 기존과 동일. 배치 SME와 택1.
     #   켜면 kspace coil축이 n_virtual_coils로 축소되어 소비부(train_part 등)에 전달됨.
     coil_compress = getattr(args, "coil_compress", False)
+    # 2.5D 인접 슬라이스 — 코일축에 슬라이스를 쌓으므로 코일축을 섞는 기법과 배타적이다.
+    num_adj_slices = int(getattr(args, "num_adj_slices", 1))
+    if num_adj_slices > 1 and coil_compress:
+        raise ValueError(
+            "--num-adj-slices > 1 과 --coil-compress 는 함께 쓸 수 없다. coil compression은 코일축을 "
+            "SVD로 섞는데, 인접 슬라이스가 그 축에 쌓여 있어 서로 다른 슬라이스가 한 가상코일로 뭉개진다.")
     n_virtual_coils = getattr(args, "n_virtual_coils", 8)
     # B5: 손실·검증을 채점 정합 foreground 영역으로 제한(기본 off). train/val 양쪽 로더에 부착
     #     (forward는 target 없어 DataTransform이 내부적으로 미포함) → 소비부 train_epoch/validate 확장.
@@ -309,6 +363,15 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
                 "기준 산출물이라, 재생성한 입력과 짝지으면 제거한 라인의 정보가 옆문으로 새어 "
                 "실제 추론엔 없는 지름길을 학습한다.")
 
+    # ---- 마스크 증강 (--mask-aug, 기본 off) ----
+    #   --remask 와 같은 재생성 경로를 쓰되 --acc 제약은 없다 — offset 모드는 가속률을 안 바꾸므로
+    #   볼륨 풀을 넓힐 필요가 없다. train 로더 전용인 것은 동일(val/forward는 딸려온 마스크 그대로).
+    mask_aug = str(getattr(args, "mask_aug", "off"))
+    if mask_aug != "off" and is_train and return_grappa:
+        raise ValueError(
+            "--mask-aug 와 GRAPPA 는 배타적이다(--remask 와 같은 이유). image_grappa 는 딸려온 "
+            "마스크 기준 산출물이라 재생성한 입력과 짝지으면 제거한 라인 정보가 옆문으로 샌다.")
+
     data_storage = SliceData(
         root=data_path,
         transform=DataTransform(
@@ -321,18 +384,20 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
             remask_acc=(remask_acc if is_train else None),
             remask_offset=getattr(args, "remask_offset", "uniform"),
             remask_seed=getattr(args, "seed", 430),
+            mask_aug=(mask_aug if is_train else "off"),
         ),
         input_key=args.input_key,
         target_key=target_key_,
         forward=isforward,
         volumes=volumes,
         acc=(acc_override if acc_override is not None else getattr(args, "acc", "all")),
+        num_adj_slices=num_adj_slices,
     )
 
-    if remask_acc is not None and is_train:
-        verify_remaskable(data_storage)
-        print(f"[remask] train 로더: acc{remask_acc} 마스크 재생성 "
-              f"(offset={getattr(args, 'remask_offset', 'uniform')}) · 볼륨 풀 --acc all")
+    if (remask_acc is not None or mask_aug != "off") and is_train:
+        verify_remaskable(data_storage)   # 재생성의 전제(생성기 동일 · full k-space)는 mask_aug도 똑같이 필요
+        print(f"[remask] train 로더 마스크 재생성 — remask={remask} · mask-aug={mask_aug} · "
+              f"offset={'재추첨' if mask_aug != 'off' else getattr(args, 'remask_offset', 'uniform')}")
     elif remask_acc is not None:
         print(f"[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터={acc_override})")
 
@@ -349,10 +414,25 @@ def create_data_loaders(data_path, args, shuffle=False, isforward=False, is_trai
         generator = torch.Generator()
         generator.manual_seed(int(seed))
 
+    # --holdout-tail: hold-out(val fold) 볼륨까지 학습에 넣되 epoch 당 슬라이스 수는 본 런과 같게 둔다.
+    #   n 은 --max-iters 에서 **유도**한다(그 수를 절단 장치로 쓰는 게 아니라 숫자만 빌린다) —
+    #   len(loader) ≤ max_iters 라 train_epoch 의 break 가 안 걸리고, 그래서 epoch 전체에 흩어진
+    #   hold-out 이 무작위로 잘려나갈 일이 없다. generator 는 DataLoader 와 **같은 객체**를 준다.
+    sampler = None
+    if holdout:
+        hold = [i for i, e in enumerate(data_storage.examples) if e[3] in holdout]
+        pool = [i for i, e in enumerate(data_storage.examples) if e[3] not in holdout]
+        mi = int(getattr(args, "max_iters", 0))
+        n = min(mi, len(data_storage)) if mi > 0 else len(data_storage)
+        sampler = HoldoutTailSampler(hold, pool, n, generator)
+        print(f"[holdout-tail] epoch당 {n} slice = hold-out {len(hold)} 전량 + "
+              f"train 풀 {len(pool)} 중 {max(0, n - len(hold))} 무작위 (epoch마다 재추첨)")
+
     data_loader = DataLoader(
         dataset=data_storage,
         batch_size=args.batch_size,
-        shuffle=shuffle,
+        shuffle=(shuffle and sampler is None),   # sampler 와 shuffle 은 배타(DataLoader 가 거부)
+        sampler=sampler,
         num_workers=num_workers,
         worker_init_fn=_worker_init_fn if num_workers > 0 else None,
         generator=generator,
@@ -465,9 +545,17 @@ def create_kfold_data_loaders(args):
     remask = str(getattr(args, "remask", "off"))
     val_acc = None if remask in ("off", "") else remask
 
-    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True, volumes=train_ids)
+    # val 로더를 **먼저** 만든다 — --holdout-tail 의 hold-out 집합을 그 로더의 실제 구성에서
+    #   그대로 꺼내려고(acc_override 필터까지 반영된 볼륨 목록 = 중복 판정 로직 0줄).
+    #   순서를 되돌리면 holdout 이 빈 채로 train 로더가 만들어져 기능이 조용히 사라진다.
+    #   val 로더는 그대로 hold-out 만 본다(계기판 역할은 tail 런에서 어차피 포기).
     val_loader = create_data_loaders(roots, args, shuffle=False, is_train=False, volumes=val_ids,
                                      acc_override=val_acc)
+    holdout = ({e[3] for e in val_loader.dataset.examples}
+               if getattr(args, "holdout_tail", False) else None)
+    train_loader = create_data_loaders(roots, args, shuffle=True, is_train=True,
+                                       volumes=(train_ids | holdout) if holdout else train_ids,
+                                       holdout=holdout)
 
     def _vols(loader):
         """로그를 분할집합이 아니라 **로더의 실제 구성**에서 뽑는다 — acc_override 로 val 이

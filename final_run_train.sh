@@ -12,6 +12,18 @@ mkdir -p shell_scripting/logs
 exec > >(tee -a "$LOG") 2>&1
 echo "[RUN  ] $RUN   LOG=$LOG"
 
+# 산출물 경로. train.py·recon_eval.py 가 ../result 를 고정으로 쓰므로(recon_eval.py 는 수정 금지)
+# 인자를 주면 ../result 를 그리로 심볼릭 링크한다. 안 주면 기존대로 ../result 에 쌓는다.
+OUT="${1:-}"
+if [ -n "$OUT" ]; then
+    mkdir -p "$OUT" || exit 1
+    OUT="$(cd "$OUT" && pwd)"
+    [ -e ../result ] && [ ! -L ../result ] && { echo "[STOP] ../result 가 실디렉토리다 — 옮기고 다시"; exit 1; }
+    [ -L ../result ] && rm ../result
+    ln -s "$OUT" ../result
+    echo "[out  ] ../result → $OUT"
+fi
+
 # shared 는 -e 30 그대로 돌려 30-epoch cosine 을 밟게 하고 25 에서 세운다 — -e 25 로 바꾸면
 # horizon 이 다시 그려져 원본과 다른 곡선이 된다(ep25 지점 3.538e-5 를 재현 못 함).
 NET="${RUN}_shared"

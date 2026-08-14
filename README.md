@@ -68,10 +68,7 @@ SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms
 ## 3. 모델 구조 및 학습 전략
 
 ### 1. PromptMR+
-[Directory] `utils/model/promptmr`  
-[Github] [PromptMR-plus](https://github.com/hellopipu/PromptMR-plus)  
-[Paper] PromptMR-plus: [*Rethinking Deep Unrolled Model for Accelerated
-MRI Reconstruction*](https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/09565.pdf)  
+- [Directory] `utils/model/promptmr`  
 
 #### 1.1. Model Structure
 PromptMR-plus 원본에서 이번 대회에 필요 없거나, 성능을 낮추는 요소들은 제외했습니다. 인접 슬라이스 SME을 제외했고, SDUM의 SWDC(Sampling-aware Weighted Data Consistency)를 추가했습니다. 
@@ -135,12 +132,23 @@ affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 �
 
 ## 5. Reference
 ### 5.1. Past Winning works
-
-### 5.2. SDUM
+#### 5.1.1. 2025 SNU FastMRI challenge | sMaRtlfy
+- https://youtu.be/-Tau6N7PNHs?si=9MQpTjnVBKG9HVAj
+- https://github.com/sMartify-fastmri/2025_final
+#### 5.1.2. 2025 SNU FastMRI challenge | 2rm1000
+- https://www.youtube.com/watch?v=m5hwaRKvDUw&t=8s
+- https://github.com/gates02/fastmri-2-1000
+#### 5.1.3. 2025 SNU FastMRI challenge | SNUnet
+- https://www.youtube.com/watch?v=Sufe7FQ0F6E
+### 5.2. PromptMR-plus
+- https://github.com/hellopipu/PromptMR-plus  
+- [[Paper]](https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/09565.pdf) *Rethinking Deep Unrolled Model for Accelerated
+MRI Reconstruction*  
+### 5.3. SDUM
 - SDUM 논문의 SWDC 내용을 기존 PromptMR-plus 모델에 추가했습니다. 
-- [Github] [SDUM](https://github.com/NVIDIA-Medtech/NV-Raw2insights-MRI)    
-- [Paper] SDUM: [*SDUM: A Scalable Deep
-Unrolled Model for Universal MRI Reconstruction*](https://arxiv.org/abs/2512.17137)  
+- https://github.com/NVIDIA-Medtech/NV-Raw2insights-MRI    
+- [[Paper]](https://arxiv.org/abs/2512.17137) *SDUM: A Scalable Deep
+Unrolled Model for Universal MRI Reconstruction*
 
 
 ### 코드 작성 과정에서 생성형 AI의 도움을 받았음을 밝힙니다. 

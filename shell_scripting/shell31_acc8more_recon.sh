@@ -45,7 +45,7 @@ for n in dict.fromkeys(sys.argv[1:]):
         print(f"[VAL  ] {n}: 읽기 실패 ({e})")
 EOF
 
-python scripts/merge_moe.py --acc4-net "$ACC4_NET" --acc8-net "$ACC8_NET" --out-net "$OUT" || exit $?
+python utils/model/merge_moe.py --acc4-net "$ACC4_NET" --acc8-net "$ACC8_NET" --out-net "$OUT" || exit $?
 
 set -x
 python -u recon_eval.py -n "$OUT" -p "$LEADERBOARD" | tee "$SCORE"

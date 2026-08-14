@@ -5,7 +5,7 @@ Option C 흐름: 공유 사전학습 → acc별 미세조정(전문가 2개) →
 채점 하네스(recon_eval.py)는 net_name 하나만 받으므로, 병합본을 하나의 net_name 아래에 둔다.
 
 사용:
-  python scripts/merge_moe.py --acc4-net promptmr_moe_acc4 --acc8-net promptmr_moe_acc8 \
+  python utils/model/merge_moe.py --acc4-net promptmr_moe_acc4 --acc8-net promptmr_moe_acc8 \
       --out-net promptmr_moe [--threshold 0.1875] [--result-root ../result]
 그 뒤:
   python recon_eval.py -n promptmr_moe -p /root/Data/leaderboard

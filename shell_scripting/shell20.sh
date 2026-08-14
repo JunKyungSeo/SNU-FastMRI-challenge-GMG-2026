@@ -108,7 +108,7 @@ do_ft() {  # $1=acc(4/8)  $2=net_name
 do_merge() {
     echo "[④ merge] $NET_ACC4 + $NET_ACC8 → $NET_MOE"
     set -x
-    python scripts/merge_moe.py --acc4-net "$NET_ACC4" --acc8-net "$NET_ACC8" \
+    python utils/model/merge_moe.py --acc4-net "$NET_ACC4" --acc8-net "$NET_ACC8" \
         --out-net "$NET_MOE" --threshold "$THRESHOLD"
     { local st=$?; set +x; } 2>/dev/null
     [ "$st" -ne 0 ] && { echo "[④ merge] 실패 exit=$st"; return $st; }

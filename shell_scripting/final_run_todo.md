@@ -465,7 +465,7 @@ tail 2 epoch 은 LR 을 어떻게 잡아도 전체 이동량의 **2~4%** 라 손
 
 ⚠️ **그런데 "마지막 epoch 을 쓴다" 가 그냥은 안 된다.** 채점·병합부는 `best_model.pt` 만 읽는데
 ([test_part.py:52·143](../utils/learning/test_part.py#L52) · `recon_eval.py` 는 경로 플래그 자체가
-없다 · [merge_moe.py:30](../scripts/merge_moe.py#L30)), 마지막 epoch 은 `model.pt` 에만 있다.
+없다 · [merge_moe.py:30](../utils/model/merge_moe.py#L30)), 마지막 epoch 은 `model.pt` 에만 있다.
 그리고 `cp model.pt best_model.pt` 는 **EMA 를 조용히 버린다** — `save_model` 이
 `model.pt['model']` 에는 원본 θ 를, `best_model.pt['model']` 에는 θ_EMA 를 넣기 때문이다
 ([train_part.py:385-403](../utils/learning/train_part.py#L385)). 그대로 복사하면 0.9336 을 포함한

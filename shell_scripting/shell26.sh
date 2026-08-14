@@ -342,7 +342,7 @@ do_merge() {
     # --threshold 를 안 준다 = merge_moe.py 의 DEFAULT_ACC_THRESHOLD(0.25) 사용.
     # 여기 숫자를 박아두면 나중에 기본값이 바뀔 때 조용히 어긋난다(옛 0.1875 사고 재발).
     set -x
-    python scripts/merge_moe.py --acc4-net "$NET_ACC4" --acc8-net "$NET_ACC8" --out-net "$NET_MOE"
+    python utils/model/merge_moe.py --acc4-net "$NET_ACC4" --acc8-net "$NET_ACC8" --out-net "$NET_MOE"
     { local st=$?; set +x; } 2>/dev/null
     [ "$st" -ne 0 ] && { echo "[④ merge] 실패 exit=$st"; return $st; }
 

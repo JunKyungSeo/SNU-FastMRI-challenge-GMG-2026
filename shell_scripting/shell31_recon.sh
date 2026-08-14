@@ -35,7 +35,7 @@ echo "=========================================================="
 
 CKPT="../result/$NET/checkpoints/best_model.pt"
 if [ "$TARGET" = merged ] && [ ! -f "$CKPT" ]; then
-    python scripts/merge_moe.py --acc4-net "${RUN}_acc4" --acc8-net "${RUN}_acc8" --out-net "$NET" || exit $?
+    python utils/model/merge_moe.py --acc4-net "${RUN}_acc4" --acc8-net "${RUN}_acc8" --out-net "$NET" || exit $?
 fi
 [ -f "$CKPT" ] || { echo "[STOP] 체크포인트 없음: $CKPT"; exit 2; }
 

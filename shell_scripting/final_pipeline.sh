@@ -20,7 +20,7 @@ step() {   # $1=단계명  $2...=명령. 성공·실패 모두 메일. KILLOK=1 
 step "1/6 acc8 18ep" bash shell_scripting/train_final_acc8.sh
 step "2/6 acc8 tail" bash shell_scripting/train_final_tail_acc8.sh
 KILLOK=1 \
-step "3/6 acc4 7ep"  bash shell_scripting/train_final_acc4.sh   # 손으로 끊어도 tail 로 진행
+step "3/6 acc4 6ep"  bash shell_scripting/train_final_acc4.sh   # 손으로 끊어도 tail 로 진행
 step "4/6 acc4 tail" bash shell_scripting/train_final_tail_acc4.sh
 
 NET="${RUN}_moe"

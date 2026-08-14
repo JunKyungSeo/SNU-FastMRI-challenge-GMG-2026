@@ -17,13 +17,32 @@ pip3 install -r requirements.txt
 ```bash
 bash final_run_train.sh
 ```
-- 가중치 : `../result/promptmrp_GMG_final_0807/checkpoints/`(repo 바깥)  
-- epoch별 validation loss : `../result/promptmrp_GMG_final_0807/val_loss_log*.npy`
+`shared 25 → acc8 18+2 → acc4 6+2 → merge` 를 순서대로 실행합니다 (GTX 1080 8GB 기준 약 278시간).
+
+- 채점 대상 가중치 : `../result/promptmrp_GMG_final_0807_moe/checkpoints/best_model.pt` (repo 바깥)
+- 단계별 가중치 : `../result/promptmrp_GMG_final_0807_{shared,acc8,acc8_tail,acc4,acc4_tail}/checkpoints/`
+- epoch별 validation loss : `../result/promptmrp_GMG_final_0807_*/val_loss_log*.npy`
 
 채점:
 
 ```bash
 LEADERBOARD_DATA_DIR="" bash recon_eval.sh
+```
+
+#### 경로를 바꿔야 할 때
+
+산출물을 다른 디스크에 쌓으려면 인자로 경로를 줍니다. `train.py` 와 `recon_eval.py` 가 `../result` 를 고정으로 참조하므로, 스크립트가 `../result` 를 지정한 경로로 심볼릭 링크합니다.
+
+```bash
+bash final_run_train.sh /mnt/data/result
+```
+
+채점은 인자 없이 그대로입니다 — `../result` 가 이미 그 경로를 가리킵니다.
+
+leaderboard 데이터가 `/root/Data/leaderboard`(또는 `/workspace/Data/leaderboard`) 가 아니라면 경로를 넘깁니다.
+
+```bash
+LEADERBOARD_DATA_DIR=/mnt/leaderboard bash recon_eval.sh
 ```
 ---
 ## [1. 대회 개요](https://github.com/LISTatSNU/FastMRI_challenge)  
@@ -72,7 +91,6 @@ SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms
 ```
 fastMRI_SNU_2026_GMG/
 ├── train.py                        학습 진입점 (인자 정의)
-├── train.sh                        단일 학습 실행 예시
 ├── final_run_train.sh              최종 제출 모델의 학습 실행
 ├── recon_eval.py                   재구성 + 채점 (SSIM_full / SSIM_bbox / 시간)
 ├── recon_eval.sh                   채점 실행
@@ -98,9 +116,11 @@ fastMRI_SNU_2026_GMG/
 │       │   └── reentrant_wrapper.py  gradient checkpointing 래퍼
 │       ├── fastmri/                원본 fastMRI 유틸 (FFT, coil combine, subsample …)
 │       ├── moe.py                  가속률 판정 router
-│       ├── merge_moe.py            acc4·acc8 expert → MoE 결합 체크포인트
 │       ├── unet.py
 │       └── varnet.py               baseline (미사용, 참고용)
+│
+├── scripts/
+│   └── merge_moe.py                acc4·acc8 expert → MoE 결합 체크포인트
 │
 └── shell_scripting/                학습·채점 실행 스크립트 모음
 ```

@@ -5,7 +5,7 @@ set -uo pipefail
 export PYTHONUNBUFFERED=1
 cd "$(cd "$(dirname "$0")" && pwd)" || exit 1   # 
 source shell_scripting/_final_base.sh
-export RUN="${RUN}_rerun"   # 원본(promptmrp_GMG_final_0807_*)과 안 겹치게. 하위 슬롯도 이걸 쓴다
+export RUN   # 하위 슬롯도 같은 RUN 을 쓴다. 우리 환경에서 시험만 할 땐 RUN=... 로 갈라 준다
 
 LOG="shell_scripting/logs/final_run_train_$(date +%Y%m%d_%H%M%S).log"
 mkdir -p shell_scripting/logs

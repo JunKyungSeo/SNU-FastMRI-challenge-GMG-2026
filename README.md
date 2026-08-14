@@ -108,19 +108,19 @@ affine은 공용 단계가 끝난 뒤에 들어온 레버라 전문가 단계에
 
 ### 5. 학습 스케줄 — 공용 30 + 전문가 20/10
 
-최종 run은 `promptmrp_GMG_final_0807`입니다. 공통 인자는 [_final_base.sh](shell_scripting/_final_base.sh) 한 곳에 모아 두고 단계별 슬롯이 델타만 얹습니다. 세 단계가 같은 값을 써야 `--init-from`이 성립하기 때문입니다.
+최종 run은 `promptmrp_GMG_final_0807`입니다. 
 
 | 단계 | epoch | LR |
 |---|---|---|
-| 공용 (acc 무관) | 30 | 2e-4 유지 5 → cosine 25 |
-| acc8 전문가 | 18 + tail 2 | warm-up 3 → 유지 5 → cosine 12 |
-| acc4 전문가 | 8 + tail 2 | warm-up 2 → 유지 2 → cosine 6 |
+| shared | 30 | 2e-4 유지 5 → cosine 25 |
+| acc8 expert | 18 + tail 2 | warm-up 3 → 유지 5 → cosine 12 |
+| acc4 expert | 8 + tail 2 | warm-up 2 → 유지 2 → cosine 6 |
 
-optimizer는 AdamW(weight_decay 1e-3), base LR 2e-4, 하한 1.8e-5(base×0.09)입니다. `--grad-clip 0.1`과 `--accum-steps 2`(batch 1 × 2)를 씁니다. 스케줄러는 linear warm-up → base 유지 → cosine 감쇠 세 구간입니다([`build_scheduler()`](utils/learning/train_part.py)).
+Optimizer AdamW(weight_decay 1e-3)  
+base LR 2e-4 / 하한 1.8e-5  
+gradient clipping = 0.1  
 
-acc8에 예산을 2배 준 건 남은 헤드룸이 그쪽에 있어서입니다. 직전 run의 리더보드 점수를 가속률로 쪼개 보면 acc4는 SSIM_full 0.9505 / SSIM_bbox 0.9516인데 acc8은 0.9167 / 0.9126입니다. 올릴 여지가 있는 쪽이 명확합니다.
-
-**EMA.** 학습은 원본 가중치로 하되 지수이동평균(decay 0.999)을 따로 굴리고, 검증과 `best_model.pt`에는 평균 쪽을 남깁니다. 제출 가중치는 전부 이 EMA 가중치입니다.
+**EMA.** 학습은 원본 가중치로 하되 지수이동평균(decay 0.999)을 따로 굴리고, 검증과 `best_model.pt`에는 평균 쪽을 남깁니다. 제출 가중치는 전부 이 EMA 가중치입니다. PromptMR-plus 원 논문에서 사용한 방식을 그대로 가져왔습니다. 
 
 **tail.** 각 전문가의 마지막 2 epoch은 hold-out fold까지 학습에 합쳐 돕니다(`--holdout-tail`). epoch당 슬라이스 수는 본 런과 같게 두고 그 안에 hold-out을 전량 넣습니다. LR이 이미 하한 근처인 구간이라 여기서 검증을 포기하고 데이터를 마저 쓰는 쪽이 낫다고 봤습니다. 대신 val이 학습에 들어간 뒤라 `best_model.pt`·early-stop 판정은 전부 의미를 잃습니다. 그래서 tail 슬롯은 마지막 epoch의 EMA 가중치를 `best_model.pt` 자리로 직접 옮깁니다. 채점부가 `best_model.pt`만 읽기 때문입니다.
 
@@ -139,7 +139,7 @@ pip3 install -r requirements.txt
 ```bash
 bash final_run_train.sh
 ```
-가중치는 `../result/<net_name>/checkpoints/`(repo 바깥의 `result` 폴더)에, epoch별 validation loss는 `../result/<net_name>/val_loss_log*.npy`에 쌓입니다. seed는 430 고정이라 같은 인자로 다시 돌리면 같은 결과가 나옵니다.
+가중치는 `../result/<net_name>/checkpoints/`(repo 바깥)에, epoch별 validation loss는 `../result/<net_name>/val_loss_log*.npy`에 쌓입니다. 
 
 채점:
 

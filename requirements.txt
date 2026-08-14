@@ -1,20 +1,7 @@
-# 이 서버(GTX 1080 = Pascal sm_61, 드라이버 550.90.12 = CUDA 12.4)에서 검증된 조합.
-# 복구: bash /root/restore_env.sh
-#
-# ⚠️ torch 는 반드시 cu121 빌드로 고정한다.
-#    핀 없이 `pip install torch` 하면 PyPI 기본 빌드(cu13x)가 깔리는데, CUDA 13 은 Pascal
-#    지원을 제거해서 GPU 를 아예 못 쓴다. 2026-07-20 컨테이너 재시작 후 실제로 이 사고가 났다
-#    (torch 2.13.0+cu130 설치 → cudaErrorInsufficientDriver → device 가 cpu 로 폴백).
-# ⚠️ numpy 는 1.x 로 고정한다. torch 2.3.1 이 numpy 1.x 로 빌드돼 있어 2.x 면 ABI 에러가 난다.
-# ⚠️ opencv 는 반드시 headless 다. 이 서버엔 libGL.so.1 이 없어서 일반 opencv-python 은
-#    `ImportError: libGL.so.1` 로 import 조차 안 된다(베이스 이미지가 opencv-python 을
-#    깔아두지만 그건 못 쓴다). 버전은 numpy>=2 를 요구하는 5.x 가 아니라 4.11.0.86 으로
-#    고정한다 — numpy>=1.21.2 만 요구해서 위 numpy 핀과 맞물린다.
 --extra-index-url https://download.pytorch.org/whl/cu121
 
 torch==2.3.1+cu121
 torchvision==0.18.1+cu121
-# torch 의 전이 의존성인데 상한이 없어 12.9.x 로 떠오른다. CUDA 12.1 계열로 맞춰 고정.
 nvidia-nvjitlink-cu12==12.1.105
 numpy==1.26.4
 scipy==1.14.0

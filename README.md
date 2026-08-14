@@ -67,6 +67,46 @@ SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms
 
 ## 3. 모델 구조 및 학습 전략
 
+### 0. 디렉터리 구조
+
+```
+fastMRI_SNU_2026_GMG/
+├── train.py                        학습 진입점 (인자 정의)
+├── train.sh                        단일 학습 실행 예시
+├── final_run_train.sh              최종 제출 모델의 학습 실행
+├── recon_eval.py                   재구성 + 채점 (SSIM_full / SSIM_bbox / 시간)
+├── recon_eval.sh                   채점 실행
+├── requirements.txt
+├── README.md
+│
+├── utils/
+│   ├── common/
+│   │   ├── loss_function.py        SSIM + L1 혼합 손실, foreground/area-weight
+│   │   ├── metrics.py              채점 지표
+│   │   └── utils.py                seed 고정, 재구성 h5 저장
+│   ├── data/
+│   │   ├── load_data.py            데이터셋·로더, K-Fold 분할, 가속률 필터
+│   │   └── transforms.py           마스크 재생성·offset 재추첨, flip/affine 증강
+│   ├── learning/
+│   │   ├── train_part.py           학습 루프, EMA, 스케줄러, 체크포인트 저장
+│   │   └── test_part.py            추론 — prep_volume / recon_slice, MoE 라우팅
+│   └── model/
+│       ├── promptmr/               백본 PromptMR+
+│       │   ├── promptmr_plus.py    cascade 본체
+│       │   ├── adapter.py          k-space ↔ 모델 입출력, readout crop
+│       │   ├── config.py           모델 하이퍼파라미터
+│       │   └── reentrant_wrapper.py  gradient checkpointing 래퍼
+│       ├── fastmri/                원본 fastMRI 유틸 (FFT, coil combine, subsample …)
+│       ├── moe.py                  가속률 판정 router
+│       ├── merge_moe.py            acc4·acc8 expert → MoE 결합 체크포인트
+│       ├── unet.py
+│       └── varnet.py               baseline (미사용, 참고용)
+│
+└── shell_scripting/                학습·채점 실행 스크립트 모음
+```
+
+학습·채점 산출물은 `<net_name>` 폴더 아래에 저장됩니다. 최종 제출 모델의 `<net_name>` 은 `promptmrp_GMG_final_0807_moe` 이며, acc4·acc8 expert 를 결합한 단일 체크포인트입니다. 추론 시 router 가 마스크의 sampling rate 로 가속률을 판정해 해당 expert 로 보냅니다.
+
 ### 1. PromptMR+
 - [Directory] `utils/model/promptmr`  
 

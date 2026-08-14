@@ -8,6 +8,24 @@
    * Double major in Department of Sociology
 * Email | bedso@snu.ac.kr
 
+## 4. 실행 가이드 및 재현성 확보
+
+```bash
+pip3 install -r requirements.txt
+```
+학습:
+```bash
+bash final_run_train.sh
+```
+- 가중치 : `../result/promptmrp_GMG_final_0807/checkpoints/`(repo 바깥)  
+- epoch별 validation loss : `../result/promptmrp_GMG_final_0807/val_loss_log*.npy`
+
+채점:
+
+```bash
+LEADERBOARD_DATA_DIR="" bash recon_eval.sh
+```
+---
 ## [1. 대회 개요](https://github.com/LISTatSNU/FastMRI_challenge)  
 
 본 대회는 [서울대학교 전기정보공학부](https://ece.snu.ac.kr/)의 [LIST](https://list.snu.ac.kr/) 연구실이 주관하고 [AIRS Medical](https://airsmed.com/)이 후원하는 대회로, NYU의 [FastMRI dataset](https://fastmri.med.nyu.edu/)과 Facebook AI 및 NeurIPS의 [FASTMRI Challenge](https://github.com/facebookresearch/fastMRI?tab=readme-ov-file)를 기반으로 합니다.
@@ -40,24 +58,20 @@ Score : SSIM_full + SSIM_bbox + InferenceTime
 
 #### (1) 중간평가 12위 @ 12:00, July 29
 SSIM_full = 0.9321 | SSIM_bbox = 0.9300 | Inference Time = 732.8 ms
-#### (2) 공개 리더보드 #위 @ 00:00, Aug 14
+#### (2) 최종 제출 @ 23:59, Aug 19
 SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms  
-#### (3) 최종 제출 @ 23:59, Aug 19
-SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms  
-#### (4) 최종 순위 #위  
+#### (3) 최종 순위 #위  
 
 점수 사본 : [shell_scripting/results/](shell_scripting/results/)  
 실행 로그 : [shell_scripting/logs/](shell_scripting/logs/)
 
 ## 3. 모델 구조 및 학습 전략
 
-### 1. PromptMR+ & SDUM
+### 1. PromptMR+
+[Directory] `utils/model/promptmr`  
 [Github] [PromptMR-plus](https://github.com/hellopipu/PromptMR-plus)  
 [Paper] PromptMR-plus: [*Rethinking Deep Unrolled Model for Accelerated
 MRI Reconstruction*](https://www.ecva.net/papers/eccv_2024/papers_ECCV/papers/09565.pdf)  
-[Github] [SDUM](https://github.com/NVIDIA-Medtech/NV-Raw2insights-MRI)    
-[Paper] SDUM: [*SDUM: A Scalable Deep
-Unrolled Model for Universal MRI Reconstruction*](https://arxiv.org/abs/2512.17137)  
 
 #### 1.1. Model Structure
 PromptMR-plus 원본에서 이번 대회에 필요 없거나, 성능을 낮추는 요소들은 제외했습니다. 인접 슬라이스 SME을 제외했고, SDUM의 SWDC(Sampling-aware Weighted Data Consistency)를 추가했습니다. 
@@ -67,7 +81,7 @@ PromptMR-plus 원본에서 이번 대회에 필요 없거나, 성능을 낮추�
 
  #### 1.3. GPU VRAM 절약
  #### 1.3.1. Read-out Crop
- kspace data의 readout(높이)방향은 crop해도 정보 손실이 없고, 제출물에서 이미지 사이즈를 384*384로 crop하므로, 이를 미리 진행하여 입력 데이터 크기를 줄였습니다. kspace data를 Inverse Fourier Transform을 적용하여 Image domain으로 바꾸고 crop한 뒤 다시 Fourier Transform을 진행하여 Frequency Domain으로 돌렸습니다. 
+ kspace data의 readout(높이)방향은 crop해도 정보 손실이 없고, 제출물에서 이미지 사이즈를 384*384로 crop하므로, 이를 미리 진행하여 입력 데이터 크기를 줄였습니다. kspace data를 Inverse Fourier Transform을 통해 Image domain으로 바꾸고 crop한 뒤 다시 Fourier Transform을 진행하여 Frequency Domain으로 돌렸습니다. 
  #### 1.3.2. Gradient Checkpointing
  cascade를 지날 때 값을 VRAM에 저장하지 않고, 필요할 때 다시 계산하는 방식입니다. 학습 시간은 증가하지만, VRAM 사용량을 획기적으로 낮출 수 있습니다. 
  #### 1.3.3. Coil별 sensitivity map estimation & checkpointing
@@ -91,22 +105,18 @@ PromptMR-plus 원본에서 이번 대회에 필요 없거나, 성능을 낮추�
 ### 4. Augmentation
 #### 4.1. Remasking
 #### 4.1.1. Equispace Remasking
-학습 데이터는 full sampled k-space에서 undersampling mask를 적용시켜 acc4와 acc8 under-sampled k-space data를 생성하는 방식입니다. 즉 제공된 mask와 다른 mask를 적용시키면 acc4 train data에서 acc8 train data를, acc8 train data에서 acc4 train data를 생성할 수 있습니다. shared와 각 expert에서 적용했습니다. 
+학습 데이터는 full sampled k-space에서 undersampling mask를 적용시켜 acc4와 acc8 under-sampled k-space data를 생성하는 방식으로 제공됩니다. 즉 제공된 mask와 다른 mask를 적용시키면 acc4 train data에서 acc8 train data를, acc8 train data에서 acc4 train data를 생성할 수 있습니다. shared와 각 expert에서 적용했습니다. 
 #### 4.1.2. Random offset Remasking
-격자 위상(offset)을 샘플마다 새로 뽑습니다. train data와 validation data는 마스크의 offset이 고정되어있지만, public leaderboard data는  offset이 random인 것을 발견했습니다.  공용 단계는 여기에 더해 가속률까지 4|8로 재추첨하고(`--mask-aug full`), 전문가 단계는 가속률을 자기 것으로 고정합니다(`--remask 4|8`).
-
-전문가 단계는 볼륨이 2배가 되지만 epoch 길이는 그대로 둡니다(`--max-iters 2179` = 4358의 절반). 로더가 매 epoch 섞이니 epoch마다 다른 절반을 보게 되고, 같은 시간 예산 안에서 데이터 다양성만 2배가 됩니다.
+격자 위상(offset)을 샘플마다 새로 뽑습니다. train data와 validation data는 마스크의 offset이 고정되어있지만, public leaderboard data는  offset이 random인 것을 발견했습니다. 따라서 이 부분을 augmentation을 통해 반영하고자 했습니다.  
+augmentation을 적용하면 expert 학습 시 데이터 수가 2배가 되고, 시간도 2배가 됩니다. 이 경우 학습 시간이 지나치게 길어지므로, 이를 막기 위해 epoch의 길이는 그대로 뒀습니다. 로더가 매 epoch 섞이니 epoch마다 다른 데이터를 보게 되고, 같은 시간 예산 안에서 데이터 다양성을 2배가 되도록 했습니다. 
 
 #### 4.2. 좌우 flip + affine
-phase-encode 방향 좌우 flip과 affine(회전·확대) 두 가지를 씁니다([`MRIAugmentor`](utils/data/transforms.py), `--aug-on`). k-space·target·병변 박스를 같이 변환하고 샘플별 RNG를 `(seed, epoch, 파일명, slice)`에서 결정적으로 뽑아, 다시 돌리면 같은 증강이 나옵니다.
+**flip**은 phase-encode 방향 좌우 flip을 적용했으며, 각 슬라이스에서 0.5 확률로 일어나도록 설정했습니다. 
 
-**flip**은 전 단계 확률 0.5 고정입니다. 이미지 도메인 왕복 대신 DFT 성질로 닫아 `K' = roll(flip(K),1)·ramp` 한 줄로 처리합니다. 픽셀 정확하고 옛 구현보다 15배 빠릅니다(470ms → 31ms).
+**affine**은 5°이내 회전과 1배~1.1배 확대입니다. 
+affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 있으므로, expert 학습에서 처음 켰습니다. acc8은 5→10 epoch cosine warm-up, acc4는 3→5 epoch cosine warm-up을 걸쳐 적용 확률을 0부터 0.5까지 늘렸습니다.
 
-**affine**은 회전 U(−5°,+5°)와 확대 U(1.0,1.1)입니다. label은 384² 고정 크롭이라 돌리면 프레임 밖 정보가 없으므로, 재사용하지 않고 코일별 IFFT → 워프 → FFT로 "변형된 환자의 획득"을 만들고 정답도 같은 워프 영상의 RSS에서 새로 뽑습니다. 보간은 LANCZOS4입니다.
-
-affine은 공용 단계가 끝난 뒤에 들어온 레버라 전문가 단계에서 처음 켜집니다. 0.5로 바로 올리면 계단이 생기므로 코사인으로 태워 올립니다(`--affine-delay`/`--affine-peak-epoch`, 양 끝 기울기 0). acc8은 5→10 epoch, acc4는 3→5 epoch에 걸쳐 0에서 0.5까지 갑니다. flip은 이 곡선과 무관하게 계속 0.5입니다. 같이 0부터 올리면 없애려던 계단보다 큰 계단(0.5→0→0.5)이 새로 생깁니다.
-
-### 5. 학습 스케줄 — 공용 30 + 전문가 20/10
+### 5. 학습 스케줄 — Shared 30 + Expert 20/10
 
 최종 run은 `promptmrp_GMG_final_0807`입니다. 
 
@@ -116,36 +126,21 @@ affine은 공용 단계가 끝난 뒤에 들어온 레버라 전문가 단계에
 | acc8 expert | 18 + tail 2 | warm-up 3 → 유지 5 → cosine 12 |
 | acc4 expert | 8 + tail 2 | warm-up 2 → 유지 2 → cosine 6 |
 
-Optimizer AdamW(weight_decay 1e-3)  
-base LR 2e-4 / 하한 1.8e-5  
-gradient clipping = 0.1  
+**최종 제출 모델에선 시간이 부족하여, shared 학습을 25epoch까지만 진행했습니다. 즉, cosine dacay를 중간에 끊었습니다.**  
 
-**EMA.** 학습은 원본 가중치로 하되 지수이동평균(decay 0.999)을 따로 굴리고, 검증과 `best_model.pt`에는 평균 쪽을 남깁니다. 제출 가중치는 전부 이 EMA 가중치입니다. PromptMR-plus 원 논문에서 사용한 방식을 그대로 가져왔습니다. 
+**Optimizer.** AdamW(weight_decay 1e-3)  
+**Learning Rate.** base 2e-4 / 하한 1.8e-5  
+**Gradient clipping.** 0.1  
+**tail.** 각 expert의 마지막 두 epoch은 validation data까지 포함하여 학습을 진행합니다. 최종 제출본인 해당 run에서만 이를 이용했습니다. 
 
-**tail.** 각 전문가의 마지막 2 epoch은 hold-out fold까지 학습에 합쳐 돕니다(`--holdout-tail`). epoch당 슬라이스 수는 본 런과 같게 두고 그 안에 hold-out을 전량 넣습니다. LR이 이미 하한 근처인 구간이라 여기서 검증을 포기하고 데이터를 마저 쓰는 쪽이 낫다고 봤습니다. 대신 val이 학습에 들어간 뒤라 `best_model.pt`·early-stop 판정은 전부 의미를 잃습니다. 그래서 tail 슬롯은 마지막 epoch의 EMA 가중치를 `best_model.pt` 자리로 직접 옮깁니다. 채점부가 `best_model.pt`만 읽기 때문입니다.
+## 5. Reference
+### 5.1. Past Winning works
 
-### 6. 층화 K-fold
+### 5.2. SDUM
+- SDUM 논문의 SWDC 내용을 기존 PromptMR-plus 모델에 추가했습니다. 
+- [Github] [SDUM](https://github.com/NVIDIA-Medtech/NV-Raw2insights-MRI)    
+- [Paper] SDUM: [*SDUM: A Scalable Deep
+Unrolled Model for Universal MRI Reconstruction*](https://arxiv.org/abs/2512.17137)  
 
-train/val 고정 분할 대신 볼륨 단위 층화 K-fold를 씁니다(`--k-fold 5 --val-fold 2`). 
 
----
-
-## 4. 실행 가이드
-
-```bash
-pip3 install -r requirements.txt
-```
-학습:
-```bash
-bash final_run_train.sh
-```
-가중치는 `../result/<net_name>/checkpoints/`(repo 바깥)에, epoch별 validation loss는 `../result/<net_name>/val_loss_log*.npy`에 쌓입니다. 
-
-채점:
-
-```bash
-LEADERBOARD_DATA_DIR="" bash recon_eval.sh
-```
-
----
 ### 코드 작성 과정에서 생성형 AI의 도움을 받았음을 밝힙니다. 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 목적: 최종 run 2~7단계 연속 — acc8 18 → tail → acc4 7 → tail → merge → 채점 → 재현성 1 epoch
+# 목적: 최종 run 2~7단계 연속 — acc8 18 → tail → acc4 6 → tail → merge → 채점 → 재현성 1 epoch
 set -uo pipefail
 export PYTHONUNBUFFERED=1
 cd "$(cd "$(dirname "$0")" && pwd)/.." || exit 1

@@ -16,3 +16,6 @@ __pycache__
 volume_stacks/
 volume_stacks.zip
 dataset_overview.html
+
+# 최종 제출 안내 영상 전사 정리본 (개인 메모)
+shell_scripting/final_submission.txt

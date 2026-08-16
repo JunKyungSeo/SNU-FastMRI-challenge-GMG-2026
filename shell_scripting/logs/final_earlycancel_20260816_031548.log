@@ -1,0 +1,45 @@
+[PIPE ] 시작 2026-08-16 03:15:48  RUN=promptmrp_GMG_final_0807  LOG=shell_scripting/logs/final_earlycancel_20260816_031548.log
+[START] train_final_acc8  2026-08-16 03:15:48  NET=promptmrp_GMG_final_0807_acc8
++ python train.py --model promptmr --readout-crop --num-cascades 12 --n-feat0 48 --sens-n-feat0 24 --n-history 11 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --aug-on --aug-schedule constant --aug-max-prob 0.5 --flip-max-prob 0.5 --affine-max-prob 0.5 --affine-delay 5 --affine-peak-epoch 10 --aug-delay 0 --remask 8 --mask-aug offset --acc all -e 18 --max-iters 2179 --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.151 --early-stop-patience 0 --init-from ../result/promptmrp_GMG_final_0807_shared/checkpoints/best_model.pt -n promptmrp_GMG_final_0807_acc8 --run-tag promptmrp_GMG_final_0807_acc8 --resume
+Current cuda device:  0
+[resume] 후보 {'model.pt': (7, 0), 'latest.pt': (6, 2000)} → model.pt 선택
+[resume] EMA shadow 복원 (updates=7630)
+[resume] start_epoch=7 start_iter=0 best_val=0.0945
+[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터=8)
+[remask] 전제 검증 통과 — 160 volume (생성기 비트 재현 · full k-space)
+[remask] train 로더 마스크 재생성 — remask=8 · mask-aug=offset · offset=재추첨
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all · remask=8(val 은 acc8) (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+[scheduler] warmup=3270 → decay_start=8720 step 부터 cosine (하한 0.151×base), total_iters=19620, base_lr=0.0002
+/usr/local/lib/python3.10/dist-packages/torch/optim/lr_scheduler.py:143: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+[resume] scheduler fast-forward 7ep+0it, lr=2.000e-04
+Epoch # 7 ............... promptmrp_GMG_final_0807_acc8 ...............
+[aug] epoch=7 p_flip=0.5000 p_affine=0.1727
+Epoch = [  7/ 18] Iter = [   0/4358] Loss = 0.04474 Time = 7.3726s
+Epoch = [  7/ 18] Iter = [  50/4358] Loss = 0.05655 |g| = 0.0281 Time = 271.5072s
+Epoch = [  7/ 18] Iter = [ 100/4358] Loss = 0.05316 |g| = 0.0398 Time = 276.1079s
+Epoch = [  7/ 18] Iter = [ 150/4358] Loss = 0.04502 |g| = 0.0242 Time = 275.6740s
+Epoch = [  7/ 18] Iter = [ 200/4358] Loss = 0.07817 |g| = 0.0492 Time = 278.1000s
+Epoch = [  7/ 18] Iter = [ 250/4358] Loss = 0.06923 |g| = 0.0332 Time = 275.8209s
+Epoch = [  7/ 18] Iter = [ 300/4358] Loss = 0.1019 |g| = 0.0274 Time = 276.6593s
+Epoch = [  7/ 18] Iter = [ 350/4358] Loss = 0.0626 |g| = 0.0412 Time = 277.1672s
+Epoch = [  7/ 18] Iter = [ 400/4358] Loss = 0.05021 |g| = 0.0181 Time = 277.5498s
+Epoch = [  7/ 18] Iter = [ 450/4358] Loss = 0.04664 |g| = 0.0764 Time = 277.1438s
+Epoch = [  7/ 18] Iter = [ 500/4358] Loss = 0.08851 |g| = 0.0237 Time = 286.2840s
+Epoch = [  7/ 18] Iter = [ 550/4358] Loss = 0.06409 |g| = 0.0274 Time = 276.1325s
+Epoch = [  7/ 18] Iter = [ 600/4358] Loss = 0.03836 |g| = 0.0172 Time = 274.7234s
+Epoch = [  7/ 18] Iter = [ 650/4358] Loss = 0.08998 |g| = 0.0244 Time = 276.8641s
+Epoch = [  7/ 18] Iter = [ 700/4358] Loss = 0.05938 |g| = 0.0199 Time = 277.4853s
+Epoch = [  7/ 18] Iter = [ 750/4358] Loss = 0.03528 |g| = 0.0361 Time = 275.8953s
+Epoch = [  7/ 18] Iter = [ 800/4358] Loss = 0.03957 |g| = 0.028 Time = 275.7197s
+Epoch = [  7/ 18] Iter = [ 850/4358] Loss = 0.05892 |g| = 0.0196 Time = 272.5316s
+Epoch = [  7/ 18] Iter = [ 900/4358] Loss = 0.03411 |g| = 0.0429 Time = 277.2244s
+Epoch = [  7/ 18] Iter = [ 950/4358] Loss = 0.06821 |g| = 0.0322 Time = 277.9740s
+Epoch = [  7/ 18] Iter = [1000/4358] Loss = 0.1245 |g| = 0.0691 Time = 285.5848s
+Epoch = [  7/ 18] Iter = [1050/4358] Loss = 0.1016 |g| = 0.0364 Time = 275.2441s
+Epoch = [  7/ 18] Iter = [1100/4358] Loss = 0.05869 |g| = 0.0272 Time = 277.2887s
+Epoch = [  7/ 18] Iter = [1150/4358] Loss = 0.05475 |g| = 0.031 Time = 273.2582s
+Epoch = [  7/ 18] Iter = [1200/4358] Loss = 0.03784 |g| = 0.0273 Time = 276.4842s
+Epoch = [  7/ 18] Iter = [1250/4358] Loss = 0.03595 |g| = 0.0397 Time = 277.2010s

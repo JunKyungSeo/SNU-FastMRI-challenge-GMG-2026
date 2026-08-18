@@ -15,8 +15,12 @@ source shell_scripting/_aug_acc4.sh
 # 감쇠 구간에서야 회복되는데 회복이 훨씬 느리다(acc8 은 감쇠 5 epoch 을 쓰고도 미회복).
 # early-stop 0 — -e 8 이면 (행수−1−best) 가 7 까지 올라가 patience 6 에 닿는다. -e 6 일 때
 # 안 걸렸던 건 최대치가 5 라 구조적으로 못 닿은 것뿐이다(acc8 은 이걸로 ep6 에서 멈췄다).
+# affine 은 _aug_acc4.sh 의 delay 3·peak 5 를 여기서 덮는다 — delay 0·peak 3 이라 ep0 부터
+# 올라가 ep3 에 0.5 로 닿는다. _aug_acc4.sh 를 안 고치는 건 tail 이 그 파일을 공유하기
+# 때문이다: 거기 delay 3 이 남아 있어야 tail 2 epoch 에 affine 이 안 걸린다.
 run_final "${RUN}_acc4" \
     --acc all -e 8 --max-iters 2179 \
     --warmup-iters 2180 --lr-decay-start-epoch 2 --lr-min-factor 0.545 \
+    --affine-delay 0 --affine-peak-epoch 3 \
     --early-stop-patience 0 \
     --init-from "$SHARED_BEST"

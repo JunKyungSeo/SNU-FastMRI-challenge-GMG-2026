@@ -66,9 +66,10 @@ Score : SSIM_full + SSIM_bbox + InferenceTime
 
 #### (1) 중간평가 12위 @ 12:00, July 29
 SSIM_full = 0.9321 | SSIM_bbox = 0.9300 | Inference Time = 732.8 ms
-#### (2) 최종 제출 @ 23:59, Aug 19
-SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms  
-#### (3) 최종 순위 #위  
+#### (2) 최종 제출 @ 23:59, Aug 20
+SSIM_full = 0.9349 | SSIM_bbox = 0.9336 | Inference Time = 883.4 ms  
+#### (3) Public Leaderboard 순위 #위  
+#### (4) 최종 순위 #위  
 
 점수 사본 : [shell_scripting/results/](shell_scripting/results/)  
 실행 로그 : [shell_scripting/logs/](shell_scripting/logs/)

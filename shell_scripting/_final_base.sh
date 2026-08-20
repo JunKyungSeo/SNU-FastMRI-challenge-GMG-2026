@@ -2,7 +2,7 @@
 # 최종 run(promptmrp_GMG_final_0807) 3단계 공통 인자. train_final_*.sh 가 source 한다.
 # ⚠️ 세 단계가 같은 값이어야 --init-from 이 성립한다. 한 곳에서만 고친다.
 RUN="${RUN:-promptmrp_GMG_final_0807}"   # 재현 run 은 RUN=... 으로 갈라 기존 결과를 안 건드린다
-DATA_ROOT="$([ -d /workspace/Data ] && echo /workspace/Data || echo /root/Data)"
+DATA_ROOT="${DATA_ROOT:-$([ -d /workspace/Data ] && echo /workspace/Data || echo /root/Data)}"
 SHARED_BEST="../result/${RUN}_shared/checkpoints/best_model.pt"
 
 BASE_ARGS=( --model promptmr --readout-crop

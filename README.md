@@ -8,31 +8,6 @@
    * Double major in Department of Sociology
 * Email | bedso@snu.ac.kr
 
-## 4. 실행 가이드 및 재현성 확보
-
-```bash
-pip3 install -r requirements.txt
-```
-학습:
-```bash
-bash final_run_train.sh "RESULT_DIR" "DATA_DIR"
-```
-
-`shared 25 → acc8 18 → acc8 연장 4 → acc8 tail 2 → acc4 8 → acc4 tail 2 → merge` 를 순서대로 실행합니다 (GTX 1080 8GB 기준 약 300시간). "RESULT_DIR"은 산출물을 쌓을 경로, "DATA_DIR"은 학습 데이터(`train/`·`val/`)가 있는 경로입니다. 주지 않으면 각각 `../result` 와 `/root/Data`(없으면 `/workspace/Data`)를 씁니다.
-
-- 채점 대상 가중치 : `../result/promptmrp_GMG_final_0807_moe/checkpoints/best_model.pt` (repo 바깥)
-- 단계별 가중치 : `../result/promptmrp_GMG_final_0807_{shared,acc8,acc8_ext,acc8_tail,acc4,acc4_tail}/checkpoints/`
-- epoch별 validation loss : `../result/promptmrp_GMG_final_0807_*/val_loss_log*.npy`
-
-acc8 본 런은 두 번에 나눠 돕니다. 첫 호출은 `--early-stop-patience 6` 으로 돌다 validation loss 가 6 epoch 연속 개선되지 않으면 서고, 두 번째 호출이 그 지점부터 이어받아 18 epoch 을 채웁니다. cosine 곡선의 horizon 을 정하는 `--num-epochs` 는 이어학습 시 바꿀 수 없으므로 epoch 수를 늘리는 대신 연장 단계(`acc8_ext`)를 별도 net 으로 두었고, 그 구간의 learning rate 는 본 런 곡선이 찍는 하한 3.019e-5 를 상수로 유지해 앞뒤가 이어집니다.
-
-채점:
-
-```bash
-LEADERBOARD_DATA_DIR="" bash recon_eval.sh
-```
-Leaderboard_Data_Dir을 주지 않으면 기존 리더보드 데이터 경로에 있는 파일을 가져와서 실행합니다. 
-
 ---
 ## [1. 대회 개요](https://github.com/LISTatSNU/FastMRI_challenge)  
 
@@ -68,7 +43,10 @@ Score : SSIM_full + SSIM_bbox + InferenceTime
 SSIM_full = 0.9321 | SSIM_bbox = 0.9300 | Inference Time = 732.8 ms
 #### (2) 최종 제출 @ 23:59, Aug 20
 SSIM_full = 0.9349 | SSIM_bbox = 0.9336 | Inference Time = 883.4 ms  
-#### (3) Public Leaderboard 순위 #위  
+#### (3) Public Leaderboard 순위 7위  
+
+![Public Leaderboard](docs/public_leaderboard.png)
+
 #### (4) 최종 순위 #위  
 
 점수 사본 : [shell_scripting/results/](shell_scripting/results/)  
@@ -182,6 +160,31 @@ affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 �
 **Learning Rate.** base 2e-4 / 하한 1.8e-5  
 **Gradient clipping.** 0.1  
 **tail.** 각 expert의 마지막 두 epoch은 validation data까지 포함하여 학습을 진행합니다. 최종 제출본인 해당 run에서만 이를 이용했습니다. 
+
+## 4. 실행 가이드 및 재현성 확보
+
+```bash
+pip3 install -r requirements.txt
+```
+학습:
+```bash
+bash final_run_train.sh "RESULT_DIR" "DATA_DIR"
+```
+
+`shared 25 → acc8 18 → acc8 연장 4 → acc8 tail 2 → acc4 8 → acc4 tail 2 → merge` 를 순서대로 실행합니다 (GTX 1080 8GB 기준 약 300시간). "RESULT_DIR"은 산출물을 쌓을 경로, "DATA_DIR"은 학습 데이터(`train/`·`val/`)가 있는 경로입니다. 주지 않으면 각각 `../result` 와 `/root/Data`(없으면 `/workspace/Data`)를 씁니다.
+
+- 채점 대상 가중치 : `../result/promptmrp_GMG_final_0807_moe/checkpoints/best_model.pt` (repo 바깥)
+- 단계별 가중치 : `../result/promptmrp_GMG_final_0807_{shared,acc8,acc8_ext,acc8_tail,acc4,acc4_tail}/checkpoints/`
+- epoch별 validation loss : `../result/promptmrp_GMG_final_0807_*/val_loss_log*.npy`
+
+acc8 본 런은 두 번에 나눠 돕니다. 첫 호출은 `--early-stop-patience 6` 으로 돌다 validation loss 가 6 epoch 연속 개선되지 않으면 서고, 두 번째 호출이 그 지점부터 이어받아 18 epoch 을 채웁니다. cosine 곡선의 horizon 을 정하는 `--num-epochs` 는 이어학습 시 바꿀 수 없으므로 epoch 수를 늘리는 대신 연장 단계(`acc8_ext`)를 별도 net 으로 두었고, 그 구간의 learning rate 는 본 런 곡선이 찍는 하한 3.019e-5 를 상수로 유지해 앞뒤가 이어집니다.
+
+채점:
+
+```bash
+LEADERBOARD_DATA_DIR="" bash recon_eval.sh
+```
+Leaderboard_Data_Dir을 주지 않으면 기존 리더보드 데이터 경로에 있는 파일을 가져와서 실행합니다. 
 
 ## 5. Reference
 ### 5.1. Past Winning works

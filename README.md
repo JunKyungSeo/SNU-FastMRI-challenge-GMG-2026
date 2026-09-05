@@ -8,23 +8,6 @@
    * Double major in Department of Sociology
 * Email | bedso@snu.ac.kr
 
-## 4. 실행 가이드 및 재현성 확보
-
-```bash
-pip3 install -r requirements.txt
-```
-학습:
-```bash
-bash final_run_train.sh
-```
-- 가중치 : `../result/promptmrp_GMG_final_0807/checkpoints/`(repo 바깥)  
-- epoch별 validation loss : `../result/promptmrp_GMG_final_0807/val_loss_log*.npy`
-
-채점:
-
-```bash
-LEADERBOARD_DATA_DIR="" bash recon_eval.sh
-```
 ---
 ## [1. 대회 개요](https://github.com/LISTatSNU/FastMRI_challenge)  
 
@@ -58,9 +41,13 @@ Score : SSIM_full + SSIM_bbox + InferenceTime
 
 #### (1) 중간평가 12위 @ 12:00, July 29
 SSIM_full = 0.9321 | SSIM_bbox = 0.9300 | Inference Time = 732.8 ms
-#### (2) 최종 제출 @ 23:59, Aug 19
-SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms  
-#### (3) 최종 순위 #위  
+#### (2) 최종 제출 @ 23:59, Aug 20
+SSIM_full = 0.9349 | SSIM_bbox = 0.9336 | Inference Time = 883.4 ms  
+#### (3) Public Leaderboard 순위 7위  
+
+![Public Leaderboard](docs/public_leaderboard.png)
+
+#### (4) 최종 순위 #위  
 
 점수 사본 : [shell_scripting/results/](shell_scripting/results/)  
 실행 로그 : [shell_scripting/logs/](shell_scripting/logs/)
@@ -72,7 +59,6 @@ SSIM_full = 0.9336 | SSIM_bbox = 0.9322 | Inference Time = 737.5 ms
 ```
 fastMRI_SNU_2026_GMG/
 ├── train.py                        학습 진입점 (인자 정의)
-├── train.sh                        단일 학습 실행 예시
 ├── final_run_train.sh              최종 제출 모델의 학습 실행
 ├── recon_eval.py                   재구성 + 채점 (SSIM_full / SSIM_bbox / 시간)
 ├── recon_eval.sh                   채점 실행
@@ -98,9 +84,11 @@ fastMRI_SNU_2026_GMG/
 │       │   └── reentrant_wrapper.py  gradient checkpointing 래퍼
 │       ├── fastmri/                원본 fastMRI 유틸 (FFT, coil combine, subsample …)
 │       ├── moe.py                  가속률 판정 router
-│       ├── merge_moe.py            acc4·acc8 expert → MoE 결합 체크포인트
 │       ├── unet.py
 │       └── varnet.py               baseline (미사용, 참고용)
+│
+├── scripts/
+│   └── merge_moe.py                acc4·acc8 expert → MoE 결합 체크포인트
 │
 └── shell_scripting/                학습·채점 실행 스크립트 모음
 ```
@@ -151,17 +139,20 @@ augmentation을 적용하면 expert 학습 시 데이터 수가 2배가 되고, 
 **flip**은 phase-encode 방향 좌우 flip을 적용했으며, 각 슬라이스에서 0.5 확률로 일어나도록 설정했습니다. 
 
 **affine**은 5°이내 회전과 1배~1.1배 확대입니다. 
-affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 있으므로, expert 학습에서 처음 켰습니다. acc8은 5→10 epoch cosine warm-up, acc4는 3→5 epoch cosine warm-up을 걸쳐 적용 확률을 0부터 0.5까지 늘렸습니다.
+affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 있으므로, expert 학습에서 처음 켰습니다. acc8은 5→10 epoch, acc4는 0→3 epoch cosine warm-up을 걸쳐 적용 확률을 0부터 0.5까지 늘렸습니다. acc8 연장 구간은 본 런 마지막 epoch과 같은 0.5를 그대로 이어받습니다.
 
-### 5. 학습 스케줄 — Shared 30 + Expert 20/10
+### 5. 학습 스케줄 — Shared 30 + Expert 24/10
 
 최종 run은 `promptmrp_GMG_final_0807`입니다. 
 
 | 단계 | epoch | LR |
 |---|---|---|
 | shared | 30 | 2e-4 유지 5 → cosine 25 |
-| acc8 expert | 18 + tail 2 | warm-up 3 → 유지 5 → cosine 12 |
-| acc4 expert | 8 + tail 2 | warm-up 2 → 유지 2 → cosine 6 |
+| acc8 expert | 18 | warm-up 3 → 유지 5 → cosine 10 (3.019e-5 까지) |
+| acc8 연장 | 4 | 3.019e-5 상수 |
+| acc8 tail | 2 | 3.019e-5 → 1.8e-5 |
+| acc4 expert | 8 | warm-up 2 → cosine 6 (1.090e-4 까지) |
+| acc4 tail | 2 | 1.090e-4 → 1.8e-5 |
 
 **최종 제출 모델에선 시간이 부족하여, shared 학습을 25epoch까지만 진행했습니다. 즉, cosine dacay를 중간에 끊었습니다.**  
 
@@ -169,6 +160,31 @@ affine은 다른 augmentation과 달리 세부 구조 손실이 존재할 수 �
 **Learning Rate.** base 2e-4 / 하한 1.8e-5  
 **Gradient clipping.** 0.1  
 **tail.** 각 expert의 마지막 두 epoch은 validation data까지 포함하여 학습을 진행합니다. 최종 제출본인 해당 run에서만 이를 이용했습니다. 
+
+## 4. 실행 가이드 및 재현성 확보
+
+```bash
+pip3 install -r requirements.txt
+```
+학습:
+```bash
+bash final_run_train.sh "RESULT_DIR" "DATA_DIR"
+```
+
+`shared 25 → acc8 18 → acc8 연장 4 → acc8 tail 2 → acc4 8 → acc4 tail 2 → merge` 를 순서대로 실행합니다 (GTX 1080 8GB 기준 약 300시간). "RESULT_DIR"은 산출물을 쌓을 경로, "DATA_DIR"은 학습 데이터(`train/`·`val/`)가 있는 경로입니다. 주지 않으면 각각 `../result` 와 `/root/Data`(없으면 `/workspace/Data`)를 씁니다.
+
+- 채점 대상 가중치 : `../result/promptmrp_GMG_final_0807_moe/checkpoints/best_model.pt` (repo 바깥)
+- 단계별 가중치 : `../result/promptmrp_GMG_final_0807_{shared,acc8,acc8_ext,acc8_tail,acc4,acc4_tail}/checkpoints/`
+- epoch별 validation loss : `../result/promptmrp_GMG_final_0807_*/val_loss_log*.npy`
+
+acc8 본 런은 두 번에 나눠 돕니다. 첫 호출은 `--early-stop-patience 6` 으로 돌다 validation loss 가 6 epoch 연속 개선되지 않으면 서고, 두 번째 호출이 그 지점부터 이어받아 18 epoch 을 채웁니다. cosine 곡선의 horizon 을 정하는 `--num-epochs` 는 이어학습 시 바꿀 수 없으므로 epoch 수를 늘리는 대신 연장 단계(`acc8_ext`)를 별도 net 으로 두었고, 그 구간의 learning rate 는 본 런 곡선이 찍는 하한 3.019e-5 를 상수로 유지해 앞뒤가 이어집니다.
+
+채점:
+
+```bash
+LEADERBOARD_DATA_DIR="" bash recon_eval.sh
+```
+Leaderboard_Data_Dir을 주지 않으면 기존 리더보드 데이터 경로에 있는 파일을 가져와서 실행합니다. 
 
 ## 5. Reference
 ### 5.1. Past Winning works

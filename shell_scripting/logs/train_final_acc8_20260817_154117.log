@@ -1,0 +1,71 @@
+[START] train_final_acc8  2026-08-17 15:41:17  NET=promptmrp_GMG_final_0807_acc8
++ python train.py --model promptmr --readout-crop --num-cascades 12 --n-feat0 48 --sens-n-feat0 24 --n-history 11 -b 1 -l 2e-4 -r 50 --num-workers 4 --use-checkpoint --fg-loss --area-weight --grad-clip 0.1 --accum-steps 2 --k-fold 5 --val-fold 2 --kfold-seed 430 --l1-weight 0.1 -t /root/Data/train/ -v /root/Data/val/ --aug-on --aug-schedule constant --aug-max-prob 0.5 --flip-max-prob 0.5 --affine-max-prob 0.5 --affine-delay 5 --affine-peak-epoch 10 --aug-delay 0 --remask 8 --mask-aug offset --acc all -e 18 --max-iters 2179 --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.151 --early-stop-patience 0 --init-from ../result/promptmrp_GMG_final_0807_shared/checkpoints/best_model.pt -n promptmrp_GMG_final_0807_acc8 --run-tag promptmrp_GMG_final_0807_acc8 --resume
+Current cuda device:  0
+[resume] 후보 {'model.pt': (17, 0), 'latest.pt': (17, 1000)} → latest.pt 선택
+[resume] EMA shadow 복원 (updates=19030)
+[resume] start_epoch=17 start_iter=1000 best_val=0.0941
+[remask] val/forward 로더: 재생성 안 함 (딸려온 마스크 그대로, acc 필터=8)
+[remask] 전제 검증 통과 — 160 volume (생성기 비트 재현 · full k-space)
+[remask] train 로더 마스크 재생성 — remask=8 · mask-aug=offset · offset=재추첨
+[K-Fold] K=5 · val-fold=2 · seed=430 · 분할 단위=volume · acc=all · remask=8(val 은 acc8) (전체 200 volume)
+[K-Fold] train 160 vol (acc4 80 · acc8 80) · 4358 slice
+[K-Fold] val    20 vol (acc4 0 · acc8 20) · 536 slice
+[scheduler] warmup=3270 → decay_start=8720 step 부터 cosine (하한 0.151×base), total_iters=19620, base_lr=0.0002
+/usr/local/lib/python3.10/dist-packages/torch/optim/lr_scheduler.py:143: UserWarning: Detected call of `lr_scheduler.step()` before `optimizer.step()`. In PyTorch 1.1.0 and later, you should call them in the opposite order: `optimizer.step()` before `lr_scheduler.step()`.  Failure to do this will result in PyTorch skipping the first value of the learning rate schedule. See more details at https://pytorch.org/docs/stable/optim.html#how-to-adjust-learning-rate
+  warnings.warn("Detected call of `lr_scheduler.step()` before `optimizer.step()`. "
+[resume] scheduler fast-forward 17ep+1000it, lr=3.142e-05
+Epoch #17 ............... promptmrp_GMG_final_0807_acc8 ...............
+[aug] epoch=17 p_flip=0.5000 p_affine=0.5000
+[resume] epoch 17: iter 0~999 건너뛰는 중 (가중치는 iter 1000 시점 것) ...
+[resume] skip 50/1000 (9s)
+[resume] skip 100/1000 (17s)
+[resume] skip 150/1000 (25s)
+[resume] skip 200/1000 (33s)
+[resume] skip 250/1000 (41s)
+[resume] skip 300/1000 (48s)
+[resume] skip 350/1000 (56s)
+[resume] skip 400/1000 (64s)
+[resume] skip 450/1000 (73s)
+[resume] skip 500/1000 (80s)
+[resume] skip 550/1000 (89s)
+[resume] skip 600/1000 (96s)
+[resume] skip 650/1000 (104s)
+[resume] skip 700/1000 (113s)
+[resume] skip 750/1000 (120s)
+[resume] skip 800/1000 (128s)
+[resume] skip 850/1000 (137s)
+[resume] skip 900/1000 (145s)
+[resume] skip 950/1000 (154s)
+[resume] skip 1000/1000 (162s)
+[resume] 건너뛰기 완료 (162s) → iter 1000부터 학습 재개
+Epoch = [ 17/ 18] Iter = [1000/4358] Loss = 0.1012 Time = 5.4627s
+Epoch = [ 17/ 18] Iter = [1050/4358] Loss = 0.03271 |g| = 0.0264 Time = 273.4956s
+Epoch = [ 17/ 18] Iter = [1100/4358] Loss = 0.07895 |g| = 0.0114 Time = 274.6547s
+Epoch = [ 17/ 18] Iter = [1150/4358] Loss = 0.08079 |g| = 0.0188 Time = 275.8623s
+Epoch = [ 17/ 18] Iter = [1200/4358] Loss = 0.1362 |g| = 0.0221 Time = 274.9035s
+Epoch = [ 17/ 18] Iter = [1250/4358] Loss = 0.008128 |g| = 0.0171 Time = 275.3905s
+Epoch = [ 17/ 18] Iter = [1300/4358] Loss = 0.07753 |g| = 0.0315 Time = 275.9761s
+Epoch = [ 17/ 18] Iter = [1350/4358] Loss = 0.09764 |g| = 0.0239 Time = 274.1510s
+Epoch = [ 17/ 18] Iter = [1400/4358] Loss = 0.03436 |g| = 0.0187 Time = 274.4982s
+Epoch = [ 17/ 18] Iter = [1450/4358] Loss = 0.04076 |g| = 0.0335 Time = 276.3439s
+Epoch = [ 17/ 18] Iter = [1500/4358] Loss = 0.06637 |g| = 0.023 Time = 285.1426s
+Epoch = [ 17/ 18] Iter = [1550/4358] Loss = 0.0526 |g| = 0.0174 Time = 276.9415s
+Epoch = [ 17/ 18] Iter = [1600/4358] Loss = 0.1087 |g| = 0.0163 Time = 275.7702s
+Epoch = [ 17/ 18] Iter = [1650/4358] Loss = 0.0721 |g| = 0.0109 Time = 275.0991s
+Epoch = [ 17/ 18] Iter = [1700/4358] Loss = 0.03933 |g| = 0.026 Time = 276.3928s
+Epoch = [ 17/ 18] Iter = [1750/4358] Loss = 0.0319 |g| = 0.0315 Time = 274.5656s
+Epoch = [ 17/ 18] Iter = [1800/4358] Loss = 0.05132 |g| = 0.0426 Time = 276.5998s
+Epoch = [ 17/ 18] Iter = [1850/4358] Loss = 0.05709 |g| = 0.0164 Time = 273.3858s
+Epoch = [ 17/ 18] Iter = [1900/4358] Loss = 0.03975 |g| = 0.0161 Time = 276.3068s
+Epoch = [ 17/ 18] Iter = [1950/4358] Loss = 0.05567 |g| = 0.0133 Time = 276.3374s
+Epoch = [ 17/ 18] Iter = [2000/4358] Loss = 0.04984 |g| = 0.0201 Time = 285.5079s
+Epoch = [ 17/ 18] Iter = [2050/4358] Loss = 0.1469 |g| = 0.0225 Time = 275.0174s
+Epoch = [ 17/ 18] Iter = [2100/4358] Loss = 0.06458 |g| = 0.0174 Time = 275.7275s
+Epoch = [ 17/ 18] Iter = [2150/4358] Loss = 0.07576 |g| = 0.0278 Time = 275.0903s
+[gnorm] epoch 17 n=590 med=0.0209 p90=0.0385 max=0.195 clip(0.1) 발동 1.2%
+[mem] epoch 17 peak allocated = 5.99GB / reserved = 7.71GB
+loss file saved! ../result/promptmrp_GMG_final_0807_acc8/val_loss_log_promptmrp_GMG_final_0807_acc8
+Epoch = [  17/  18] TrainLoss = 0.06335 ValLoss = 0.09402 TrainTime = 6676.3482s ValTime = 430.9569s
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@NewRecord@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+ForwardTime = 3.7776s
+[DONE ] train_final_acc8  2026-08-17 17:40:32  exit=0  → ../result/promptmrp_GMG_final_0807_acc8/checkpoints/best_model.pt

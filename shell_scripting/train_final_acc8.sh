@@ -17,5 +17,5 @@ source shell_scripting/_aug_acc8.sh
 run_final "${RUN}_acc8" \
     --acc all -e 18 --max-iters 2179 \
     --warmup-iters 3270 --lr-decay-start-epoch 8 --lr-min-factor 0.151 \
-    --early-stop-patience 6 \
+    --early-stop-patience "${ESP:-6}" \
     --init-from "$SHARED_BEST"

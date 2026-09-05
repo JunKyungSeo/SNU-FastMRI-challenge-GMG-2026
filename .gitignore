@@ -12,10 +12,10 @@ __pycache__
 # HDF5 데이터 파일 (utils/data 등)
 *.h5
 
-# 시각화 산출물 (h5_viewer --export 결과, 대용량)
-viewer_result/volume_stacks/
-viewer_result/volume_stacks.zip
-viewer_result/dataset_overview.html
+# 시각화 산출물 (h5_viewer --export 결과, 대용량). 경로 고정이면 폴더를 옮길 때 규칙이 풀린다.
+volume_stacks/
+volume_stacks.zip
+dataset_overview.html
 
 # 최종 제출 안내 영상 전사 정리본 (개인 메모)
 shell_scripting/final_submission.txt

@@ -7,7 +7,7 @@ cd "$(cd "$(dirname "$0")" && pwd)/.." || exit 1
 source shell_scripting/_final_base.sh
 source shell_scripting/_aug_acc8.sh
 
-MAIN="../result/${RUN}_acc8/checkpoints/best_model.pt"
+MAIN="${MAIN:-../result/${RUN}_acc8/checkpoints/best_model.pt}"   # ext 를 끼우면 그 net 으로 덮어쓴다
 [ -f "$MAIN" ] || { echo "[STOP] acc8 본 런이 없다: $MAIN"; exit 2; }
 
 # LR 은 본 런 로컬 ep18 지점(3.019e-5)을 이어받아 원래 하한 1.8e-5 까지 (min-factor = 1.8/3.019).

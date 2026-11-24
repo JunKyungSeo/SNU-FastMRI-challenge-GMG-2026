@@ -47,7 +47,7 @@ SSIM_full = 0.9349 | SSIM_bbox = 0.9336 | Inference Time = 883.4 ms
 
 ![Public Leaderboard](docs/public_leaderboard.png)
 
-#### (4) 최종 순위 #위  
+#### (4) 최종 순위 6위  
 
 점수 사본 : [shell_scripting/results/](shell_scripting/results/)  
 실행 로그 : [shell_scripting/logs/](shell_scripting/logs/)
